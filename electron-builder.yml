@@ -1,0 +1,22 @@
+appId: com.thecollectedworks.reframe
+productName: Reframe
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: vendor/ffmpeg/${os}-${arch}
+    to: ffmpeg
+win:
+  target: portable
+  artifactName: Reframe-${version}-win-${arch}.exe
+mac:
+  target: zip
+  category: public.app-category.photography
+  artifactName: Reframe-${version}-mac-${arch}.zip
+  identity: '-'
+linux:
+  target: AppImage
+  artifactName: Reframe-${version}-linux-${arch}.AppImage
