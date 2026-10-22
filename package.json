@@ -18,9 +18,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "electron-vite preview",
     "postinstall": "node node_modules/electron/install.js && node node_modules/ffmpeg-static/install.js",
-    "dist:win": "node scripts/fetch-ffmpeg.mjs win x64 && electron-vite build && electron-builder --win --x64",
-    "dist:mac": "node scripts/fetch-ffmpeg.mjs mac arm64 && node scripts/fetch-ffmpeg.mjs mac x64 && electron-vite build && electron-builder --mac --arm64 --x64",
-    "dist:linux": "node scripts/fetch-ffmpeg.mjs linux x64 && electron-vite build && electron-builder --linux --x64"
+    "dist:win": "node scripts/fetch-ffmpeg.mjs win x64 && electron-vite build && electron-builder --win --x64 --publish never",
+    "dist:mac": "node scripts/fetch-ffmpeg.mjs mac arm64 && node scripts/fetch-ffmpeg.mjs mac x64 && electron-vite build && electron-builder --mac --arm64 --x64 --publish never",
+    "dist:linux": "node scripts/fetch-ffmpeg.mjs linux x64 && electron-vite build && electron-builder --linux --x64 --publish never"
   },
   "devDependencies": {
     "@types/node": "26.6.5",
