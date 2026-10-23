@@ -118,6 +118,16 @@ export interface ReleaseNote {
   body: string
 }
 
+/**
+ * The installed Windows app updating itself: idle (or not applicable), downloading, downloaded and
+ * waiting for a restart, or failed (fall back to the download link).
+ */
+export type UpdateStatus =
+  | { state: 'idle' }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'ready'; version: string }
+  | { state: 'failed' }
+
 export interface ReframeApi {
   platform: NodeJS.Platform
   openFolder(): Promise<FolderScan | null>
@@ -135,7 +145,10 @@ export interface ReframeApi {
   scrubProxy(path: string, w: number, h: number, color?: ColorMeta): Promise<string>
   reveal(path: string): Promise<void>
   /** Newer GitHub release than this build, if any. */
-  checkUpdate(): Promise<{ version: string; notes: ReleaseNote[] } | null>
+  checkUpdate(): Promise<{ version: string; notes: ReleaseNote[]; status: UpdateStatus } | null>
+  onUpdateStatus(cb: (s: UpdateStatus) => void): () => void
+  /** Restarts into the downloaded update. */
+  installUpdate(): Promise<void>
   openRelease(): Promise<void>
   /** 0..1 shows progress on the taskbar / Dock icon; -1 clears it. */
   setProgress(p: number): Promise<void>

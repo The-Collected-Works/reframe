@@ -28,9 +28,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: reframe-${{ matrix.os }}
+          # The update manifests and block maps let installed copies update themselves
+          # (downloading only what changed).
           path: |
             dist/*.exe
             dist/*.zip
+            dist/latest*.yml
+            dist/*.blockmap
           if-no-files-found: error
 
   # Tag pushes publish a GitHub Release, which is what the in-app update button checks.

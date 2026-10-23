@@ -1,7 +1,7 @@
 {
   "name": "reframe",
   "productName": "Reframe",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Batch-crop images and video into artboards",
   "main": "./out/main/index.js",
   "author": "The Collected Works",
@@ -19,6 +19,7 @@
     "start": "electron-vite preview",
     "postinstall": "node node_modules/electron/install.js && node node_modules/ffmpeg-static/install.js",
     "dist:win": "node scripts/fetch-ffmpeg.mjs win x64 && electron-vite build && electron-builder --win --x64 --publish never",
+    "dist:win:zip": "node scripts/fetch-ffmpeg.mjs win x64 && electron-vite build && electron-builder --win zip --x64 --publish never",
     "dist:mac": "node scripts/fetch-ffmpeg.mjs mac arm64 && node scripts/fetch-ffmpeg.mjs mac x64 && electron-vite build && electron-builder --mac --arm64 --x64 --publish never",
     "dist:linux": "node scripts/fetch-ffmpeg.mjs linux x64 && electron-vite build && electron-builder --linux --x64 --publish never"
   },
@@ -37,5 +38,8 @@
     "typescript": "7.0.2",
     "vite": "8.3.5",
     "zustand": "5.0.16"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
   }
 }

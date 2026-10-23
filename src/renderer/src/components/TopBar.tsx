@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { Artboard, ReleaseNote } from '@shared/types'
+import type { Artboard, ReleaseNote, UpdateStatus } from '@shared/types'
 import { api } from '../media'
 import { boardMenu } from '../menus'
 import { reducedMotion } from '../motion'
@@ -126,26 +126,32 @@ export function TopBar({ onOpen }: { onOpen: () => void }) {
   )
 }
 
-type Update = { version: string; notes: ReleaseNote[] }
+type Update = { version: string; notes: ReleaseNote[]; status: UpdateStatus }
 
-/** Checks for a newer release shortly after launch and every few hours; null until there is one. */
+/**
+ * Checks for a newer release shortly after launch and every few hours; null until there is one.
+ * The installed Windows app then downloads it itself, reporting progress as it goes.
+ */
 function useUpdateCheck(): Update | null {
-  const [version, setVersion] = useState<Update | null>(null)
+  const [update, setUpdate] = useState<Update | null>(null)
   useEffect(() => {
-    const check = () => api.checkUpdate().then((u) => setVersion(u ?? null), () => {})
+    const check = () => api.checkUpdate().then((u) => setUpdate(u ?? null), () => {})
     const first = setTimeout(check, 3000)
     const every = setInterval(check, 6 * 60 * 60 * 1000)
+    const off = api.onUpdateStatus((status) => setUpdate((u) => u && { ...u, status }))
     return () => {
       clearTimeout(first)
       clearInterval(every)
+      off()
     }
   }, [])
-  return version
+  return update
 }
 
 /**
- * Opens the release page on click. Hovering reveals what's new: the notes of every release since
- * this build, newest first. The dropdown stays open while the pointer moves between the two.
+ * Hovering reveals what's new: the notes of every release since this build, newest first. The
+ * dropdown stays open while the pointer moves between the two. Clicking opens the release page,
+ * or, once the installed app has downloaded the update itself, restarts into it.
  */
 function UpdateButton({ update }: { update: Update }) {
   const [open, setOpen] = useState(false)
@@ -157,12 +163,32 @@ function UpdateButton({ update }: { update: Update }) {
   const enter = () => later(() => setOpen(true), open ? 0 : 180)
   const leave = () => later(() => setOpen(false), 220)
   useEffect(() => () => clearTimeout(timer.current), [])
+  const { status } = update
+  const ready = status.state === 'ready'
+  const downloading = status.state === 'downloading'
+  const act = () => (ready ? api.installUpdate() : downloading ? undefined : api.openRelease())
   return (
     <div className="update-wrap" onPointerEnter={enter} onPointerLeave={leave}>
-      <button className="update" title={open ? undefined : `Reframe ${update.version} is available`} onClick={() => api.openRelease()}>
+      <button
+        className={'update' + (downloading ? ' downloading' : '')}
+        style={downloading ? { ['--p' as string]: `${status.percent}%` } : undefined}
+        title={open ? undefined : ready ? 'Restart Reframe to finish updating' : `Reframe ${update.version} is available`}
+        onClick={act}
+      >
         <Icon name="update" size={14} />
-        Update
-        <span className="muted">{update.version}</span>
+        {ready ? (
+          'Restart to update'
+        ) : downloading ? (
+          <>
+            Updating
+            <span className="muted">{status.percent}%</span>
+          </>
+        ) : (
+          <>
+            Update
+            <span className="muted">{update.version}</span>
+          </>
+        )}
       </button>
       <Popover open={open && update.notes.length > 0} onClose={() => setOpen(false)} className="changelog">
         <div className="changelog-body" onPointerEnter={() => clearTimeout(timer.current)} onPointerLeave={leave}>
@@ -178,9 +204,9 @@ function UpdateButton({ update }: { update: Update }) {
             ))}
           </div>
           <div className="menu-sep" />
-          <button className="ghost changelog-download" onClick={() => api.openRelease()}>
-            <Icon name="download" size={14} />
-            Download {update.version}
+          <button className="ghost changelog-download" disabled={downloading} onClick={act}>
+            <Icon name={ready ? 'update' : 'download'} size={14} />
+            {ready ? `Restart to update to ${update.version}` : downloading ? `Downloading ${update.version}…` : `Download ${update.version}`}
           </button>
         </div>
       </Popover>

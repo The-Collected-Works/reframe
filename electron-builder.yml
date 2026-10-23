@@ -9,9 +9,29 @@ files:
 extraResources:
   - from: vendor/ffmpeg/${os}-${arch}
     to: ffmpeg
+# Where the installed app looks for updates. Builds never upload (the release workflow publishes),
+# but this makes them write the update manifests (latest.yml, latest-mac.yml) and embed the feed.
+publish:
+  provider: github
+  owner: The-Collected-Works
+  repo: reframe
+  releaseType: release
+# Chromium's UI strings: only English is used, and each extra locale is unpacked on every install.
+electronLanguages:
+  - en-US
+# Windows: a one-click per-user installer (no admin prompt; unpacks once, so launches are fast)
+# and a zip for running from anywhere. A self-extracting portable exe unpacked ~400 MB to a temp
+# folder on every launch, before the app could even start.
 win:
-  target: portable
-  artifactName: Reframe-${version}-win-${arch}.exe
+  target:
+    - nsis
+    - zip
+  artifactName: Reframe-${version}-win-${arch}-portable.${ext}
+nsis:
+  oneClick: true
+  perMachine: false
+  artifactName: Reframe-${version}-win-${arch}-setup.${ext}
+  shortcutName: Reframe
 mac:
   target: zip
   category: public.app-category.photography

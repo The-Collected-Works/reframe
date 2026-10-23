@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'elec
 import type { ColorMeta, ProjectFile, VideoExportJob } from '@shared/types'
 import { cancelExport, exportVideo, frame, poster, scrubProxy, stopWorker } from './jobs'
 import { saveProject, scanFolder, watchFolder } from './folder'
+import { installUpdate, pollAutoUpdate, updateStatus } from './autoupdate'
 import { checkForUpdate, openRelease } from './updates'
 
 protocol.registerSchemesAsPrivileged([
@@ -192,7 +193,14 @@ ipcMain.handle('focus-window', (e) => {
   if (w?.isMinimized()) w.restore()
   w?.focus()
 })
-ipcMain.handle('check-update', () => checkForUpdate())
+// Finding a newer release also starts the installed app downloading it in the background.
+ipcMain.handle('check-update', async (e) => {
+  const update = await checkForUpdate()
+  const w = BrowserWindow.fromWebContents(e.sender)
+  if (update && w) pollAutoUpdate(w)
+  return update && { ...update, status: updateStatus() }
+})
+ipcMain.handle('install-update', () => installUpdate())
 ipcMain.handle('open-release', () => openRelease())
 ipcMain.handle('reveal', async (_e, path: string) => {
   const st = await fs.stat(path).catch(() => null)

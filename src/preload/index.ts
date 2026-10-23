@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { ExportProgress, ReframeApi } from '@shared/types'
+import type { ExportProgress, ReframeApi, UpdateStatus } from '@shared/types'
 
 function listen<T>(channel: string, cb: (payload: T) => void): () => void {
   const fn = (_e: unknown, payload: T) => cb(payload)
@@ -22,6 +22,8 @@ const api: ReframeApi = {
   scrubProxy: (path, w, h, color) => ipcRenderer.invoke('scrub-proxy', path, w, h, color),
   reveal: (path) => ipcRenderer.invoke('reveal', path),
   checkUpdate: () => ipcRenderer.invoke('check-update'),
+  onUpdateStatus: (cb) => listen<UpdateStatus>('update-status', cb),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
   setProgress: (p) => ipcRenderer.invoke('set-progress', p),
   focusWindow: () => ipcRenderer.invoke('focus-window'),
   setDimmed: (dimmed) => ipcRenderer.invoke('set-dimmed', dimmed),

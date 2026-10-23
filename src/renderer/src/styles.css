@@ -292,6 +292,16 @@ input {
   color: var(--muted);
 }
 
+/* While the installed app downloads an update, the button fills from the left. */
+.update.downloading {
+  background: linear-gradient(to right, var(--tint-3) var(--p), var(--tint-2) var(--p));
+  cursor: default;
+}
+
+.update.downloading:hover {
+  background: linear-gradient(to right, var(--tint-3) var(--p), var(--tint-2) var(--p));
+}
+
 .update:hover {
   background: var(--tint-3);
 }
