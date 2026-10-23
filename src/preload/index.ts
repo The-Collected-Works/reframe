@@ -19,12 +19,17 @@ const api: ReframeApi = {
   cancelExport: () => ipcRenderer.invoke('cancel-export'),
   poster: (path) => ipcRenderer.invoke('poster', path),
   frame: (path, time, color) => ipcRenderer.invoke('frame', path, time, color),
+  scrubProxy: (path, w, h, color) => ipcRenderer.invoke('scrub-proxy', path, w, h, color),
   reveal: (path) => ipcRenderer.invoke('reveal', path),
   checkUpdate: () => ipcRenderer.invoke('check-update'),
+  setProgress: (p) => ipcRenderer.invoke('set-progress', p),
+  focusWindow: () => ipcRenderer.invoke('focus-window'),
+  setDimmed: (dimmed) => ipcRenderer.invoke('set-dimmed', dimmed),
   openRelease: () => ipcRenderer.invoke('open-release'),
   pathForFile: (file) => webUtils.getPathForFile(file),
   onExportProgress: (cb) => listen<ExportProgress>('export-progress', cb),
-  onFolderChanged: (cb) => listen<void>('folder-changed', cb)
+  onFolderChanged: (cb) => listen<void>('folder-changed', cb),
+  onWindowMoving: (cb) => listen<void>('window-moving', cb)
 }
 
 contextBridge.exposeInMainWorld('reframe', api)

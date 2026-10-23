@@ -81,7 +81,7 @@ async function renderVideo(item: Item, prefs: ExportPrefs) {
   })
 }
 
-export function ExportDialog() {
+export function ExportDialog({ closing = false }: { closing?: boolean }) {
   const project = useStore((s) => s.project)
   const assets = useStore((s) => s.assets)
   const selection = useStore((s) => s.selection)
@@ -160,14 +160,31 @@ export function ExportDialog() {
   }
 
   const done = Object.values(status).filter((s) => s.state === 'done').length
+  const failedCount = Object.values(status).filter((s) => s.state === 'error').length
   const failed = Object.values(status).filter((s) => s.state === 'error').length
   const overall = list.length ? list.reduce((acc, i) => acc + (status[i.id]?.progress ?? 0), 0) / list.length : 0
   const imgCount = items.filter((i) => i.asset.kind === 'image').length
   const vidCount = items.length - imgCount
+  // Progress on the taskbar / Dock icon while running.
+  useEffect(() => {
+    api.setProgress(phase === 'running' ? overall : -1)
+  }, [phase, overall])
+  useEffect(() => () => void api.setProgress(-1), [])
+
+  // Finished while you were in another app: tell the OS.
+  useEffect(() => {
+    if (phase !== 'done' || cancelled.current || document.hasFocus()) return
+    const n = new Notification(failedCount ? 'Export finished with errors' : 'Export complete', {
+      body: failedCount ? `${done} exported, ${failedCount} failed` : `${done} file${done === 1 ? '' : 's'} exported`,
+      silent: false
+    })
+    n.onclick = () => api.focusWindow()
+  }, [phase])
+
   const crfKey = QUALITY.reduce((best, q) => (Math.abs(q.crf - prefs.videoCrf) < Math.abs(best.crf - prefs.videoCrf) ? q : best)).value
 
   return (
-    <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && phase !== 'running' && setExportOpen(false)}>
+    <div className={'modal-backdrop' + (closing ? ' closing' : '')} onPointerDown={(e) => e.target === e.currentTarget && phase !== 'running' && setExportOpen(false)}>
       <div className="modal">
         <header className="modal-head">
           <span>Export</span>

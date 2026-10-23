@@ -1,21 +1,38 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { api } from '../media'
+import { usePresence } from '../motion'
 import {
   Check,
-  CircleArrowUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUp,
+  FileOutput,
   ClipboardPaste,
   Copy,
+  Download,
+  CopyPlus,
   FlipHorizontal2,
   FlipVertical2,
   Folder,
+  FolderOpen,
   LayoutGrid,
+  Maximize2,
   Pause,
   Pipette,
   Play,
   Plus,
   RotateCcw,
+  Share,
+  SlidersHorizontal,
+  Trash2,
   RotateCcwSquare,
   RotateCwSquare,
   Square,
+  Volume1,
+  Volume2,
+  VolumeX,
   X,
   type LucideIcon
 } from 'lucide-react'
@@ -34,18 +51,82 @@ const ICONS = {
   paste: ClipboardPaste,
   check: Check,
   pipette: Pipette,
-  update: CircleArrowUp,
+  open: Maximize2,
+  chevronDown: ChevronDown,
+  edit: SlidersHorizontal,
+  duplicate: CopyPlus,
+  trash: Trash2,
+  reveal: FolderOpen,
+  include: FileOutput,
+  export: Share,
+  update: ArrowUp,
+  download: Download,
+  prev: ChevronLeft,
+  next: ChevronRight,
+  volumeHigh: Volume2,
+  volumeLow: Volume1,
+  volumeOff: VolumeX,
   rotateL: RotateCcwSquare,
   rotateR: RotateCwSquare,
-  flipH: FlipHorizontal2,
-  flipV: FlipVertical2
+  // Lucide names these by the axis line, not the motion: mirroring left-right is the vertical-axis glyph.
+  flipH: FlipVertical2,
+  flipV: FlipHorizontal2
 } satisfies Record<string, LucideIcon>
 
 const FILLED = new Set<keyof typeof ICONS>(['play', 'pause'])
 
-export function Icon({ name, size = 16 }: { name: keyof typeof ICONS; size?: number }) {
+export type IconName = keyof typeof ICONS
+
+export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
   const Glyph = ICONS[name]
   return <Glyph size={size} strokeWidth={1.4} absoluteStrokeWidth fill={FILLED.has(name) ? 'currentColor' : 'none'} />
+}
+
+/**
+ * A pill that slides to whichever child matches `selector` inside the nearest positioned
+ * container. It measures after layout, and only animates once it has a first position.
+ */
+export function Indicator({ selector, deps, className }: { selector: string; deps: unknown[]; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [ready, setReady] = useState(false)
+  useLayoutEffect(() => {
+    const el = ref.current!
+    const host = el.parentElement!
+    // Layout offsets (summed up to the host, in case the target sits in its own positioned
+    // wrapper), not screen rects: rects include transforms, so measuring while a button is
+    // pressed (scaled down) or a popover is scaling in left the pill off-centre.
+    const measure = () => {
+      const on = host.querySelector<HTMLElement>(selector)
+      if (!on) return setBox(null)
+      let x = 0
+      let y = 0
+      let n: HTMLElement | null = on
+      while (n && n !== host) {
+        x += n.offsetLeft
+        y += n.offsetTop
+        n = n.offsetParent as HTMLElement | null
+      }
+      if (n !== host) return setBox(null)
+      setBox({ x, y, w: on.offsetWidth, h: on.offsetHeight })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(host)
+    host.querySelectorAll(':scope > *').forEach((c) => ro.observe(c))
+    return () => ro.disconnect()
+  }, deps)
+  useEffect(() => {
+    if (box && !ready) requestAnimationFrame(() => setReady(true))
+  }, [box, ready])
+  return (
+    <span
+      ref={ref}
+      aria-hidden
+      className={'indicator ' + (className ?? '') + (ready ? ' ready' : '')}
+      style={box ? { width: box.w, height: box.h, transform: `translate(${box.x}px, ${box.y}px)` } : { opacity: 0 }}
+    />
+  )
 }
 
 export function Segmented<T extends string>({
@@ -54,13 +135,14 @@ export function Segmented<T extends string>({
   onChange
 }: {
   value: T
-  options: { value: T; label: ReactNode; title?: string }[]
+  options: { value: T; label: ReactNode; title?: string; disabled?: boolean }[]
   onChange: (v: T) => void
 }) {
   return (
     <div className="seg">
+      <Indicator selector=":scope > button.on" deps={[value, options.length]} />
       {options.map((o) => (
-        <button key={o.value} title={o.title} className={o.value === value ? 'on' : ''} onClick={() => onChange(o.value)}>
+        <button key={o.value} title={o.title} disabled={o.disabled} className={o.value === value ? 'on' : ''} onClick={() => onChange(o.value)}>
           {o.label}
         </button>
       ))}
@@ -74,6 +156,22 @@ const round = (v: number, step: number) => {
 }
 
 /** Numeric input that commits on enter/blur, steps with arrow keys, and scrubs by dragging its label. */
+/**
+ * Middle-click resets a value field. Handled on press so the browser's autoscroll (and, on
+ * Linux, primary-selection paste) never starts.
+ */
+function middleReset(onReset?: () => void) {
+  if (!onReset) return {}
+  return {
+    onMouseDown: (e: React.MouseEvent) => {
+      if (e.button !== 1) return
+      e.preventDefault()
+      onReset()
+    },
+    onAuxClick: (e: React.MouseEvent) => e.button === 1 && e.preventDefault()
+  }
+}
+
 export function NumberField({
   value,
   onChange,
@@ -82,10 +180,13 @@ export function NumberField({
   min = -Infinity,
   max = Infinity,
   suffix,
-  width
+  width,
+  onReset
 }: {
   value: number
   onChange: (v: number) => void
+  /** Middle-click: back to the default. */
+  onReset?: () => void
   label?: string
   step?: number
   min?: number
@@ -102,6 +203,7 @@ export function NumberField({
     setDraft(null)
   }
   const scrub = (e: React.PointerEvent) => {
+    if (e.button !== 0) return
     const startX = e.clientX
     const start = value
     const el = e.currentTarget as HTMLElement
@@ -115,7 +217,7 @@ export function NumberField({
     el.addEventListener('pointerup', up)
   }
   return (
-    <label className="num" style={width ? { width } : undefined}>
+    <label className="num" style={width ? { width } : undefined} {...middleReset(onReset && (() => (setDraft(null), onReset())))}>
       {label && (
         <span className="num-label" onPointerDown={scrub}>
           {label}
@@ -152,7 +254,8 @@ export function Slider({
   onChange,
   display,
   parse,
-  curve = 1
+  curve = 1,
+  onReset
 }: {
   value: number
   min: number
@@ -164,6 +267,7 @@ export function Slider({
   suffix?: string
   /** >1 gives more resolution at the low end. */
   curve?: number
+  onReset?: () => void
 }) {
   const toPos = (v: number) => Math.pow((v - min) / (max - min), 1 / curve)
   const fromPos = (p: number) => min + Math.pow(p, curve) * (max - min)
@@ -176,6 +280,7 @@ export function Slider({
       max={1000}
       value={Math.round(pos * 1000)}
       style={{ ['--p' as string]: `${pos * 100}%` }}
+      {...middleReset(onReset)}
       onChange={(e) => {
         const v = fromPos(Number(e.target.value) / 1000)
         const shown = display ? display(v) : v
@@ -186,7 +291,7 @@ export function Slider({
   )
 }
 
-export function ColorField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function ColorField({ value, onChange, onReset }: { value: string; onChange: (v: string) => void; onReset?: () => void }) {
   const [draft, setDraft] = useState<string | null>(null)
   const commit = () => {
     if (draft == null) return
@@ -198,7 +303,7 @@ export function ColorField({ value, onChange }: { value: string; onChange: (v: s
     setDraft(null)
   }
   return (
-    <div className="color">
+    <div className="color" {...middleReset(onReset && (() => (setDraft(null), onReset())))}>
       <label className="swatch" style={{ background: value }}>
         <input type="color" value={value} onChange={(e) => onChange(e.target.value)} />
       </label>
@@ -218,33 +323,70 @@ export function Toggle({ value, onChange }: { value: boolean; onChange: (v: bool
   return <button className={'toggle' + (value ? ' on' : '')} role="switch" aria-checked={value} onClick={() => onChange(!value)} />
 }
 
-/** Floats below its parent element; fixed positioning so scroll containers don't clip it. */
-export function Popover({ onClose, children, className }: { onClose: () => void; children: ReactNode; className?: string }) {
+/**
+ * Floats below the element it's declared in. Rendered into document.body (a placeholder stays in
+ * place to find the anchor), so no ancestor's overflow, mask or transform can clip it.
+ */
+export function Popover({
+  open = true,
+  onClose,
+  children,
+  className
+}: {
+  open?: boolean
+  onClose: () => void
+  children: ReactNode
+  className?: string
+}) {
   const ref = useRef<HTMLDivElement>(null)
+  const placeholder = useRef<HTMLSpanElement>(null)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  const { mounted, closing } = usePresence(open, 120)
   useLayoutEffect(() => {
+    if (!mounted) return setPos(null)
     const el = ref.current!
-    const anchor = el.parentElement!.getBoundingClientRect()
+    const anchor = placeholder.current!.parentElement!.getBoundingClientRect()
     const left = Math.max(8, Math.min(anchor.left, window.innerWidth - el.offsetWidth - 8))
-    setPos({ left, top: anchor.bottom + 8 })
-  }, [])
+    // Anchored in the top bar: open clear of the bar's edge, not just below the anchor.
+    const bar = placeholder.current!.closest('.topbar')?.getBoundingClientRect()
+    setPos({ left, top: Math.max(anchor.bottom + 8, bar ? bar.bottom + 6 : 0) })
+  }, [mounted])
+  // Registered once, in the capture phase (so nothing that stops propagation can keep it open),
+  // ignoring the press that opened it. Presses on the anchor are left to the anchor's own click,
+  // so it toggles rather than closing here and immediately reopening.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
   useEffect(() => {
+    if (!open) return
+    const opened = performance.now()
     const down = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      const t = e.target as Node
+      const anchor = placeholder.current?.parentElement
+      if (e.timeStamp < opened || ref.current?.contains(t) || anchor?.contains(t)) return
+      onCloseRef.current()
     }
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    const t = setTimeout(() => window.addEventListener('pointerdown', down))
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && onCloseRef.current()
+    window.addEventListener('pointerdown', down, true)
     window.addEventListener('keydown', key)
+    // Clicks on the title bar's drag region never reach the page, but dragging the window closes it.
+    const offMove = api.onWindowMoving(() => onCloseRef.current())
     return () => {
-      clearTimeout(t)
-      window.removeEventListener('pointerdown', down)
+      window.removeEventListener('pointerdown', down, true)
       window.removeEventListener('keydown', key)
+      offMove()
     }
-  }, [onClose])
+  }, [open])
   return (
-    <div ref={ref} className={'popover ' + (className ?? '')} style={pos ?? { visibility: 'hidden' }}>
-      {children}
-    </div>
+    <>
+      <span ref={placeholder} hidden />
+      {mounted &&
+        createPortal(
+          <div ref={ref} className={'popover ' + (className ?? '') + (closing ? ' closing' : '')} style={pos ?? { visibility: 'hidden' }}>
+            {children}
+          </div>,
+          document.body
+        )}
+    </>
   )
 }
 

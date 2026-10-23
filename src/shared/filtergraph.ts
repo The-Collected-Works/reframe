@@ -55,7 +55,9 @@ function filterGraph(job: VideoExportJob): string {
   const sw = odd ? job.srcHeight : job.srcWidth
   const sh = odd ? job.srcWidth : job.srcHeight
   const norm = `${base}${TRANSPOSE[q] ? ',' + TRANSPOSE[q] : ''}`
-  const plan = rasterPlan(W, H, sw, sh, bounds(computeLayout(W, H, sw, sh, { ...s, rotation: 0 })))
+  // Transposing swaps the media's own axes, so its stretch swaps with them.
+  const flat = { ...s, rotation: 0, scaleX: odd ? s.scaleY : s.scaleX, scaleY: odd ? s.scaleX : s.scaleY }
+  const plan = rasterPlan(W, H, sw, sh, bounds(computeLayout(W, H, sw, sh, flat)))
   const fg = plan
     ? `crop=${plan.crop.w}:${plan.crop.h}:${plan.crop.x}:${plan.crop.y},` +
       `scale=${plan.scale.w}:${plan.scale.h}:flags=lanczos,` +

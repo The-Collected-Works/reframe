@@ -61,6 +61,22 @@ export function dragOffset(
   }
 }
 
+/** Applies `patch` while keeping `pivot` (artboard pixels) fixed on the media. */
+export function withPivot(
+  s: CropSettings,
+  W: number,
+  H: number,
+  sw: number,
+  sh: number,
+  patch: Partial<CropSettings>,
+  pivot: Point
+): Partial<CropSettings> & Pick<CropSettings, 'offsetX' | 'offsetY'> {
+  const a = computeLayout(W, H, sw, sh, s)
+  const b = computeLayout(W, H, sw, sh, { ...s, ...patch })
+  const moved = fromLocal(b, toLocal(a, pivot))
+  return { ...patch, offsetX: s.offsetX + (pivot.x - moved.x) / W, offsetY: s.offsetY + (pivot.y - moved.y) / H }
+}
+
 /** Zoom keeping `pivot` (artboard pixels) fixed on the media. */
 export function zoomAbout(
   s: CropSettings,
@@ -71,10 +87,46 @@ export function zoomAbout(
   zoom: number,
   pivot: Point
 ): Pick<CropSettings, 'zoom' | 'offsetX' | 'offsetY'> {
-  const a = computeLayout(W, H, sw, sh, s)
-  const b = computeLayout(W, H, sw, sh, { ...s, zoom })
-  const moved = fromLocal(b, toLocal(a, pivot))
-  return { zoom, offsetX: s.offsetX + (pivot.x - moved.x) / W, offsetY: s.offsetY + (pivot.y - moved.y) / H }
+  return withPivot(s, W, H, sw, sh, { zoom }, pivot) as Pick<CropSettings, 'zoom' | 'offsetX' | 'offsetY'>
+}
+
+/**
+ * Snaps a scale about `pivot`: every bounding-box edge (and the centre) moves linearly with the
+ * ratio, `edge(r) = pivot + (edge(1) - pivot) * r`, so the ratio that lands any of them exactly on
+ * an artboard edge or centre can be solved directly. `start` is the bounding box at ratio 1;
+ * `axes` limits which directions are scaling (a one-sided stretch only moves one).
+ */
+export function snapScale(
+  W: number,
+  H: number,
+  start: { x: number; y: number; w: number; h: number },
+  pivot: Point,
+  ratio: number,
+  thresh: number,
+  axes: { x: boolean; y: boolean }
+): { ratio: number; guides: Guides } | null {
+  let best: { ratio: number; d: number } | null = null
+  const consider = (edges: number[], p: number, targets: number[]) => {
+    for (const e of edges) {
+      if (Math.abs(e - p) < 1e-6) continue
+      const now = p + (e - p) * ratio
+      for (const t of targets) {
+        const d = Math.abs(t - now)
+        const r = (t - p) / (e - p)
+        if (d < thresh && r > 0 && (!best || d < best.d)) best = { ratio: r, d }
+      }
+    }
+  }
+  const xs = [start.x, start.x + start.w / 2, start.x + start.w]
+  const ys = [start.y, start.y + start.h / 2, start.y + start.h]
+  if (axes.x) consider(xs, pivot.x, [0, W / 2, W])
+  if (axes.y) consider(ys, pivot.y, [0, H / 2, H])
+  if (!best) return null
+  const r = (best as { ratio: number }).ratio
+  // Every line that now coincides, so simultaneous alignments all show.
+  const lines = (edges: number[], p: number, targets: number[], on: boolean) =>
+    on ? targets.filter((t) => edges.some((e) => Math.abs(p + (e - p) * r - t) < 0.5)) : []
+  return { ratio: r, guides: { x: lines(xs, pivot.x, [0, W / 2, W], axes.x), y: lines(ys, pivot.y, [0, H / 2, H], axes.y) } }
 }
 
 /** Rotate keeping the media's centre where it is. */

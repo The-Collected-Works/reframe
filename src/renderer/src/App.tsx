@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ContextMenu } from './components/ContextMenu'
 import { ExportDialog } from './components/ExportDialog'
 import { Grid } from './components/Grid'
 import { Inspector } from './components/Inspector'
@@ -6,13 +7,29 @@ import { Loupe } from './components/Loupe'
 import { TopBar } from './components/TopBar'
 import { Icon } from './components/ui'
 import { api, cancelPick, hydrate, pickBackground } from './media'
+import { usePresence } from './motion'
 import { useStore } from './store'
+
+function Hud() {
+  const hud = useStore((s) => s.hud)
+  return hud ? (
+    <div key={hud.n} className="hud" role="status">
+      {hud.text}
+    </div>
+  ) : null
+}
 
 export function App() {
   const dir = useStore((s) => s.dir)
   const view = useStore((s) => s.view)
   const assets = useStore((s) => s.assets)
   const exportOpen = useStore((s) => s.exportOpen)
+  const exportPresence = usePresence(exportOpen, 180)
+  // The window controls are drawn by the OS over the page, so CSS can't dim them with the
+  // dialog's backdrop; the main process tints them to match instead.
+  useEffect(() => {
+    api.setDimmed(exportOpen)
+  }, [exportOpen])
   const [dropping, setDropping] = useState(false)
   const [booted, setBooted] = useState(false)
 
@@ -104,6 +121,25 @@ export function App() {
     return () => window.removeEventListener('keydown', key)
   }, [openDir])
 
+  // Focus rings only while navigating with Tab, as in native apps; any pointer use hides them.
+  // (Otherwise a clicked button shows a ring as soon as an arrow key is pressed.)
+  useEffect(() => {
+    const root = document.documentElement
+    const key = (e: KeyboardEvent) => e.key === 'Tab' && root.classList.add('keyboard-nav')
+    const pointer = () => root.classList.remove('keyboard-nav')
+    window.addEventListener('keydown', key, true)
+    window.addEventListener('pointerdown', pointer, true)
+    return () => {
+      window.removeEventListener('keydown', key, true)
+      window.removeEventListener('pointerdown', pointer, true)
+    }
+  }, [])
+
+  // The folder in the window title (taskbar, Mission Control, window menus).
+  useEffect(() => {
+    document.title = dir ? `${dir.split(/[\\/]/).filter(Boolean).pop()} — Reframe` : 'Reframe'
+  }, [dir])
+
   // Keep the focused cell in view when navigating by keyboard.
   const focus = useStore((s) => s.focus)
   useEffect(() => {
@@ -149,7 +185,9 @@ export function App() {
         )
       )}
       {dir && assets.length === 0 && <div className="empty-hint center">No images or videos in this folder</div>}
-      {exportOpen && <ExportDialog />}
+      {exportPresence.mounted && <ExportDialog closing={exportPresence.closing} />}
+      <Hud />
+      <ContextMenu />
     </div>
   )
 }

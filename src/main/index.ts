@@ -3,7 +3,7 @@ import { dirname, extname, join, normalize } from 'node:path'
 import { Readable } from 'node:stream'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import type { ColorMeta, ProjectFile, VideoExportJob } from '@shared/types'
-import { cancelExport, exportVideo, frame, poster, stopWorker } from './jobs'
+import { cancelExport, exportVideo, frame, poster, scrubProxy, stopWorker } from './jobs'
 import { saveProject, scanFolder, watchFolder } from './folder'
 import { checkForUpdate, openRelease } from './updates'
 
@@ -52,7 +52,9 @@ async function open(path: string) {
 
 function serveMedia(req: Request): Promise<Response> | Response {
   const path = normalize(decodeURIComponent(new URL(req.url).pathname.slice(1)))
-  if (!currentDir || dirname(path) !== currentDir) return new Response(null, { status: 403 })
+  // The open folder, plus the scrub proxies made from it.
+  const allowed = (currentDir && dirname(path) === currentDir) || dirname(path) === normalize(join(app.getPath('userData'), 'posters', 'scrub'))
+  if (!allowed) return new Response(null, { status: 403 })
   return fs.stat(path).then(
     (st) => {
       const headers: Record<string, string> = {
@@ -90,7 +92,8 @@ function createWindow() {
     show: false,
     backgroundColor: BG,
     titleBarStyle: mac ? 'hiddenInset' : 'hidden',
-    ...(mac ? { trafficLightPosition: { x: 18, y: 17 } } : { titleBarOverlay: { color: BG, symbolColor: '#8b8b93', height: 48 } }),
+    // 47px: the top bar is 48 including its 1px bottom border, which should run under the buttons.
+    ...(mac ? { trafficLightPosition: { x: 18, y: 17 } } : { titleBarOverlay: { color: BG, symbolColor: '#8b8b93', height: 47 } }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -98,6 +101,9 @@ function createWindow() {
     }
   })
   win.once('ready-to-show', () => win?.show())
+  // Lets open popovers close when the window is dragged by its title bar (those clicks never
+  // reach the page).
+  win.on('will-move', () => win?.webContents.send('window-moving'))
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL)
   else win.loadFile(join(__dirname, '../renderer/index.html'))
@@ -149,6 +155,42 @@ const inFolder = (path: string) => {
 ipcMain.handle('frame', (_e, path: string, time: number, color?: ColorMeta) => {
   inFolder(path)
   return frame(path, time, color)
+})
+ipcMain.handle('scrub-proxy', (_e, path: string, w: number, h: number, color?: ColorMeta) => {
+  inFolder(path)
+  return scrubProxy(path, w, h, color)
+})
+// Export progress on the taskbar / Dock icon (-1 clears it).
+ipcMain.handle('set-progress', (e, p: number) => BrowserWindow.fromWebContents(e.sender)?.setProgressBar(p < 0 ? -1 : p))
+// Windows / Linux draw the caption buttons over the page (titleBarOverlay), so a modal's backdrop
+// can't dim them. Fade their colours alongside the backdrop instead (it's 55% black over BG), on
+// the same 180ms ease-out-cubic as the backdrop's CSS animation so the two move together.
+const OVERLAY = { color: [0x11, 0x11, 0x13], symbol: [0x8b, 0x8b, 0x93] }
+const DIM = 0.45
+let overlayFade: NodeJS.Timeout | undefined
+ipcMain.handle('set-dimmed', (e, dimmed: boolean) => {
+  const w = BrowserWindow.fromWebContents(e.sender)
+  if (!w || process.platform === 'darwin') return
+  clearInterval(overlayFade)
+  const hex = (c: number[], k: number) => '#' + c.map((v) => Math.round(v * k).toString(16).padStart(2, '0')).join('')
+  const from = dimmed ? 1 : DIM
+  const to = dimmed ? DIM : 1
+  const t0 = Date.now()
+  overlayFade = setInterval(() => {
+    const t = Math.min(1, (Date.now() - t0) / 180)
+    const k = from + (to - from) * (1 - Math.pow(1 - t, 3))
+    try {
+      w.setTitleBarOverlay({ color: hex(OVERLAY.color, k), symbolColor: hex(OVERLAY.symbol, k) })
+    } catch {
+      // No overlay (e.g. frameless without one); nothing to tint.
+    }
+    if (t === 1) clearInterval(overlayFade)
+  }, 16)
+})
+ipcMain.handle('focus-window', (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender)
+  if (w?.isMinimized()) w.restore()
+  w?.focus()
 })
 ipcMain.handle('check-update', () => checkForUpdate())
 ipcMain.handle('open-release', () => openRelease())

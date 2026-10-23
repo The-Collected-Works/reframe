@@ -3,50 +3,21 @@ import { drawFrame, resolveSettings } from '@shared/layout'
 import type { Artboard, Clip } from '@shared/types'
 import { dragOffset, NO_GUIDES, type Guides } from '../interact'
 import { posterTime } from '@shared/media'
+import { observeVisibility, scheduleDraw } from '../lazydraw'
 import { mediaUrl, prioritize } from '../media'
+import { assetMenu } from '../menus'
 import { hasOverrides, useBoard, useStore, type Asset } from '../store'
 import { fmtTime } from './ui'
 
 const GAP = 8
 /** Mat around each frame; matches .cell padding in styles.css. */
 const PAD = 10
-
-// Cells draw lazily: only when on (or near) screen, only when their content changed, and through
-// a per-frame time budget so a large redraw never blocks input.
-const drawQueue = new Set<() => void>()
-let drawRaf = 0
-
-function scheduleDraw(task: () => void) {
-  drawQueue.add(task)
-  if (!drawRaf) drawRaf = requestAnimationFrame(flushDraws)
-}
-
-function flushDraws() {
-  drawRaf = 0
-  const t0 = performance.now()
-  for (const task of drawQueue) {
-    drawQueue.delete(task)
-    task()
-    if (performance.now() - t0 > 6) break
-  }
-  if (drawQueue.size) drawRaf = requestAnimationFrame(flushDraws)
-}
-
-let observer: IntersectionObserver | null = null
-const onVisibility = new WeakMap<Element, (visible: boolean) => void>()
-
-function observeVisibility(el: Element, cb: (visible: boolean) => void): () => void {
-  observer ??= new IntersectionObserver(
-    (entries) => entries.forEach((e) => onVisibility.get(e.target)?.(e.isIntersecting)),
-    { rootMargin: '400px 0px' }
-  )
-  onVisibility.set(el, cb)
-  observer.observe(el)
-  return () => {
-    observer?.unobserve(el)
-    onVisibility.delete(el)
-  }
-}
+/**
+ * Horizontal padding of the scroller (matches .grid-scroll). With its 10px scrollbar gutter on
+ * each side and the 10px mat, frame-to-edge is 36px on every side, deliberately larger than
+ * frame-to-frame (PAD + GAP + PAD = 28) so the grid sits inside a margin.
+ */
+const EDGE = 16
 
 /**
  * Stays mounted (hidden) while the single view is open, so switching back is instant and keeps
@@ -64,7 +35,7 @@ export function Grid({ active }: { active: boolean }) {
 
   useLayoutEffect(() => {
     const el = ref.current!
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth - 32))
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth - EDGE * 2))
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -73,7 +44,8 @@ export function Grid({ active }: { active: boolean }) {
   const aspect = board.width / board.height
   const target = aspect >= 1 ? cellSize : cellSize * aspect
   const cols = Math.max(1, Math.floor((width + GAP) / (target + PAD * 2 + GAP)))
-  const cellW = width > 0 ? Math.floor((width - GAP * (cols - 1)) / cols) : 0
+  // Exact (fractional) widths, so no rounding leftover piles up on the right.
+  const cellW = width > 0 ? (width - GAP * (cols - 1)) / cols : 0
 
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
 
@@ -196,6 +168,8 @@ const Cell = memo(function Cell({ asset, board, width, active }: { asset: Asset;
       c.width = pw
       c.height = ph
     }
+    // First draw fades the thumbnail in (CSS), and tells view transitions it has pixels.
+    if (!c.dataset.ready && asset.thumb) c.dataset.ready = '1'
     const ctx = c.getContext('2d')!
     const kk = k * dpr
     const video = fade.current > 0 ? live.current : null
@@ -357,7 +331,13 @@ const Cell = memo(function Cell({ asset, board, width, active }: { asset: Asset;
   }
 
   return (
-    <div data-name={asset.name} className={'cell' + (selected ? ' selected' : '') + (focused ? ' focused' : '') + (settings.skip ? ' skipped' : '')}>
+    <div
+      data-name={asset.name}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        assetMenu(asset.name, asset.path, { x: e.clientX, y: e.clientY })
+      }}
+      className={'cell' + (selected ? ' selected' : '') + (focused ? ' focused' : '') + (settings.skip ? ' skipped' : '')}>
       <div
         ref={frame}
         className="frame"

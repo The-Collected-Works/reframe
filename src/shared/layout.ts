@@ -3,6 +3,8 @@ import type { Artboard, CropSettings } from './types'
 export const DEFAULT_SETTINGS: CropSettings = {
   fit: 'fill',
   zoom: 1,
+  scaleX: 1,
+  scaleY: 1,
   anchorX: 0.5,
   anchorY: 0.5,
   offsetX: 0,
@@ -95,8 +97,8 @@ export function computeLayout(W: number, H: number, sw: number, sh: number, s: C
       // Smallest scale whose rotated rect still covers the whole board.
       kx = ky = Math.max((W * c + H * n) / sw, (W * n + H * c) / sh)
   }
-  const w = sw * kx * s.zoom
-  const h = sh * ky * s.zoom
+  const w = sw * kx * s.zoom * s.scaleX
+  const h = sh * ky * s.zoom * s.scaleY
   const bw = w * c + h * n
   const bh = w * n + h * c
   return {

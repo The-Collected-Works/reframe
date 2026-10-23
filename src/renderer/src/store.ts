@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { DEFAULT_SETTINGS, resolveSettings } from '@shared/layout'
+import type { IconName } from './components/ui'
 import type { Artboard, AssetEntry, Clip, ColorMeta, CropSettings, ExportPrefs, FolderScan, ProjectFile, SettingKey } from '@shared/types'
 
 export interface Asset extends AssetEntry {
@@ -7,11 +8,27 @@ export interface Asset extends AssetEntry {
   h: number
   duration: number
   color?: ColorMeta
+  audio?: boolean
+  /** Video frame rate; 0 if unknown. */
+  fps?: number
   thumb: ImageBitmap | null
   error: boolean
 }
 
 export type View = 'grid' | 'loupe'
+
+export interface AppMenuItem {
+  id?: string
+  label?: string
+  icon?: IconName
+  shortcut?: string
+  /** Present makes it a toggle, shown with a trailing check. */
+  checked?: boolean
+  enabled?: boolean
+  /** Destructive: shown in red. */
+  danger?: boolean
+  separator?: boolean
+}
 
 export const PRESETS: { name: string; width: number; height: number }[] = [
   { name: 'Square', width: 1080, height: 1080 },
@@ -77,6 +94,13 @@ interface State {
   boardEditor: string | null
   /** Eyedropper armed: the next click on media samples the background colour. */
   picking: boolean
+  /** Brief confirmation shown over the content (copy, paste, undo). `n` restarts it. */
+  hud: { text: string; n: number } | null
+  /** The open context menu (see menus.ts / ContextMenu.tsx). */
+  contextMenu: { x: number; y: number; items: AppMenuItem[] } | null
+  /** Preview playback volume, shared by every video and remembered between sessions. */
+  volume: number
+  lastVolume: number
 }
 
 interface Actions {
@@ -95,6 +119,8 @@ interface Actions {
   /** Like edit(), but computes the patch from each target's current settings. */
   editEach(fn: (s: CropSettings) => Partial<CropSettings>): void
   setSelection(names: string[]): void
+  /** Makes the focused asset's values for `keys` the artboard defaults; the selection then follows them. */
+  makeDefault(keys: SettingKey[]): void
   /** Removes overrides so the keys follow the defaults again. Defaults to the selection. */
   resetKeys(keys: SettingKey[], names?: string[]): void
   copy(): void
@@ -109,6 +135,8 @@ interface Actions {
   setExportOpen(open: boolean): void
   setBoardEditor(id: string | null): void
   setPicking(picking: boolean): void
+  showHud(text: string): void
+  setVolume(volume: number): void
   undo(): void
   redo(): void
 }
@@ -116,6 +144,15 @@ interface Actions {
 export type Store = State & Actions
 
 let lastCommit = 0
+
+function storedVolume(): number {
+  try {
+    const v = parseFloat(localStorage.getItem('reframe.volume') ?? '')
+    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.8
+  } catch {
+    return 0.8
+  }
+}
 
 export const useStore = create<Store>()((set, get) => {
   /** Applies a project change, coalescing rapid edits (slider drags) into one undo step. */
@@ -176,6 +213,10 @@ export const useStore = create<Store>()((set, get) => {
     exportOpen: false,
     boardEditor: null,
     picking: false,
+    hud: null,
+    contextMenu: null,
+    volume: storedVolume(),
+    lastVolume: storedVolume() || 0.8,
 
     load(scan) {
       const project = normalizeProject(scan.project)
@@ -238,7 +279,8 @@ export const useStore = create<Store>()((set, get) => {
     },
 
     selectAll: () => set({ selection: get().assets.map((a) => a.name) }),
-    clearSelection: () => set({ selection: [], focus: null }),
+    // In single view the focused asset stays on screen; only the inspector switches to defaults.
+    clearSelection: () => set({ selection: [], focus: get().view === 'loupe' ? get().focus : null }),
 
     step(delta) {
       const { assets, focus } = get()
@@ -269,6 +311,16 @@ export const useStore = create<Store>()((set, get) => {
       mapBoard((b) => selection.reduce((acc, n) => withOverrides(acc, [n], fn(resolveSettings(acc, n))), b))
     },
 
+    makeDefault(keys) {
+      const { selection, focus, project, boardId } = get()
+      const board = project.artboards.find((b) => b.id === boardId)
+      if (!board || !selection.length) return
+      const source = resolveSettings(board, focus && selection.includes(focus) ? focus : selection[0])
+      const values = Object.fromEntries(keys.map((k) => [k, source[k]])) as Partial<CropSettings>
+      mapBoard((b) => withoutOverrides({ ...b, defaults: { ...b.defaults, ...values } }, selection, keys))
+      get().showHud(`Now the default for ${board.name}`)
+    },
+
     resetKeys(keys, names = get().selection) {
       mapBoard((b) => withoutOverrides(b, names, keys))
     },
@@ -281,6 +333,8 @@ export const useStore = create<Store>()((set, get) => {
       if (!board || !focus) return
       const { skip: _skip, ...overrides } = board.overrides[focus] ?? {}
       set({ clipboard: overrides })
+      const n = Object.keys(overrides).length
+      get().showHud(n ? `Copied ${n} setting${n === 1 ? '' : 's'}` : 'Copied defaults')
     },
 
     paste() {
@@ -288,6 +342,7 @@ export const useStore = create<Store>()((set, get) => {
       if (!clipboard || !selection.length) return
       const keys = (Object.keys(DEFAULT_SETTINGS) as SettingKey[]).filter((k) => k !== 'skip')
       mapBoard((b) => withOverrides(withoutOverrides(b, selection, keys), selection, clipboard))
+      get().showHud(selection.length > 1 ? `Pasted to ${selection.length} items` : 'Pasted')
     },
 
     setClip(name, clip) {
@@ -341,6 +396,16 @@ export const useStore = create<Store>()((set, get) => {
     setExportOpen: (exportOpen) => set({ exportOpen }),
     setBoardEditor: (boardEditor) => set({ boardEditor }),
     setPicking: (picking) => set({ picking }),
+    setVolume(volume) {
+      const v = Math.min(1, Math.max(0, volume))
+      set({ volume: v, lastVolume: v > 0 ? v : get().lastVolume })
+      try {
+        localStorage.setItem('reframe.volume', String(v))
+      } catch {
+        // Not persisted; fine.
+      }
+    },
+    showHud: (text) => set({ hud: { text, n: (get().hud?.n ?? 0) + 1 } }),
 
     undo() {
       const { past, project, future, boardId } = get()
@@ -349,6 +414,7 @@ export const useStore = create<Store>()((set, get) => {
       lastCommit = 0
       const keep = prev.artboards.some((b) => b.id === boardId)
       set({ project: prev, past: past.slice(0, -1), future: [project, ...future], boardId: keep ? boardId : prev.artboards[0].id })
+      get().showHud('Undo')
     },
 
     redo() {
@@ -358,6 +424,7 @@ export const useStore = create<Store>()((set, get) => {
       lastCommit = 0
       const keep = next.artboards.some((b) => b.id === boardId)
       set({ project: next, past: [...past, project], future: future.slice(1), boardId: keep ? boardId : next.artboards[0].id })
+      get().showHud('Redo')
     }
   }
 })

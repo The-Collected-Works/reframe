@@ -7,6 +7,9 @@ export interface CropSettings {
   fit: FitMode
   /** Multiplier on the fit scale. 1 = exactly fit/fill. */
   zoom: number
+  /** Stretch along the media's own width / height (from dragging an edge). 1 = none. */
+  scaleX: number
+  scaleY: number
   /** Where the media sits within the free space, 0..1 (like CSS object-position). */
   anchorX: number
   anchorY: number
@@ -101,6 +104,18 @@ export interface PosterResult {
   data: Uint8Array
   duration: number
   color: ColorMeta
+  /** Has an audio stream. */
+  audio: boolean
+  /** Frame rate (average), or 0 if unknown. */
+  fps: number
+}
+
+/** One published release, newer than the running build. `body` is GitHub's Markdown, as written. */
+export interface ReleaseNote {
+  version: string
+  name: string
+  date: string
+  body: string
 }
 
 export interface ReframeApi {
@@ -116,11 +131,20 @@ export interface ReframeApi {
   poster(path: string): Promise<PosterResult>
   /** A frame decoded the way export decodes it, as JPEG. */
   frame(path: string, time: number, color?: ColorMeta): Promise<Uint8Array>
+  /** Path of a small all-keyframe copy for scrubbing, built in the background on first request. */
+  scrubProxy(path: string, w: number, h: number, color?: ColorMeta): Promise<string>
   reveal(path: string): Promise<void>
   /** Newer GitHub release than this build, if any. */
-  checkUpdate(): Promise<{ version: string } | null>
+  checkUpdate(): Promise<{ version: string; notes: ReleaseNote[] } | null>
   openRelease(): Promise<void>
+  /** 0..1 shows progress on the taskbar / Dock icon; -1 clears it. */
+  setProgress(p: number): Promise<void>
+  focusWindow(): Promise<void>
+  /** Tints the OS-drawn window controls to match a modal's dimmed backdrop. */
+  setDimmed(dimmed: boolean): Promise<void>
   pathForFile(file: File): string
   onExportProgress(cb: (p: ExportProgress) => void): () => void
   onFolderChanged(cb: () => void): () => void
+  /** The user started dragging the window. */
+  onWindowMoving(cb: () => void): () => void
 }

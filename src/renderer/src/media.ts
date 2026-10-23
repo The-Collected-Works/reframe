@@ -25,10 +25,10 @@ export function loadImage(path: string): Promise<HTMLImageElement> {
   return img.decode().then(() => img)
 }
 
-export async function loadPoster(path: string): Promise<{ bitmap: ImageBitmap; duration: number; color: ColorMeta }> {
+export async function loadPoster(path: string): Promise<{ bitmap: ImageBitmap; duration: number; color: ColorMeta; audio: boolean; fps: number }> {
   const res = await api.poster(path)
   const bitmap = await createImageBitmap(new Blob([res.data as BlobPart], { type: 'image/jpeg' }))
-  return { bitmap, duration: res.duration, color: res.color }
+  return { bitmap, duration: res.duration, color: res.color, audio: res.audio, fps: res.fps }
 }
 
 async function loadMeta(a: Asset): Promise<Partial<Asset>> {
@@ -36,9 +36,9 @@ async function loadMeta(a: Asset): Promise<Partial<Asset>> {
     const img = await loadImage(a.path)
     return { w: img.naturalWidth, h: img.naturalHeight, thumb: await shrink(img, img.naturalWidth, img.naturalHeight) }
   }
-  const { bitmap, duration, color } = await loadPoster(a.path)
+  const { bitmap, duration, color, audio, fps } = await loadPoster(a.path)
   const thumb = await shrink(bitmap, bitmap.width, bitmap.height)
-  const meta = { w: bitmap.width, h: bitmap.height, duration, color, thumb }
+  const meta = { w: bitmap.width, h: bitmap.height, duration, color, audio, fps, thumb }
   bitmap.close()
   return meta
 }

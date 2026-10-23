@@ -2,11 +2,12 @@
 // thread (over a second on Windows while Defender scans ffmpeg.exe, or from a network/WSL path);
 // in the main process that would freeze the whole window. Here it only delays the result.
 import type { ColorMeta, VideoExportJob } from '@shared/types'
-import { cancelExport, exportVideo, frame, poster } from './ffmpeg'
+import { cancelExport, exportVideo, frame, poster, scrubProxy } from './ffmpeg'
 
 export type WorkerRequest =
   | { id: number; type: 'poster'; path: string }
   | { id: number; type: 'frame'; path: string; time: number; color?: ColorMeta }
+  | { id: number; type: 'proxy'; path: string; w: number; h: number; color?: ColorMeta }
   | { id: number; type: 'export'; job: VideoExportJob }
   | { type: 'cancel' }
 
@@ -21,6 +22,7 @@ port.on('message', async ({ data }) => {
   try {
     if (req.type === 'poster') reply({ id: req.id, result: await poster(req.path) })
     else if (req.type === 'frame') reply({ id: req.id, result: await frame(req.path, req.time, req.color) })
+    else if (req.type === 'proxy') reply({ id: req.id, result: await scrubProxy(req.path, req.w, req.h, req.color) })
     else {
       await exportVideo(req.job, (progress) => reply({ id: req.id, progress }))
       reply({ id: req.id, result: null })
