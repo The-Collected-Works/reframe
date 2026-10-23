@@ -2,7 +2,9 @@ import type { ReactNode } from 'react'
 import { DEFAULT_SETTINGS, normDeg, resolveSettings } from '@shared/layout'
 import type { CropSettings, FitMode, SettingKey } from '@shared/types'
 import { ZOOM_MAX, ZOOM_MIN } from '../interact'
+import { combo, MOD, SHIFT } from '../keys'
 import { pickBackground } from '../media'
+import { resetSelection } from '../menus'
 import { hasOverrides, useBoard, useStore, type Asset } from '../store'
 import { ColorField, fmtTime, Icon, NumberField, Segmented, Slider, Toggle } from './ui'
 
@@ -177,14 +179,14 @@ export function Inspector() {
 
       {editing && (
         <footer className="insp-foot">
-          <button className="ghost" disabled={!anyOverride} onClick={() => resetKeys(Object.keys(s) as SettingKey[])}>
+          <button className="ghost" disabled={!anyOverride} title={`Reset to defaults (${combo(MOD, SHIFT, 'R')})`} onClick={resetSelection}>
             <Icon name="reset" size={14} /> Reset
           </button>
           <div className="spacer" />
-          <button className="icon-btn" title="Copy settings (⌘C)" onClick={copy} disabled={!focus}>
+          <button className="icon-btn" title={`Copy settings (${combo(MOD, 'C')})`} onClick={copy} disabled={!focus}>
             <Icon name="copy" size={14} />
           </button>
-          <button className="icon-btn" title="Paste settings (⌘V)" onClick={paste} disabled={!clipboard}>
+          <button className="icon-btn" title={`Paste settings (${combo(MOD, 'V')})`} onClick={paste} disabled={!clipboard}>
             <Icon name="paste" size={14} />
           </button>
         </footer>

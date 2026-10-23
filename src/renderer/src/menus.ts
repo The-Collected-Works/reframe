@@ -1,11 +1,22 @@
 import { DEFAULT_SETTINGS, resolveSettings } from '@shared/layout'
 import type { SettingKey } from '@shared/types'
+import { combo, MOD, SHIFT } from './keys'
 import { api } from './media'
 import { hasOverrides, useStore, type AppMenuItem } from './store'
 
 const mac = api.platform === 'darwin'
 const revealLabel = mac ? 'Reveal in Finder' : api.platform === 'win32' ? 'Show in Explorer' : 'Show in Folder'
-const key = (k: string) => (mac ? `⌘${k}` : `Ctrl+${k}`)
+const key = (k: string) => combo(MOD, k)
+
+/** Back to the artboard's defaults for every selected asset; undoable, and says so. */
+export function resetSelection(): void {
+  const st = useStore.getState()
+  const board = st.project.artboards.find((b) => b.id === st.boardId)
+  const names = st.selection.filter((n) => board && hasOverrides(board, n))
+  if (!names.length) return
+  st.resetKeys(Object.keys(DEFAULT_SETTINGS) as SettingKey[], names)
+  st.showHud(`Reset ${names.length === 1 ? names[0] : `${names.length} assets`} · ${key('Z')} to undo`)
+}
 
 let resolver: ((id: string | null) => void) | null = null
 
@@ -34,7 +45,7 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
   const sel = st.selection
   const skip = resolveSettings(board, name).skip
   const id = await showMenu(at.x, at.y, [
-    ...(inLoupe ? [] : [{ id: 'open', label: 'Open', icon: 'open' as const, shortcut: 'E' }, { separator: true }]),
+    ...(inLoupe ? [] : [{ id: 'open', label: 'Open', icon: 'open' as const, shortcut: 'Space' }, { separator: true }]),
     { id: 'copy', label: 'Copy Settings', icon: 'copy', shortcut: key('C'), enabled: sel.length === 1 },
     {
       id: 'paste',
@@ -43,7 +54,13 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
       shortcut: key('V'),
       enabled: !!st.clipboard
     },
-    { id: 'reset', label: 'Reset to Defaults', icon: 'reset', enabled: sel.some((n) => hasOverrides(board, n)) },
+    {
+      id: 'reset',
+      label: 'Reset to Defaults',
+      icon: 'reset',
+      shortcut: combo(MOD, SHIFT, 'R'),
+      enabled: sel.some((n) => hasOverrides(board, n))
+    },
     { separator: true },
     { id: 'include', label: 'Include in Export', icon: 'include', checked: !skip },
     { separator: true },
@@ -53,7 +70,7 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
   if (id === 'open') st.setView('loupe')
   else if (id === 'copy') st.copy()
   else if (id === 'paste') st.paste()
-  else if (id === 'reset') st.resetKeys(Object.keys(DEFAULT_SETTINGS) as SettingKey[])
+  else if (id === 'reset') resetSelection()
   else if (id === 'include') st.edit({ skip: !skip })
   else if (id === 'reveal') api.reveal(path)
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { bounds, computeLayout, corners, drawFrame, fromLocal, quarterTurns, resolveSettings, toLocal, type Point } from '@shared/layout'
 import type { CropSettings } from '@shared/types'
 import { dragOffset, NO_GUIDES, rotateAbout, snapAngle, snapScale, snapZoom, withPivot, zoomAbout, ZOOM_MAX, ZOOM_MIN, type Guides } from '../interact'
+import { combo, MOD } from '../keys'
 import { api, loadStill, mediaUrl } from '../media'
 import { assetMenu } from '../menus'
 import { crossfade, fly, settledRect, snapshot } from '../motion'
@@ -793,7 +794,7 @@ export function Loupe() {
       if (mode.kind === 'move') {
         const r = dragOffset(start, W, H, a.w, a.h, (ev.clientX - x0) / kk, (ev.clientY - y0) / kk, 6 / kk, {
           shift: ev.shiftKey,
-          alt: ev.altKey
+          alt: ev.altKey || ev.metaKey || ev.ctrlKey
         })
         patch = r.patch
         guides.current = r.guides
@@ -844,7 +845,7 @@ export function Loupe() {
         }
       } else {
         const ang = Math.atan2(pt.y - p0.cy, pt.x - p0.cx)
-        const deg = snapAngle(start.rotation + ((ang - a0) * 180) / Math.PI, ev.shiftKey, ev.altKey)
+        const deg = snapAngle(start.rotation + ((ang - a0) * 180) / Math.PI, ev.shiftKey, ev.altKey || ev.metaKey || ev.ctrlKey)
         patch = rotateAbout(start, W, H, a.w, a.h, deg)
         setReadout({ ...at, text: `${Math.round(patch.rotation! * 10) / 10}°` })
       }
@@ -907,7 +908,7 @@ export function Loupe() {
         {asset && (
           <button
             className="zoom-chip"
-            title={manual ? 'Fit to view (⌘/Ctrl+0)' : 'Actual pixels'}
+            title={manual ? `Fit to view (${combo(MOD, '0')})` : 'Actual pixels'}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => (manual ? fitView() : actualPixels())}
           >

@@ -128,11 +128,20 @@ export type UpdateStatus =
   | { state: 'ready'; version: string }
   | { state: 'failed' }
 
+/** What's over the page: nothing, or a modal's dimmed backdrop. */
+export type OverlayTint = 'none' | 'dim'
+
 export interface ReframeApi {
   platform: NodeJS.Platform
   openFolder(): Promise<FolderScan | null>
   scanFolder(dir: string): Promise<FolderScan>
   lastFolder(): Promise<string | null>
+  /** Recently opened folders that still exist, newest first. */
+  recentFolders(): Promise<string[]>
+  /** Removes a folder from the recent list; returns the updated list. */
+  forgetFolder(dir: string): Promise<string[]>
+  /** A folder to open, chosen from the taskbar jump list or the Dock menu. */
+  onOpenFolderRequest(cb: (dir: string) => void): () => void
   saveProject(dir: string, project: ProjectFile): Promise<void>
   chooseExportDir(defaultPath?: string): Promise<string | null>
   writeFile(path: string, data: ArrayBuffer): Promise<void>
@@ -153,8 +162,8 @@ export interface ReframeApi {
   /** 0..1 shows progress on the taskbar / Dock icon; -1 clears it. */
   setProgress(p: number): Promise<void>
   focusWindow(): Promise<void>
-  /** Tints the OS-drawn window controls to match a modal's dimmed backdrop. */
-  setDimmed(dimmed: boolean): Promise<void>
+  /** Tints the OS-drawn window controls to match what the page lays over itself. */
+  setOverlayTint(tint: OverlayTint): Promise<void>
   pathForFile(file: File): string
   onExportProgress(cb: (p: ExportProgress) => void): () => void
   onFolderChanged(cb: () => void): () => void

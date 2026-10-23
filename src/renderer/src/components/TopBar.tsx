@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Artboard, ReleaseNote, UpdateStatus } from '@shared/types'
+import { version } from '../../../../package.json'
+import { ALT, combo, MOD, SHIFT } from '../keys'
 import { api } from '../media'
 import { boardMenu } from '../menus'
 import { reducedMotion } from '../motion'
@@ -8,7 +10,7 @@ import { Icon, NumberField, Popover, Segmented } from './ui'
 
 const basename = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 
-export function TopBar({ onOpen }: { onOpen: () => void }) {
+export function TopBar({ onOpen }: { onOpen: (dir?: string) => void }) {
   const dir = useStore((s) => s.dir)
   const boards = useStore((s) => s.project.artboards)
   const boardId = useStore((s) => s.boardId)
@@ -21,10 +23,7 @@ export function TopBar({ onOpen }: { onOpen: () => void }) {
 
   return (
     <header className={'topbar ' + api.platform}>
-      <button className="folder" onClick={onOpen} title={dir ?? 'Open folder'}>
-        <Icon name="folder" size={15} />
-        <span>{dir ? basename(dir) : 'Open folder'}</span>
-      </button>
+      <FolderMenu dir={dir} onOpen={onOpen} />
 
       {dir && (
         <div className="tabs-wrap">
@@ -33,7 +32,7 @@ export function TopBar({ onOpen }: { onOpen: () => void }) {
               <div key={b.id} className="tab-wrap">
                 <button
                   className={'tab' + (b.id === boardId ? ' on' : '') + (editor === b.id ? ' editing' : '')}
-                  title={b.id === boardId ? 'Edit artboard' : i < 9 ? `${api.platform === 'darwin' ? '⌘' : 'Ctrl+'}${i + 1}` : undefined}
+                  title={b.id === boardId ? 'Edit artboard' : i < 9 ? combo(MOD, String(i + 1)) : undefined}
                   onClick={() => (b.id === boardId ? setBoardEditor(editor === b.id ? null : b.id) : setBoard(b.id))}
                   onContextMenu={(e) => {
                     e.preventDefault()
@@ -93,6 +92,7 @@ export function TopBar({ onOpen }: { onOpen: () => void }) {
       <div className="drag-fill" />
 
       {update && <UpdateButton update={update} />}
+      <AppInfo />
 
       {dir && (
         <div className="tools">
@@ -111,12 +111,12 @@ export function TopBar({ onOpen }: { onOpen: () => void }) {
           <Segmented
             value={view}
             options={[
-              { value: 'grid', label: <Icon name="grid" size={15} />, title: 'Grid (G)' },
+              { value: 'grid', label: <Icon name="grid" size={15} />, title: 'Grid (E)' },
               { value: 'loupe', label: <Icon name="loupe" size={15} />, title: 'Single (E)' }
             ]}
             onChange={setView}
           />
-          <button className="primary" onClick={() => setExportOpen(true)} title={`Export (${api.platform === 'darwin' ? '⌘' : 'Ctrl+'}E)`}>
+          <button className="primary" onClick={() => setExportOpen(true)} title={`Export (${combo(MOD, 'E')})`}>
             <Icon name="export" size={14} />
             Export
           </button>
@@ -124,6 +124,73 @@ export function TopBar({ onOpen }: { onOpen: () => void }) {
       )}
     </header>
   )
+}
+
+/**
+ * The folder button: a menu with Open Folder… and the folders opened recently, newest first (so
+ * the open one leads). Each recent folder can be dropped from the list.
+ */
+function FolderMenu({ dir, onOpen }: { dir: string | null; onOpen: (dir?: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [recent, setRecent] = useState<string[]>([])
+  useEffect(() => {
+    if (open) api.recentFolders().then(setRecent, () => {})
+  }, [open])
+  const shown = recent.slice(0, 5)
+  const pick = (d?: string) => {
+    setOpen(false)
+    // Picking the folder that's already open just closes the menu.
+    if (!(d && dir && samePath(d, dir))) onOpen(d)
+  }
+  return (
+    <div className="tab-wrap">
+      <button className={'folder' + (open ? ' open' : '')} title={dir ?? undefined} onClick={() => setOpen(!open)}>
+        <Icon name="folder" size={15} />
+        <span>{dir ? basename(dir) : 'Open folder'}</span>
+      </button>
+      <Popover open={open} onClose={() => setOpen(false)} className="menu folder-menu">
+        <button className="menu-item" onClick={() => pick()}>
+          <span>Open Folder…</span>
+          <span className="muted">{combo(MOD, 'O')}</span>
+        </button>
+        {shown.length > 0 && (
+          <>
+            <div className="menu-sep" />
+            <div className="menu-label">Recent</div>
+            {shown.map((d) => {
+              return (
+                <div key={d} className="recent">
+                  <button className="menu-item" title={d} onClick={() => pick(d)}>
+                    <span className="recent-name">{basename(d) || d}</span>
+                    <span className="recent-path muted">{shortParent(d)}</span>
+                  </button>
+                  <button
+                    className="recent-forget"
+                    title="Remove from recent folders"
+                    aria-label="Remove from recent folders"
+                    onClick={() => api.forgetFolder(d).then(setRecent, () => {})}
+                  >
+                    <Icon name="close" size={12} />
+                  </button>
+                </div>
+              )
+            })}
+          </>
+        )}
+      </Popover>
+    </div>
+  )
+}
+
+const samePath = (a: string, b: string) => a.replace(/[\\/]+$/, '').toLowerCase() === b.replace(/[\\/]+$/, '').toLowerCase()
+
+/** The folder's parent, keeping its last two parts: "…\Clients\Acme". */
+function shortParent(path: string): string {
+  const sep = path.includes('\\') ? '\\' : '/'
+  const parts = path.split(/[\\/]/).filter(Boolean)
+  parts.pop()
+  if (parts.length <= 2) return (path.startsWith('/') ? '/' : '') + parts.join(sep)
+  return '…' + sep + parts.slice(-2).join(sep)
 }
 
 type Update = { version: string; notes: ReleaseNote[]; status: UpdateStatus }
@@ -154,15 +221,7 @@ function useUpdateCheck(): Update | null {
  * or, once the installed app has downloaded the update itself, restarts into it.
  */
 function UpdateButton({ update }: { update: Update }) {
-  const [open, setOpen] = useState(false)
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const later = (fn: () => void, ms: number) => {
-    clearTimeout(timer.current)
-    timer.current = setTimeout(fn, ms)
-  }
-  const enter = () => later(() => setOpen(true), open ? 0 : 180)
-  const leave = () => later(() => setOpen(false), 220)
-  useEffect(() => () => clearTimeout(timer.current), [])
+  const { open, setOpen, enter, leave, keep } = useHoverOpen()
   const { status } = update
   const ready = status.state === 'ready'
   const downloading = status.state === 'downloading'
@@ -191,7 +250,7 @@ function UpdateButton({ update }: { update: Update }) {
         )}
       </button>
       <Popover open={open && update.notes.length > 0} onClose={() => setOpen(false)} className="changelog">
-        <div className="changelog-body" onPointerEnter={() => clearTimeout(timer.current)} onPointerLeave={leave}>
+        <div className="changelog-body" onPointerEnter={keep} onPointerLeave={leave}>
           <div className="changelog-scroll">
             {update.notes.map((n) => (
               <section key={n.version} className="release">
@@ -208,6 +267,117 @@ function UpdateButton({ update }: { update: Update }) {
             <Icon name={ready ? 'update' : 'download'} size={14} />
             {ready ? `Restart to update to ${update.version}` : downloading ? `Downloading ${update.version}…` : `Download ${update.version}`}
           </button>
+        </div>
+      </Popover>
+    </div>
+  )
+}
+
+/**
+ * Open on hover: after a short pause (so passing over doesn't flash it), and staying open while
+ * the pointer moves from the anchor into the dropdown (`keep`) and briefly after it leaves both.
+ */
+function useHoverOpen() {
+  const [open, setOpen] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const later = (fn: () => void, ms: number) => {
+    clearTimeout(timer.current)
+    timer.current = setTimeout(fn, ms)
+  }
+  useEffect(() => () => clearTimeout(timer.current), [])
+  return {
+    open,
+    setOpen,
+    enter: () => later(() => setOpen(true), open ? 0 : 180),
+    leave: () => later(() => setOpen(false), 220),
+    keep: () => clearTimeout(timer.current)
+  }
+}
+
+
+/** Every shortcut, grouped. Keys are shown as separate chips; " / " separates alternatives. */
+const SHORTCUTS: { title: string; items: [string, string[]][] }[] = [
+  {
+    title: 'View',
+    items: [
+      ['Grid / single view', ['E']],
+      ['Open selected', ['Space']],
+      ['Back to grid, deselect', ['Esc']],
+      ['Previous / next asset', ['←', '→']],
+      ['Switch artboard', [MOD, '1–9']]
+    ]
+  },
+  {
+    title: 'Edit',
+    items: [
+      ['Copy / paste settings', [MOD, 'C', '/', MOD, 'V']],
+      ['Undo / redo', [MOD, 'Z', '/', MOD, SHIFT, 'Z']],
+      ['Select all', [MOD, 'A']],
+      ['Pick background color', ['I']],
+      ['Reset asset to defaults', [MOD, SHIFT, 'R']],
+      ['Reset a value', ['Middle-click']]
+    ]
+  },
+  {
+    title: 'Single view',
+    items: [
+      ['Play / pause', ['Space']],
+      ['Fit to view', [MOD, '0']],
+      ['Zoom in / out', [MOD, '+', '/', MOD, '−']],
+      ['Zoom', ['Scroll wheel', '/', 'Pinch']],
+      ['Pan', ['Two-finger scroll', '/', 'Middle-drag']],
+      ['Scale media', [ALT, 'Scroll']],
+      ['Reset transform', ['Double-click']]
+    ]
+  },
+  {
+    title: 'While dragging',
+    items: [
+      ['Stretch (edges, corners)', [SHIFT]],
+      ['Scale from center', [ALT]],
+      ['Lock axis (move)', [SHIFT]],
+      ['15° steps (rotate)', [SHIFT]],
+      ['No snapping', [MOD]]
+    ]
+  },
+  {
+    title: 'File',
+    items: [
+      ['Open folder', [MOD, 'O']],
+      ['Export', [MOD, 'E']]
+    ]
+  }
+]
+
+/** An info button that toggles a dropdown with the version and every shortcut. */
+function AppInfo() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="update-wrap">
+      <button className={'icon-btn' + (open ? ' on' : '')} title="About Reframe and keyboard shortcuts" aria-label="About Reframe and keyboard shortcuts" onClick={() => setOpen(!open)}>
+        <Icon name="info" size={16} />
+      </button>
+      <Popover open={open} onClose={() => setOpen(false)} className="app-info">
+        <div className="app-info-body">
+          <header className="app-info-head">
+            <span className="release-version">Reframe</span>
+            <span className="muted">{version}</span>
+          </header>
+          <div className="changelog-scroll">
+            {SHORTCUTS.map((g) => (
+              <section key={g.title} className="keys">
+                <h4>{g.title}</h4>
+                {g.items.map(([label, keys]) => (
+                  <div key={label} className="key-row">
+                    <span>{label}</span>
+                    <span className="key-combo">
+                      {keys.map((k, i) => (k === '/' ? <span key={i} className="key-or">/</span> : <kbd key={i}>{k}</kbd>))}
+                    </span>
+                  </div>
+                ))}
+              </section>
+            ))}
+          </div>
         </div>
       </Popover>
     </div>
@@ -416,7 +586,7 @@ function BoardEditor({ board, open, canDelete }: { board: Artboard; open: boolea
             className="ghost danger"
             onClick={() => {
               removeBoard(board.id)
-              useStore.getState().showHud(`Deleted “${board.name}” · ${api.platform === 'darwin' ? '⌘' : 'Ctrl+'}Z to undo`)
+              useStore.getState().showHud(`Deleted “${board.name}” · ${combo(MOD, 'Z')} to undo`)
             }}
           >
             <Icon name="trash" size={14} />

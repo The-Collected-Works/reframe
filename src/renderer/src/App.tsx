@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ContextMenu } from './components/ContextMenu'
 import { ExportDialog } from './components/ExportDialog'
 import { Grid } from './components/Grid'
@@ -6,6 +6,7 @@ import { Inspector } from './components/Inspector'
 import { Loupe } from './components/Loupe'
 import { TopBar } from './components/TopBar'
 import { Icon } from './components/ui'
+import { resetSelection } from './menus'
 import { api, cancelPick, hydrate, pickBackground } from './media'
 import { usePresence } from './motion'
 import { useStore } from './store'
@@ -25,18 +26,21 @@ export function App() {
   const assets = useStore((s) => s.assets)
   const exportOpen = useStore((s) => s.exportOpen)
   const exportPresence = usePresence(exportOpen, 180)
-  // The window controls are drawn by the OS over the page, so CSS can't dim them with the
-  // dialog's backdrop; the main process tints them to match instead.
-  useEffect(() => {
-    api.setDimmed(exportOpen)
-  }, [exportOpen])
   const [dropping, setDropping] = useState(false)
+  // The window controls are drawn by the OS over the page, so CSS can't dim them with the
+  // dialog's backdrop; the main process matches them instead.
+  useEffect(() => {
+    api.setOverlayTint(exportOpen ? 'dim' : 'none')
+  }, [exportOpen])
   const [booted, setBooted] = useState(false)
 
   const openDir = useCallback(async (path?: string) => {
     const scan = path ? await api.scanFolder(path).catch(() => null) : await api.openFolder()
     if (scan) useStore.getState().load(scan)
   }, [])
+
+  // A folder picked from the taskbar's or Dock's recent folders while the app is running.
+  useEffect(() => api.onOpenFolderRequest((dir) => openDir(dir)), [openDir])
 
   // Reopen the last folder on launch.
   useEffect(() => {
@@ -95,6 +99,7 @@ export function App() {
         else if (k === 'c') st.copy()
         else if (k === 'v') st.paste()
         else if (k === 'e') st.setExportOpen(true)
+        else if (k === 'r' && e.shiftKey) resetSelection()
         else if (/^[1-9]$/.test(k)) {
           const b = st.project.artboards[Number(k) - 1]
           if (b) st.setBoard(b.id)
@@ -107,8 +112,10 @@ export function App() {
       else if (k === 'escape') {
         if (st.view === 'loupe') st.setView('grid')
         else st.clearSelection()
-      } else if (k === 'g') st.setView('grid')
-      else if (k === 'e' || (k === 'enter' && st.view === 'grid')) st.setView('loupe')
+      } else if (k === 'e') st.setView(st.view === 'loupe' ? 'grid' : 'loupe')
+      // Space opens the selection, like Quick Look; in single view it plays and pauses instead.
+      // A focused button keeps Space for itself.
+      else if (k === ' ' && st.view === 'grid' && st.focus && !(e.target as HTMLElement).closest('button')) st.setView('loupe')
       else if (k === 'arrowright' || (k === 'arrowdown' && st.view === 'loupe')) st.step(1)
       else if (k === 'arrowleft' || (k === 'arrowup' && st.view === 'loupe')) st.step(-1)
       else if (k === 'arrowdown' || k === 'arrowup') {
@@ -147,27 +154,56 @@ export function App() {
     document.querySelector('.cell.focused')?.scrollIntoView({ block: 'nearest' })
   }, [focus, view])
 
+  // The drop tint goes when the drag leaves for anywhere outside the app (including off the
+  // window, where nothing is the related target). As a backstop, dragover repeats every ~50ms
+  // while files are over the window, so if it stops the drag has gone, however it ended.
+  const dropIdle = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const endDrop = () => {
+    clearTimeout(dropIdle.current)
+    setDropping(false)
+  }
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
-    setDropping(false)
+    endDrop()
     const file = e.dataTransfer.files[0]
     if (file) openDir(api.pathForFile(file))
   }
+  // The viewport (or the empty state) is the drop zone, and only it tints: the top bar sits under
+  // the OS-drawn window controls, which couldn't follow the tint in step.
+  const dropZone = {
+    onDragOver: (e: React.DragEvent) => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      setDropping(true)
+      clearTimeout(dropIdle.current)
+      dropIdle.current = setTimeout(endDrop, 250)
+    },
+    onDragLeave: (e: React.DragEvent) => !e.currentTarget.contains(e.relatedTarget as Node | null) && endDrop(),
+    onDrop
+  }
+  const zone = (name: string) => name + ' drop-zone' + (dropping ? ' dropping' : '')
+  // Elsewhere, files are refused (a not-allowed cursor) rather than opened by the browser, which
+  // would navigate the window away from the app.
+  useEffect(() => {
+    const refuse = (e: DragEvent) => {
+      if (e.defaultPrevented) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
+    }
+    window.addEventListener('dragover', refuse)
+    window.addEventListener('drop', refuse)
+    return () => {
+      window.removeEventListener('dragover', refuse)
+      window.removeEventListener('drop', refuse)
+    }
+  }, [])
 
   return (
-    <div
-      className={'app' + (dropping ? ' dropping' : '')}
-      onDragOver={(e) => {
-        e.preventDefault()
-        setDropping(true)
-      }}
-      onDragLeave={(e) => e.currentTarget === e.target && setDropping(false)}
-      onDrop={onDrop}
-    >
-      <TopBar onOpen={() => openDir()} />
+    <div className="app">
+      <TopBar onOpen={openDir} />
       {dir ? (
         <main className="workspace">
-          <section className="content">
+          <section className={zone('content')} {...dropZone}>
             <Grid active={view === 'grid'} />
             {view === 'loupe' && <Loupe />}
           </section>
@@ -175,7 +211,7 @@ export function App() {
         </main>
       ) : (
         booted && (
-          <main className="empty">
+          <main className={zone('empty')} {...dropZone}>
             <button className="empty-drop" onClick={() => openDir()}>
               <Icon name="folder" size={28} />
               <span>Open a folder</span>

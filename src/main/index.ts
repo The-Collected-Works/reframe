@@ -2,10 +2,11 @@ import { createReadStream, promises as fs } from 'node:fs'
 import { dirname, extname, join, normalize } from 'node:path'
 import { Readable } from 'node:stream'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
-import type { ColorMeta, ProjectFile, VideoExportJob } from '@shared/types'
+import type { ColorMeta, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
 import { cancelExport, exportVideo, frame, poster, scrubProxy, stopWorker } from './jobs'
 import { saveProject, scanFolder, watchFolder } from './folder'
 import { installUpdate, pollAutoUpdate, updateStatus } from './autoupdate'
+import { folderArg, forget, readState, recentFolders, remember, updateSystemMenus } from './recent'
 import { checkForUpdate, openRelease } from './updates'
 
 protocol.registerSchemesAsPrivileged([
@@ -32,22 +33,13 @@ if (!primary) app.quit()
 const BG = '#111113'
 let win: BrowserWindow | null = null
 let currentDir: string | null = null
-const statePath = () => join(app.getPath('userData'), 'state.json')
-
-async function readState(): Promise<{ lastFolder?: string }> {
-  try {
-    return JSON.parse(await fs.readFile(statePath(), 'utf8'))
-  } catch {
-    return {}
-  }
-}
 
 async function open(path: string) {
   const dir = (await fs.stat(path)).isDirectory() ? path : dirname(path)
   const scan = await scanFolder(dir)
   currentDir = normalize(dir)
   watchFolder(dir, () => win?.webContents.send('folder-changed'))
-  await fs.writeFile(statePath(), JSON.stringify({ lastFolder: dir })).catch(() => {})
+  await remember(dir)
   return scan
 }
 
@@ -130,7 +122,12 @@ ipcMain.handle('open-folder', async () => {
   return res.canceled || !res.filePaths[0] ? null : open(res.filePaths[0])
 })
 ipcMain.handle('scan-folder', (_e, dir: string) => open(dir))
+ipcMain.handle('recent-folders', () => recentFolders())
+ipcMain.handle('forget-folder', (_e, dir: string) => forget(dir))
+// On launch: a folder the app was started with (from the taskbar's recent folders), else the last.
+const launchFolder = folderArg(process.argv)
 ipcMain.handle('last-folder', async () => {
+  if (launchFolder) return launchFolder
   const { lastFolder } = await readState()
   if (!lastFolder) return null
   return fs.stat(lastFolder).then((s) => (s.isDirectory() ? lastFolder : null), () => null)
@@ -167,21 +164,30 @@ ipcMain.handle('set-progress', (e, p: number) => BrowserWindow.fromWebContents(e
 // can't dim them. Fade their colours alongside the backdrop instead (it's 55% black over BG), on
 // the same 180ms ease-out-cubic as the backdrop's CSS animation so the two move together.
 const OVERLAY = { color: [0x11, 0x11, 0x13], symbol: [0x8b, 0x8b, 0x93] }
-const DIM = 0.45
+type Rgb = number[]
+const scale = (c: Rgb, k: number) => c.map((v) => v * k)
+const TINTS: Record<OverlayTint, { color: Rgb; symbol: Rgb }> = {
+  none: OVERLAY,
+  dim: { color: scale(OVERLAY.color, 0.45), symbol: scale(OVERLAY.symbol, 0.45) }
+}
+let overlayNow = OVERLAY
 let overlayFade: NodeJS.Timeout | undefined
-ipcMain.handle('set-dimmed', (e, dimmed: boolean) => {
+// Eases from whatever the controls show now.
+ipcMain.handle('set-overlay-tint', (e, tint: OverlayTint) => {
   const w = BrowserWindow.fromWebContents(e.sender)
-  if (!w || process.platform === 'darwin') return
+  const to = TINTS[tint]
+  if (!w || !to || process.platform === 'darwin') return
   clearInterval(overlayFade)
-  const hex = (c: number[], k: number) => '#' + c.map((v) => Math.round(v * k).toString(16).padStart(2, '0')).join('')
-  const from = dimmed ? 1 : DIM
-  const to = dimmed ? DIM : 1
+  const hex = (c: Rgb) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')
+  const from = overlayNow
   const t0 = Date.now()
   overlayFade = setInterval(() => {
     const t = Math.min(1, (Date.now() - t0) / 180)
-    const k = from + (to - from) * (1 - Math.pow(1 - t, 3))
+    const k = 1 - Math.pow(1 - t, 3)
+    const mix = (a: Rgb, b: Rgb) => a.map((v, i) => v + (b[i] - v) * k)
+    overlayNow = { color: mix(from.color, to.color), symbol: mix(from.symbol, to.symbol) }
     try {
-      w.setTitleBarOverlay({ color: hex(OVERLAY.color, k), symbolColor: hex(OVERLAY.symbol, k) })
+      w.setTitleBarOverlay({ color: hex(overlayNow.color), symbolColor: hex(overlayNow.symbol) })
     } catch {
       // No overlay (e.g. frameless without one); nothing to tint.
     }
@@ -208,10 +214,13 @@ ipcMain.handle('reveal', async (_e, path: string) => {
   else shell.showItemInFolder(path)
 })
 
-app.on('second-instance', () => {
+// A second launch focuses this window, opening the folder it was given (a jump list entry).
+app.on('second-instance', (_e, argv) => {
   if (!win) return
   if (win.isMinimized()) win.restore()
   win.focus()
+  const dir = folderArg(argv)
+  if (dir) win.webContents.send('open-folder-request', dir)
 })
 
 app.whenReady().then(() => {
@@ -219,6 +228,7 @@ app.whenReady().then(() => {
   protocol.handle('media', serveMedia)
   setMenu()
   createWindow()
+  updateSystemMenus((dir) => win?.webContents.send('open-folder-request', dir))
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow())
 })
 

@@ -1,7 +1,7 @@
 {
   "name": "reframe",
   "productName": "Reframe",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Batch-crop images and video into artboards",
   "main": "./out/main/index.js",
   "author": "The Collected Works",
