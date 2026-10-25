@@ -58,10 +58,12 @@ export function Grid({ active }: { active: boolean }) {
   // Exact (fractional) widths, so no rounding leftover piles up on the right.
   const cellW = width > 0 ? (width - GAP * (cols - 1)) / cols : 0
 
-  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const marqueeRef = useRef<HTMLDivElement>(null)
 
   // Box select from anywhere that isn't a thumbnail (thumbnails drag to reposition instead).
-  // Shift / ⌘ / Ctrl add to the selection. A click without dragging selects or clears.
+  // Shift / ⌘ / Ctrl add to the selection. A click without dragging selects or clears. The box is
+  // drawn straight onto its element and cells are measured once, so dragging doesn't re-render the
+  // grid; the selection only changes when what's inside the box does.
   const onPointerDown = (e: React.PointerEvent) => {
     const t = e.target as HTMLElement
     if (e.button !== 0 || t.closest('.frame')) return
@@ -77,20 +79,19 @@ export function Grid({ active }: { active: boolean }) {
     let last = { x: e.clientX, y: e.clientY }
     let active = false
     let raf = 0
+    let cells: { name: string; x: number; y: number; w: number; h: number }[] = []
+    let shown = st.selection
+    const mq = marqueeRef.current!
     el.setPointerCapture(e.pointerId)
 
     const update = () => {
       const p = toContent(last.x, last.y)
       const m = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) }
-      setMarquee(m)
+      Object.assign(mq.style, { display: 'block', left: `${m.x}px`, top: `${m.y}px`, width: `${m.w}px`, height: `${m.h}px` })
       const hits = new Set(base)
-      for (const c of el.querySelectorAll<HTMLElement>('.cell')) {
-        const r = c.getBoundingClientRect()
-        const cx = r.left - box.left + el.scrollLeft
-        const cy = r.top - box.top + el.scrollTop
-        if (cx < m.x + m.w && cx + r.width > m.x && cy < m.y + m.h && cy + r.height > m.y) hits.add(c.dataset.name!)
-      }
-      st.setSelection(order.filter((n) => hits.has(n)))
+      for (const c of cells) if (c.x < m.x + m.w && c.x + c.w > m.x && c.y < m.y + m.h && c.y + c.h > m.y) hits.add(c.name)
+      const next = order.filter((n) => hits.has(n))
+      if (next.length !== shown.length || next.some((n, i) => n !== shown[i])) st.setSelection((shown = next))
     }
     // Scroll while the pointer is held near the top or bottom edge.
     const autoscroll = () => {
@@ -108,6 +109,10 @@ export function Grid({ active }: { active: boolean }) {
       if (!active && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 4) return
       if (!active) {
         active = true
+        cells = [...el.querySelectorAll<HTMLElement>('.cell')].map((c) => {
+          const r = c.getBoundingClientRect()
+          return { name: c.dataset.name!, x: r.left - box.left + el.scrollLeft, y: r.top - box.top + el.scrollTop, w: r.width, h: r.height }
+        })
         raf = requestAnimationFrame(autoscroll)
       }
       update()
@@ -117,7 +122,7 @@ export function Grid({ active }: { active: boolean }) {
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)
       el.removeEventListener('pointercancel', up)
-      setMarquee(null)
+      mq.style.display = 'none'
       if (active) return
       if (cellEl) st.select(cellEl.dataset.name!, e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : 'replace')
       else if (!additive) st.clearSelection()
@@ -156,9 +161,7 @@ export function Grid({ active }: { active: boolean }) {
           {truncated && <div className="muted">Stopped at 20,000 files. Open a subfolder to see the rest.</div>}
         </div>
       )}
-      {marquee && (
-        <div className="marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />
-      )}
+      <div className="marquee" ref={marqueeRef} />
     </div>
   )
 }
@@ -470,7 +473,7 @@ const Cell = memo(function Cell({
   // the video has actually presented a frame, so there's no jump or blank flash either way.
   useEffect(() => {
     // Not while the eyedropper is open: the exact thumbnail is what should be on screen.
-    if (!previewing || picking || asset.kind !== 'video' || !asset.w) return
+    if (!previewing || picking || !active || asset.kind !== 'video' || !asset.w) return
     const v = document.createElement('video') as HTMLVideoElement & {
       requestVideoFrameCallback?: (cb: () => void) => number
     }
@@ -529,7 +532,7 @@ const Cell = memo(function Cell({
         release(v)
       })
     }
-  }, [previewing, picking, asset.path, asset.w, asset.duration, clip?.start, clip?.end])
+  }, [previewing, picking, active, asset.path, asset.w, asset.duration, clip?.start, clip?.end])
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return
@@ -560,10 +563,12 @@ const Cell = memo(function Cell({
       drawRef.current()
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
       if (!dragging) useStore.getState().select(asset.name)
     }
     el.addEventListener('pointermove', move)
     el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
   }
 
   return (
@@ -580,8 +585,8 @@ const Cell = memo(function Cell({
         style={{ height }}
         onPointerDown={onPointerDown}
         onDoubleClick={() => useStore.getState().setView('loupe')}
-        onPointerEnter={() => setHover(true)}
-        onPointerLeave={() => setHover(false)}
+        onPointerEnter={asset.kind === 'video' ? () => setHover(true) : undefined}
+        onPointerLeave={asset.kind === 'video' ? () => setHover(false) : undefined}
       >
         <canvas ref={canvas} style={{ width, height }} />
         {!asset.thumb && !asset.error && <div className="cell-loading" />}

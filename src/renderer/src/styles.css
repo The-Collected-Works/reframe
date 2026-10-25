@@ -553,9 +553,11 @@ input {
   overflow-x: hidden;
 }
 
-/* With folders, the cards sit 16px from the top and bottom too, as from the sides. */
+/* With folders, the cards sit 16px from the top and bottom too, as from the sides. Moving through
+   thumbnails with the keyboard keeps the focused one clear of the stuck header above. */
 .grid-scroll.sectioned {
   padding-block: 16px;
+  scroll-padding-top: 62px;
 }
 
 .grid-scroll.inactive {
@@ -844,6 +846,7 @@ input {
 }
 
 .marquee {
+  display: none;
   position: absolute;
   z-index: 5;
   border: 1px solid rgba(110, 155, 255, 0.8);
