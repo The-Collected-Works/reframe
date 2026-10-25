@@ -6,7 +6,7 @@ import { keymap } from '../lib/keymap.svelte'
  */
 
 export const GLOBAL = keymap({
-  title: 'Everywhere',
+  title: 'Global',
   actions: {
     openFolder: { keys: 'mod+o', label: 'Open folder', inFields: true, always: true },
     exportAll: { keys: 'mod+e', label: 'Export' },
@@ -47,7 +47,7 @@ export const GRID = keymap({
 })
 
 export const SINGLE = keymap({
-  title: 'Single view',
+  title: 'Single',
   actions: {
     play: { keys: 'space', label: 'Play / pause' },
     prev: { keys: ['arrowleft', 'arrowup'], label: 'Previous' },
