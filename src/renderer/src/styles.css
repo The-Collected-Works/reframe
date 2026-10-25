@@ -1,6 +1,8 @@
 :root {
   --bg: #111113;
   --well: #0b0b0c;
+  /* A hovered folder's card in the grid: the well, faintly lifted. */
+  --card: color-mix(in srgb, var(--well), white 2.5%);
   --panel: #151517;
   --raised: #1e1e21;
   --hover: #26262a;
@@ -584,7 +586,7 @@ input {
 }
 
 .grid-folder:has(> .grid-section:hover) {
-  background-color: rgba(255, 255, 255, 0.025);
+  background-color: var(--card);
 }
 
 /* A folder's body: the gap under its header and room under its last row. It folds away with the
@@ -625,40 +627,33 @@ input {
   text-align: left;
 }
 
-/* The stuck surface: solid, the window's colour (::before), with the card's own tint over it while
-   the folder is hovered (::after), so it looks the same as the header in place and simply covers
-   the thumbnails scrolling under it. Square on top, as the card's top has scrolled away and it runs
-   on off the edge; rounded below like the card, for when the folder's end pushes it off. */
-.grid-section::before,
-.grid-section::after {
+/* The stuck surface: the colour of what's behind the header in place (the window, or the card while
+   the folder is hovered), slightly see-through and lightly blurred so thumbnails scrolling under it
+   show faintly. Over its own colour it adds nothing, so it looks just like the header in place (88%
+   also rounds cleanly there, where some opacities land a shade off). Square on top, as the
+   card's top has scrolled away and it runs on off the edge; rounded below like the card, for when
+   the folder's end pushes it off. */
+.grid-section::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
   border-radius: 0 0 12px 12px;
+  background-color: color-mix(in srgb, var(--well) 88%, transparent);
+  backdrop-filter: blur(6px);
   pointer-events: none;
   visibility: hidden;
-}
-
-.grid-section::before {
-  background: var(--well);
-}
-
-.grid-section::after {
-  background: rgba(255, 255, 255, 0.025);
-  opacity: 0;
-  transition: opacity 220ms var(--ease);
+  transition: background-color 220ms var(--ease);
 }
 
 @container scroll-state(stuck: top) {
-  .grid-section::before,
-  .grid-section::after {
+  .grid-section::before {
     visibility: visible;
   }
 }
 
-.grid-folder:has(> .grid-section:not(.excluded):hover) .grid-section:not(.excluded)::after {
-  opacity: 1;
+.grid-folder:has(> .grid-section:not(.excluded):hover) .grid-section:not(.excluded)::before {
+  background-color: color-mix(in srgb, var(--card) 88%, transparent);
 }
 
 /* Folding a folder open and closed: the body animates between no height and its content's. Only
