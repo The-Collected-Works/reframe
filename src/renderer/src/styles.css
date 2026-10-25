@@ -1551,6 +1551,16 @@ button.crumb:hover {
   border-top: 1px solid var(--line);
 }
 
+.foot-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* ---------- controls ---------- */
 
 .seg {
@@ -1843,6 +1853,16 @@ button.crumb:hover {
 
 .toggle.on::after {
   transform: translateX(12px);
+  background: #fff;
+}
+
+/* Some on, some off: half-lit, the knob in the middle. */
+.toggle.mixed {
+  background: color-mix(in srgb, var(--accent) 45%, var(--line-strong));
+}
+
+.toggle.mixed::after {
+  transform: translateX(6px);
   background: #fff;
 }
 

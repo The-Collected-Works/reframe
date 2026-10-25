@@ -38,6 +38,9 @@
   const overridden = (keys: SettingKey[]) => editing && selection.some((n) => keys.some((k) => board.overrides[n]?.[k] !== undefined))
   const hasVideo = $derived((editing ? chosen : app.assets).some((a) => a.kind === 'video'))
   const anyOverride = $derived(editing && selection.some((n) => hasOverrides(board, n)))
+  // Whether the selection goes into this artboard's export: all of it, none, or some.
+  const exported = $derived(selection.filter((n) => !resolveSettings(board, n).skip).length)
+  const mixedExport = $derived(exported > 0 && exported < selection.length)
 
   const rp = (keys: SettingKey[]) => ({
     overridden: overridden(keys),
@@ -197,11 +200,6 @@
       </Row>
     {/if}
 
-    {#if editing}
-      <Row label="Include in export" {...rp(['skip'])}>
-        <Toggle value={!s.skip} onChange={(v) => app.edit({ skip: !v })} />
-      </Row>
-    {/if}
   </div>
 
   {#if editing}
@@ -210,6 +208,12 @@
         <Icon name="reset" size={14} /> Reset
       </button>
       <div class="spacer"></div>
+      <!-- Whether the selection is exported (for this artboard). Not a framing setting, so it
+           sits apart from them; Reset leaves it alone. -->
+      <label class="foot-toggle" title={`Include in the ${board.name} export`}>
+        Export
+        <Toggle value={exported === selection.length} mixed={mixedExport} onChange={(v) => app.edit({ skip: !v })} />
+      </label>
       <button class="icon-btn" title={`Copy settings (${combo(MOD, 'C')})`} onclick={() => app.copy()} disabled={!app.focus}>
         <Icon name="copy" size={14} />
       </button>

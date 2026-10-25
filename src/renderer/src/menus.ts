@@ -1,19 +1,21 @@
-import { DEFAULT_SETTINGS, resolveSettings } from '@shared/layout'
-import type { SettingKey } from '@shared/types'
+import { resolveSettings } from '@shared/layout'
 import { combo, MOD, SHIFT } from './keys'
 import { api, rescanFolder } from './media'
 import { inside, mac } from './paths'
-import { app, baseName, folderOf, hasOverrides, type AppMenuItem } from './store.svelte'
+import { app, baseName, folderOf, FRAMING_KEYS, hasOverrides, type AppMenuItem } from './store.svelte'
 
 const revealLabel = mac ? 'Reveal in Finder' : api.platform === 'win32' ? 'Show in Explorer' : 'Show in Folder'
 const key = (k: string) => combo(MOD, k)
 
-/** Back to the artboard's defaults for every selected asset; undoable, and says so. */
+/**
+ * Back to the artboard's framing for every selected asset; undoable, and says so. Whether each is
+ * exported stays as it is.
+ */
 export function resetSelection(): void {
   const board = app.board
   const names = app.selection.filter((n) => hasOverrides(board, n))
   if (!names.length) return
-  app.resetKeys(Object.keys(DEFAULT_SETTINGS) as SettingKey[], names)
+  app.resetKeys(FRAMING_KEYS, names)
   app.showHud(`Reset ${names.length === 1 ? baseName(names[0]) : `${names.length} assets`} · ${key('Z')} to undo`)
 }
 

@@ -447,8 +447,7 @@ class AppState {
   paste() {
     const { clipboard, selection } = this
     if (!clipboard || !selection.length) return
-    const keys = (Object.keys(DEFAULT_SETTINGS) as SettingKey[]).filter((k) => k !== 'skip')
-    this.#mapBoard((b) => withOverrides(withoutOverrides(b, selection, keys), selection, clipboard))
+    this.#mapBoard((b) => withOverrides(withoutOverrides(b, selection, FRAMING_KEYS), selection, clipboard))
     this.showHud(selection.length > 1 ? `Pasted to ${selection.length} items` : 'Pasted')
   }
 
@@ -554,7 +553,14 @@ class AppState {
 
 export const app = new AppState()
 
-export const hasOverrides = (board: Artboard, name: string): boolean => Object.keys(board.overrides[name] ?? {}).length > 0
+/**
+ * Whether an asset's framing has been adjusted away from the artboard's defaults. Being left out
+ * of the export isn't an adjustment: it's about the asset, not how it's framed.
+ */
+export const hasOverrides = (board: Artboard, name: string): boolean => Object.keys(board.overrides[name] ?? {}).some((k) => k !== 'skip')
+
+/** Every setting that frames an asset (all but whether it's exported). */
+export const FRAMING_KEYS = (Object.keys(DEFAULT_SETTINGS) as SettingKey[]).filter((k) => k !== 'skip')
 
 export const clipFor = (project: ProjectFile, name: string, duration: number): { start: number; end: number } => {
   const c = project.clips[name]
