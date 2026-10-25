@@ -394,6 +394,11 @@ class AppState {
     showToast('Redo')
   }
 
+  /** An asset's settings on the current artboard (its overrides over the defaults). */
+  settingsOf(name: string): CropSettings {
+    return resolveSettings(this.board, name)
+  }
+
   /** An asset with what's been loaded about it. */
   asset(name: string | null): Asset | undefined {
     const entry = name ? this.assets.find((a) => a.name === name) : undefined
