@@ -9,13 +9,30 @@
 
   let { board, open, canDelete }: { board: Artboard; open: boolean; canDelete: boolean } = $props()
   const size = (n: number) => Math.max(16, Math.min(8192, Math.round(n)))
+  // Opens ready to rename: the name focused and selected, once the popover is placed (it's hidden,
+  // so can't take focus, until then). Enter or clicking away keeps the new name; Esc closes
+  // without it.
+  let nameInput: HTMLInputElement
+  const focusName = (input: HTMLInputElement) => {
+    const raf = requestAnimationFrame(() => input.focus())
+    return () => cancelAnimationFrame(raf)
+  }
+  // Ahead of the popover's own Esc (which closes it): put the name back, so the blur as it closes
+  // changes nothing.
+  function onkeydowncapture(e: KeyboardEvent) {
+    if (open && e.key === 'Escape' && nameInput) nameInput.value = board.name
+  }
 </script>
+
+<svelte:window {onkeydowncapture} />
 
 <Popover {open} onClose={() => app.setBoardEditor(null)} padding={10}>
 <div class="editor">
   <input
     class="text"
+    bind:this={nameInput}
     value={board.name}
+    {@attach focusName}
     onfocus={(e) => e.currentTarget.select()}
     onblur={(e) => e.currentTarget.value.trim() && app.updateBoard(board.id, { name: e.currentTarget.value.trim() })}
     onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
