@@ -1,7 +1,7 @@
 <!--
   The artboard tabs. Clicking another tab switches to it. On the current one, clicking its name
   renames it in place (Enter or clicking away saves, Esc cancels), and clicking the rest of it
-  opens its editor (the size).
+  opens its editor (the size). Middle-click deletes one, like closing a browser tab (it undoes).
   When they overflow: fades on whichever side has more, the wheel scrolls them sideways, and
   click-dragging pans (a click that doesn't move still picks a tab). The current tab is kept in view.
 -->
@@ -175,6 +175,8 @@
               onRename(b.id)
             } else onEdit(editing === b.id ? null : b.id)
           }}
+          onmousedown={(e) => e.button === 1 && e.preventDefault()}
+          onauxclick={(e) => e.button === 1 && boards.length > 1 && onDelete(b.id)}
           oncontextmenu={(e) => {
             e.preventDefault()
             onMenu(b.id, { x: e.clientX, y: e.clientY })

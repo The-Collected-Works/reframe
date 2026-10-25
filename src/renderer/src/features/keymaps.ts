@@ -21,7 +21,10 @@ export const GLOBAL = keymap({
     reset: { keys: 'mod+shift+r', label: 'Reset to defaults' },
     pick: { keys: 'i', label: 'Pick background color' }
   },
-  notes: [{ keys: 'Middle-click', label: 'Reset a value' }]
+  notes: [
+    { keys: 'Middle-click', label: 'Reset a value' },
+    { keys: 'Middle-click', label: 'Delete an artboard (on its tab)' }
+  ]
 })
 
 export const GRID = keymap({
