@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
   import type { ProjectFile } from '@shared/types'
-  import ExportDialog from './export/ExportDialog.svelte'
-  import Grid from './grid/Grid.svelte'
-  import Inspector from './inspector/Inspector.svelte'
-  import Loupe from './loupe/Loupe.svelte'
-  import { resetSelection } from './menus'
-  import { api, cancelPick, pickBackground, rescanFolder } from './media'
-  import { basename } from './paths'
-  import { app } from './store.svelte'
-  import TopBar from './topbar/TopBar.svelte'
+  import ExportDialog from './features/export/ExportDialog.svelte'
+  import Grid from './features/grid/Grid.svelte'
+  import Inspector from './features/inspector/Inspector.svelte'
+  import SingleView from './features/single/SingleView.svelte'
+  import { resetSelection } from './features/menus'
+  import { api, cancelPick, pickBackground, rescanFolder } from './state/loading'
+  import { basename } from './lib/paths'
+  import { app } from './state/app.svelte'
+  import TopBar from './features/topbar/TopBar.svelte'
   import ContextMenu from './ui/ContextMenu.svelte'
   import Icon from './ui/Icon.svelte'
 
@@ -100,14 +100,14 @@
     if (app.boardEditor) return
     if (k === 'i') pickBackground()
     else if (k === 'escape') {
-      if (app.view === 'loupe') app.setView('grid')
+      if (app.view === 'single') app.setView('grid')
       else app.clearSelection()
-    } else if (k === 'e') app.setView(app.view === 'loupe' ? 'grid' : 'loupe')
+    } else if (k === 'e') app.setView(app.view === 'single' ? 'grid' : 'single')
     // Space opens the selection, like Quick Look; in single view it plays and pauses instead. A
     // focused button keeps Space for itself.
-    else if (k === ' ' && app.view === 'grid' && app.focus && !(e.target as HTMLElement).closest('button')) app.setView('loupe')
-    else if (k === 'arrowright' || (k === 'arrowdown' && app.view === 'loupe')) app.step(1)
-    else if (k === 'arrowleft' || (k === 'arrowup' && app.view === 'loupe')) app.step(-1)
+    else if (k === ' ' && app.view === 'grid' && app.focus && !(e.target as HTMLElement).closest('button')) app.setView('single')
+    else if (k === 'arrowright' || (k === 'arrowdown' && app.view === 'single')) app.step(1)
+    else if (k === 'arrowleft' || (k === 'arrowup' && app.view === 'single')) app.step(-1)
     else if (k === 'arrowdown' || k === 'arrowup') stepRow(k === 'arrowdown' ? 1 : -1)
     else return
     e.preventDefault()
@@ -203,7 +203,7 @@
     <main class="workspace">
       <section class={['content drop-zone', { dropping }]} {...dropZone}>
         <Grid active={app.view === 'grid'} />
-        {#if app.view === 'loupe'}<Loupe />{/if}
+        {#if app.view === 'single'}<SingleView />{/if}
       </section>
       <Inspector />
     </main>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { middleReset } from '../format'
+  import { middleReset } from '../lib/format'
 
   let {
     value,

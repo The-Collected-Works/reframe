@@ -1,5 +1,5 @@
 <script lang="ts" generics="T extends string">
-  import type { IconName } from '../icons'
+  import type { IconName } from './icons'
   import Icon from './Icon.svelte'
   import Indicator from './Indicator.svelte'
 

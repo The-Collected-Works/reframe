@@ -981,9 +981,9 @@ input {
   flex-shrink: 0;
 }
 
-/* ---------- loupe ---------- */
+/* ---------- single view ---------- */
 
-.loupe {
+.single {
   position: absolute;
   inset: 0;
 }
@@ -1024,8 +1024,8 @@ input {
   color: var(--text);
 }
 
-/* Bottom band of the stage (kept clear of the board; see Loupe's reserved height). */
-.loupe-overlay {
+/* Bottom band of the stage (kept clear of the board; see SingleView's reserved height). */
+.single-overlay {
   position: absolute;
   left: 0;
   right: 0;
@@ -1037,7 +1037,7 @@ input {
   pointer-events: none;
 }
 
-.loupe-overlay > * {
+.single-overlay > * {
   pointer-events: auto;
 }
 
@@ -1305,7 +1305,7 @@ input {
 }
 
 /* Fades the viewport to its background behind the filmstrip, so the strip sits on solid ground. */
-.loupe-fade {
+.single-fade {
   position: absolute;
   left: 0;
   right: 0;
@@ -2470,7 +2470,7 @@ button.crumb:hover {
   pointer-events: none;
 }
 
-.loupe-overlay,
+.single-overlay,
 .zoom-chip {
   animation: rise-in 300ms var(--ease) 140ms both;
 }
