@@ -41,6 +41,8 @@
   const k = $derived(width / board.width)
 
   let canvas: HTMLCanvasElement
+  // Drawn at least once with the thumbnail: it fades in (and view transitions know it has pixels).
+  let ready = $state(false)
   const preview = new HoverPreview(
     () => asset,
     () => clip,
@@ -65,8 +67,7 @@
       canvas.width = pw
       canvas.height = ph
     }
-    // First draw fades the thumbnail in (CSS), and tells view transitions it has pixels.
-    if (!canvas.dataset.ready && asset.thumb) canvas.dataset.ready = '1'
+    if (asset.thumb) ready = true
     const ctx = canvas.getContext('2d')!
     const kk = k * dpr
     const fade = preview.fade.current
@@ -173,7 +174,7 @@
     onpointerenter={asset.kind === 'video' ? () => (preview.hovering = true) : undefined}
     onpointerleave={asset.kind === 'video' ? () => (preview.hovering = false) : undefined}
   >
-    <canvas bind:this={canvas} style:width={`${width}px`} style:height={`${height}px`}></canvas>
+    <canvas bind:this={canvas} data-ready={ready || undefined} style:width={`${width}px`} style:height={`${height}px`}></canvas>
     {#if !asset.thumb && !asset.error}<div class="cell-loading"></div>{/if}
     {#if asset.error}<div class="cell-error">Can’t read file</div>{/if}
   </div>
@@ -189,3 +190,128 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* Each cell sits on a mat; selection fills the mat so the frame's own edge stays readable. */
+  .cell {
+    min-width: 0;
+    padding: 10px 10px 2px;
+    border-radius: 9px;
+    transition: background-color var(--t-med) var(--ease), box-shadow var(--t-med) var(--ease);
+  }
+
+  /* Without the caption row (file names hidden), the mat is even on all four sides. */
+  .cell:not(:has(.cell-meta)) {
+    padding-bottom: 10px;
+  }
+
+  .cell:hover {
+    background: rgba(255, 255, 255, 0.025);
+  }
+
+  .cell.selected {
+    background: var(--raised);
+  }
+
+  .cell.selected.focused {
+    background: #2a2a31;
+  }
+
+  .frame {
+    position: relative;
+    overflow: hidden;
+    background: var(--panel);
+  }
+
+  /* Hairline on top of the content, so the artboard edge shows even against black. */
+  .frame::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  canvas {
+    display: block;
+    opacity: 0;
+    transition: opacity 260ms var(--ease);
+  }
+
+  canvas[data-ready] {
+    opacity: 1;
+  }
+
+  .skipped canvas {
+    opacity: 0.25;
+  }
+
+  /* Excluded from export: dimmed, with a faint X from corner to corner (1px at any size or shape).
+     Inside the frame's hairline, so the two never overlap and brighten the corners. */
+  .skipped .frame::after {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    background: var(--excluded-x) no-repeat center / 100% 100%;
+    pointer-events: none;
+  }
+
+  .cell-loading {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.03) 50%, transparent 70%) var(--panel);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+    transition: opacity 260ms var(--ease);
+  }
+
+  @keyframes shimmer {
+    from {
+      background-position: 150% 0;
+    }
+    to {
+      background-position: -50% 0;
+    }
+  }
+
+  .cell-error {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--faint);
+    font-size: 11px;
+  }
+
+  .cell-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding-top: 6px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .selected .cell-meta {
+    color: var(--text);
+  }
+
+  .cell-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The folder before a name, when the grid isn't grouped by folder. */
+  .cell-folder {
+    color: var(--faint);
+  }
+
+  .cell-dur {
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
+  }
+</style>

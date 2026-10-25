@@ -213,3 +213,78 @@
   <Toast />
   <ContextMenu />
 </div>
+
+<style>
+  .app {
+    height: 100%;
+    display: grid;
+    grid-template-rows: var(--topbar-h) 1fr;
+  }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: 1fr var(--inspector-w);
+    min-height: 0;
+  }
+
+  .content {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    background: var(--well);
+  }
+
+  /* Dragging files over the viewport: it takes an accent tint, edge to edge. */
+  .drop-zone {
+    position: relative;
+  }
+
+  .drop-zone.dropping::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent-soft);
+    pointer-events: none;
+    z-index: 40;
+    animation: fade 160ms var(--ease) both;
+  }
+
+  .empty {
+    display: grid;
+    place-items: center;
+    background: var(--well);
+  }
+
+  .empty-drop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 48px 72px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 14px;
+    color: var(--text);
+    font-size: 13px;
+    animation: rise-in 420ms var(--ease) both;
+    transition: border-color var(--t-med) var(--ease), background-color var(--t-med) var(--ease), transform var(--t-med) var(--ease);
+  }
+
+  .empty-drop :global(svg) {
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .empty-drop:hover {
+    border-color: var(--faint);
+    background: var(--panel);
+  }
+
+  .empty-drop:active {
+    transform: scale(0.985);
+  }
+
+  .empty.dropping .empty-drop {
+    border-color: var(--accent);
+    transform: scale(1.02);
+  }
+</style>

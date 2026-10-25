@@ -225,3 +225,166 @@
     </footer>
   {/if}
 </aside>
+
+<style>
+  .inspector {
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    min-height: 0;
+  }
+
+  .insp-head {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* Breadcrumb: the artboard's defaults are the parent of whatever is selected. */
+  .crumbs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    margin-left: -6px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .crumb {
+    flex: none;
+    max-width: 100%;
+    padding: 3px 6px;
+    border-radius: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+  }
+
+  /* The asset crumb takes the remaining width and truncates; the artboard crumb keeps its size. */
+  .crumb.current {
+    flex: 0 1 auto;
+    color: var(--text);
+  }
+
+  button.crumb:hover {
+    color: var(--text);
+    background: var(--tint-2);
+  }
+
+  .crumb-sep {
+    flex: none;
+    display: grid;
+    place-items: center;
+    color: var(--faint);
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 5px;
+    background: var(--tint-1);
+    color: var(--muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .insp-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+
+  .position {
+    display: flex;
+    gap: 8px;
+  }
+
+  .xy {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  /* Four separate buttons; with the same 8px gap, columns 1–2 sit under Scale and 3–4 under Angle. */
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .tool {
+    display: grid;
+    place-items: center;
+    height: var(--control);
+    border-radius: var(--radius);
+    background: var(--tint-1);
+    color: var(--muted);
+    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+  }
+
+  .tool:hover {
+    color: var(--text);
+    background: var(--tint-2);
+  }
+
+  .tool:active {
+    transform: scale(0.95);
+  }
+
+  .tool.on {
+    color: var(--text);
+    background: var(--tint-3);
+  }
+
+  .color-row,
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* The eyedropper while it's picking. */
+  .armed {
+    color: var(--accent);
+  }
+
+  .insp-foot {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .foot-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+</style>

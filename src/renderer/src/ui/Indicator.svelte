@@ -45,3 +45,21 @@
   style={box ? `width: ${box.w}px; height: ${box.h}px; transform: translate(${box.x}px, ${box.y}px)` : 'opacity: 0'}
   {@attach track}
 ></span>
+
+<style>
+  /* The sliding selection pill. Nested in its track: radius = track radius (9) - track padding (3). */
+  .indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.11);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+  }
+
+  .indicator.ready {
+    transition: transform 280ms var(--ease), width 280ms var(--ease), height 280ms var(--ease);
+  }
+</style>

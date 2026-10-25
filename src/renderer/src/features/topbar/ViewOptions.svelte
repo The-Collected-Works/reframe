@@ -37,7 +37,7 @@
   </button>
 {/snippet}
 
-<div class="tab-wrap">
+<div class="anchor">
   <button
     class={['icon-btn view-btn', { on: open, filtered: prefs.filter !== 'all' }]}
     title={prefs.filter !== 'all' ? `View options (showing ${filter.label.toLowerCase()})` : 'View options'}
@@ -50,7 +50,8 @@
   >
     <Icon name="viewOptions" size={15} />
   </button>
-  <Popover {open} onClose={() => (open = false)} class="menu view-menu">
+  <Popover {open} onClose={() => (open = false)}>
+    <div class="menu">
     <div class="menu-label">Show</div>
     {#each FILTERS as f (f.value)}{@render option(prefs.filter === f.value, f.label, () => app.setViewPrefs({ filter: f.value }))}{/each}
     <div class="menu-sep"></div>
@@ -68,5 +69,36 @@
     <button class="menu-item" disabled={!changed} onclick={() => app.resetView()}>
       <span>Reset View</span>
     </button>
+    </div>
   </Popover>
 </div>
+
+<style>
+  .anchor {
+    position: relative;
+  }
+
+  .icon-btn {
+    position: relative;
+  }
+
+  /* A dot on the button while a filter is hiding something. */
+  .filtered::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .menu {
+    width: 208px;
+  }
+
+  .menu :global(svg) {
+    color: var(--accent);
+  }
+</style>

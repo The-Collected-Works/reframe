@@ -134,7 +134,7 @@
                 onChange={(imageFormat) => app.setExportPrefs({ imageFormat })}
               />
               {#if prefs.imageFormat !== 'png'}
-                <div class="slider-row grow">
+                <div class="slider-row">
                   <Slider value={prefs.imageQuality * 100} min={50} max={100} step={1} onChange={(v) => app.setExportPrefs({ imageQuality: v / 100 })} />
                   <span class="muted tabular">{Math.round(prefs.imageQuality * 100)}</span>
                 </div>
@@ -205,3 +205,240 @@
     </footer>
   </div>
 </div>
+
+<style>
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.55);
+    animation: fade 180ms var(--ease-cubic) both;
+  }
+
+  .modal {
+    width: 460px;
+    max-height: calc(100vh - 96px);
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border-radius: 12px;
+    box-shadow: 0 0 0 1px var(--line-strong), 0 24px 80px rgba(0, 0, 0, 0.6);
+    animation: sheet-in 280ms var(--spring) both;
+  }
+
+  .modal-backdrop:global(.closing) {
+    animation: fade-out 180ms var(--ease-cubic) forwards;
+    pointer-events: none;
+  }
+
+  .modal-backdrop:global(.closing) .modal {
+    animation: sheet-out 180ms var(--ease) forwards;
+  }
+
+  @keyframes sheet-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
+    }
+  }
+
+  @keyframes sheet-out {
+    to {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+    }
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  .modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 12px 4px 20px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .modal-body {
+    padding: 8px 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .field-label {
+    margin-bottom: 8px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .dest {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 4px 0 10px;
+    background: var(--tint-1);
+    border-radius: var(--radius);
+  }
+
+  /* Long paths keep their end (the folder names that matter) and lose their start. */
+  .path {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+  }
+
+  .checks {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 34px;
+    padding: 0 8px;
+    margin: 0 -8px;
+    border-radius: 6px;
+    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+  }
+
+  .check:hover {
+    background: var(--raised);
+  }
+
+  .check input {
+    display: none;
+  }
+
+  .box {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: var(--tint-3);
+    color: transparent;
+  }
+
+  .on .box {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .inline {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .inline > :global(.seg) {
+    flex: none;
+  }
+
+  .slider-row {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .modal-foot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px 12px 20px;
+    border-top: 1px solid var(--line);
+  }
+
+  .progress-body {
+    gap: 14px;
+  }
+
+  .bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--raised);
+    overflow: hidden;
+  }
+
+  .bar div {
+    height: 100%;
+    background: var(--text);
+    transition: width 300ms var(--ease);
+  }
+
+  .overall-meta {
+    margin-top: 8px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .jobs {
+    display: flex;
+    flex-direction: column;
+    max-height: 320px;
+    overflow-y: auto;
+    margin: 0 -8px;
+  }
+
+  .job {
+    display: grid;
+    grid-template-columns: 1fr auto 48px;
+    align-items: center;
+    gap: 12px;
+    min-height: 26px;
+    padding: 0 8px;
+    border-radius: 6px;
+    color: var(--faint);
+    transition: color var(--t-med) var(--ease);
+  }
+
+  .job.running,
+  .job.done {
+    color: var(--text);
+  }
+
+  .job.error {
+    color: var(--danger);
+  }
+
+  .job-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .job-state {
+    display: flex;
+    justify-content: flex-end;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+
+  .job-state :global(svg) {
+    animation: dot-in 300ms var(--spring) both;
+  }
+
+  .job-error {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    padding-bottom: 6px;
+    user-select: text;
+  }
+</style>

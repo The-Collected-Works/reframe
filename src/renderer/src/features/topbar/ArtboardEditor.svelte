@@ -11,7 +11,8 @@
   const size = (n: number) => Math.max(16, Math.min(8192, Math.round(n)))
 </script>
 
-<Popover {open} onClose={() => app.setBoardEditor(null)} class="board-editor">
+<Popover {open} onClose={() => app.setBoardEditor(null)} padding={10}>
+<div class="editor">
   <input
     class="text"
     value={board.name}
@@ -47,4 +48,80 @@
       </button>
     {/if}
   </div>
+</div>
 </Popover>
+
+<style>
+  .editor {
+    width: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .text {
+    height: var(--control);
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    outline: 0;
+    background: var(--tint-1);
+    font-weight: 500;
+  }
+
+  .text:focus {
+    background: var(--tint-2);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  .wh {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .wh > :global(.num) {
+    flex: 1;
+  }
+
+  .presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .chip {
+    height: 26px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: var(--tint-1);
+    color: var(--muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+  }
+
+  .chip:hover {
+    color: var(--text);
+    background: var(--tint-2);
+  }
+
+  .chip.on {
+    color: var(--text);
+    background: var(--tint-3);
+  }
+
+  .chip:active {
+    transform: scale(0.95);
+  }
+
+  .editor .menu-sep {
+    margin: 2px -10px;
+  }
+
+  .editor-actions {
+    display: flex;
+    justify-content: space-between;
+    margin: 0 -4px -4px;
+  }
+</style>

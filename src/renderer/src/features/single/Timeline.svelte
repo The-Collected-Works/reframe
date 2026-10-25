@@ -115,3 +115,155 @@
     {/if}
   </div>
 </div>
+
+<style>
+  /* The hit area is the full bar height; the rail inside is slim. The body is inset so the trim
+     grips, which sit just outside the kept range, never clip. */
+  .timeline {
+    flex: 1;
+    min-width: 0;
+    height: 44px;
+    padding: 0 10px;
+    display: flex;
+  }
+
+  .tl-body {
+    position: relative;
+    flex: 1;
+  }
+
+  .tl-rail {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 4px;
+    margin-top: -2px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .tl-range,
+  .tl-played {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: inherit;
+  }
+
+  .tl-range {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .tl-played {
+    background: var(--text);
+  }
+
+  /* Playhead: a slim bar, slim enough to sit beside the trim grips. */
+  .tl-head {
+    position: absolute;
+    top: 50%;
+    width: 3px;
+    height: 14px;
+    margin: -7px 0 0 -1.5px;
+    border-radius: 1.5px;
+    background: #fff;
+    box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.25), 0 1px 4px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+  }
+
+  /* Trim grips: quiet slivers just outside the kept range, brighter when the bar is in use. */
+  .tl-handle {
+    position: absolute;
+    top: 50%;
+    width: 3px;
+    height: 12px;
+    margin-top: -6px;
+    border-radius: 1.5px;
+    background: rgba(255, 255, 255, 0.32);
+    cursor: ew-resize;
+    transition: background-color var(--t-fast) var(--ease), height 160ms var(--ease), margin-top 160ms var(--ease);
+  }
+
+  .tl-handle.in {
+    margin-left: -6px;
+  }
+
+  .tl-handle.out {
+    margin-left: 3px;
+  }
+
+  /* A larger, invisible grab area. */
+  .tl-handle::before {
+    content: '';
+    position: absolute;
+    inset: -12px -7px;
+  }
+
+  .timeline:hover .tl-handle,
+  .timeline.active .tl-handle {
+    background: rgba(255, 255, 255, 0.6);
+  }
+
+  .timeline .tl-handle:hover,
+  .timeline .tl-handle.on {
+    height: 16px;
+    margin-top: -8px;
+    background: #fff;
+  }
+
+  /* Time under the pointer. */
+  .tl-bubble {
+    position: absolute;
+    bottom: calc(50% + 14px);
+    translate: -50% 0;
+    padding: 3px 7px;
+    border-radius: 6px;
+    background: var(--raised);
+    box-shadow: 0 0 0 1px var(--line-strong), 0 4px 14px rgba(0, 0, 0, 0.4);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    white-space: nowrap;
+    pointer-events: none;
+    animation: fade 120ms var(--ease) both;
+  }
+
+  /* The frame at a trim handle while it's dragged. */
+  .tl-preview {
+    position: absolute;
+    bottom: calc(50% + 18px);
+    translate: -50% 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 4px 5px;
+    border-radius: 8px;
+    background: var(--raised);
+    box-shadow: 0 0 0 1px var(--line-strong), 0 8px 28px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    z-index: 3;
+    transform-origin: bottom center;
+    animation: preview-in 180ms var(--spring) both;
+  }
+
+  @keyframes preview-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.94);
+    }
+  }
+
+  .tl-preview canvas {
+    display: block;
+    border-radius: 4px;
+    background: var(--well);
+  }
+
+  .tl-preview span {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+</style>

@@ -61,11 +61,11 @@
   // nearest item and selects it (the glide above then finishes the motion). A click that never
   // moved still selects the thumbnail under it.
   let swallowClick = false
+  let dragging = $state(false)
   function onpointerdown(e: PointerEvent) {
     if (e.button !== 0) return
     const x0 = e.clientX
     const left0 = strip.scrollLeft
-    let dragging = false
     let samples: { t: number; x: number }[] = [{ t: performance.now(), x: e.clientX }]
     const move = (ev: PointerEvent) => {
       if (!dragging && Math.abs(ev.clientX - x0) < 4) return
@@ -73,7 +73,6 @@
         dragging = true
         hold()
         strip.setPointerCapture(e.pointerId)
-        strip.classList.add('dragging')
       }
       strip.scrollLeft = left0 - (ev.clientX - x0)
       const now = performance.now()
@@ -84,7 +83,7 @@
       strip.removeEventListener('pointerup', up)
       strip.removeEventListener('pointercancel', up)
       if (!dragging) return
-      strip.classList.remove('dragging')
+      dragging = false
       swallowClick = true
       const first = samples[0]
       const last = samples[samples.length - 1]
@@ -117,7 +116,7 @@
 </script>
 
 <div
-  class="film-scroll"
+  class={['film-scroll', { dragging }]}
   role="presentation"
   bind:this={strip}
   bind:clientWidth={stripWidth}
@@ -133,3 +132,28 @@
     <FilmstripItem entry={a} {board} on={a.name === app.focus} />
   {/each}
 </div>
+
+<style>
+  /* Side padding (set inline) is half the strip, so any item can be centred. */
+  .film-scroll {
+    position: relative;
+    display: flex;
+    gap: 2px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    cursor: grab;
+    /* Active ±1 fully visible; the outermost item each side fades away. */
+    mask-image: linear-gradient(to right, transparent, #000 var(--item), #000 calc(100% - var(--item)), transparent);
+    animation: fade 220ms var(--ease) both;
+  }
+
+  .dragging {
+    cursor: grabbing;
+  }
+
+  .dragging > :global(*) {
+    pointer-events: none;
+  }
+</style>

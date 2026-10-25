@@ -79,3 +79,55 @@
     </div>
   </div>
 </div>
+
+<style>
+  .single {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Fades the viewport to its background behind the filmstrip, so the strip sits on solid ground. */
+  .single-fade {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 130px;
+    background: linear-gradient(to bottom, transparent, var(--well) 70%);
+    pointer-events: none;
+  }
+
+  /* The bottom band of the stage (kept clear of the board; see Stage's reserved height). */
+  .single-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    pointer-events: none;
+    animation: rise-in 300ms var(--ease) 140ms both;
+  }
+
+  .single-overlay > :global(*) {
+    pointer-events: auto;
+  }
+
+  /* The filmstrip with its count and arrows: a compact, centred cluster, no container. */
+  .film-row {
+    height: 64px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .film-count {
+    min-width: 52px;
+    margin-right: 4px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+</style>

@@ -31,3 +31,32 @@
 <div class={['collapsible', { open: expanded }]}>
   <div class="collapsible-inner">{#if mounted}{@render children()}{/if}</div>
 </div>
+
+<style>
+  /* Folding open and closed: the body animates between no height and its content's. Only the
+     vertical axis is clipped (headers and tints reach out sideways), with a little room so focus
+     rings at the edges aren't cut off. `clip` rather than `hidden`, so headers inside still stick
+     to the scroller. */
+  .collapsible {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--t-fold) var(--ease-fold);
+  }
+
+  .collapsible.open {
+    grid-template-rows: 1fr;
+  }
+
+  .collapsible-inner {
+    min-height: 0;
+    overflow-x: visible;
+    overflow-y: clip;
+    overflow-clip-margin: 4px;
+    opacity: 0;
+    transition: opacity 240ms var(--ease-fold);
+  }
+
+  .open .collapsible-inner {
+    opacity: 1;
+  }
+</style>

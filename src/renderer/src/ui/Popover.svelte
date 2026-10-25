@@ -9,7 +9,8 @@
   import { api } from '../lib/bridge'
   import { closing } from '../lib/motion'
 
-  let { open = true, onClose, children, class: className = '' }: { open?: boolean; onClose: () => void; children: Snippet; class?: string } = $props()
+  /** The content sizes itself; `padding` is the surface's inset around it. */
+  let { open = true, onClose, children, padding = 6 }: { open?: boolean; onClose: () => void; children: Snippet; padding?: number } = $props()
 
   let placeholder: HTMLSpanElement
   let el = $state<HTMLDivElement>()
@@ -50,7 +51,36 @@
 
 <span bind:this={placeholder} hidden></span>
 {#if open}
-  <div bind:this={el} class={['popover', className]} style="visibility: hidden" {@attach portal} {@attach place} out:closing={{ duration: 120 }}>
+  <div
+    bind:this={el}
+    class="popover"
+    style="visibility: hidden"
+    style:padding={`${padding}px`}
+    {@attach portal}
+    {@attach place}
+    out:closing={{ duration: 120 }}
+  >
     {@render children()}
   </div>
 {/if}
+
+<style>
+  .popover {
+    position: fixed;
+    z-index: 50;
+    min-width: 200px;
+    background: var(--raised);
+    border-radius: 10px;
+    box-shadow: 0 0 0 1px var(--line-strong), 0 12px 40px rgba(0, 0, 0, 0.5);
+    /* Over the title bar's drag region, which would otherwise take the pointer. */
+    -webkit-app-region: no-drag;
+    /* Grows out of its anchor. */
+    transform-origin: top left;
+    animation: pop-in 160ms var(--ease) both;
+  }
+
+  .popover:global(.closing) {
+    animation: pop-out 120ms var(--ease) forwards;
+    pointer-events: none;
+  }
+</style>

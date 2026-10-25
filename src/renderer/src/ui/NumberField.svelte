@@ -79,3 +79,42 @@
   />
   {#if suffix}<span class="num-suffix">{suffix}</span>{/if}
 </label>
+
+<style>
+  .num {
+    display: flex;
+    align-items: center;
+    height: var(--control);
+    padding: 0 8px;
+    gap: 6px;
+    background: var(--tint-1);
+    border-radius: 6px;
+    min-width: 0;
+  }
+
+  .num:focus-within {
+    background: var(--tint-2);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  .num-label {
+    color: var(--faint);
+    cursor: ew-resize;
+  }
+
+  input {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    background: none;
+    border: 0;
+    outline: 0;
+    padding: 0;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .num-suffix {
+    color: var(--faint);
+  }
+</style>

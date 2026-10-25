@@ -1,0 +1,51 @@
+/* Shared animations, and the elements scripts create for view transitions (see lib/motion.ts). */
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+
+@keyframes pop-out {
+  to {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.98);
+  }
+}
+
+@keyframes dot-in {
+  from {
+    transform: scale(0);
+  }
+}
+
+/* A thumbnail flying between the grid and the single view. */
+.flyer {
+  position: absolute;
+  z-index: 20;
+  transform-origin: 0 0;
+  pointer-events: none;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  will-change: transform;
+}
+
+/* The single view's previous frame, fading out over the next. */
+.crossfade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}

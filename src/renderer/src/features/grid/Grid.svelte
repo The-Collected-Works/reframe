@@ -91,3 +91,87 @@
   {/if}
   <div class="marquee" bind:this={marquee}></div>
 </div>
+
+<style>
+  .grid-scroll {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    /* Never sideways: while the window is resized, cells are a frame late to shrink, which would
+       otherwise flash a horizontal scrollbar. */
+    overflow-x: hidden;
+    /* The scrollbar's lane is reserved whether or not it scrolls, so the width never changes. Only
+       on the right, where the scrollbar is: a lane on the left too would keep section headers from
+       reaching the edge, so the left gets the same 10px as padding instead. With the cells' 10px
+       mat, frame-to-edge is 36px on every side: 26 + 10 top, bottom and left; 16 + 10 lane + 10 on
+       the right. */
+    scrollbar-gutter: stable;
+    padding: 26px 16px 26px 26px;
+    /* Grid ⇄ single view: the grid recedes while the zoom flies over it. */
+    transition: opacity var(--t-med) var(--ease), transform var(--t-slow) var(--ease), visibility 0s;
+  }
+
+  /* With folders, the cards sit 16px from the top and bottom too, as from the sides. Moving through
+     thumbnails with the keyboard keeps the focused one clear of the stuck header above. */
+  .sectioned {
+    padding-block: 16px;
+    scroll-padding-top: 62px;
+  }
+
+  .inactive {
+    visibility: hidden;
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(0.985);
+    transition: opacity var(--t-med) var(--ease), transform var(--t-slow) var(--ease), visibility 0s linear var(--t-slow);
+  }
+
+  /* Below the grid: folders the scan left out (click one to include it again), and the file limit. */
+  .grid-foot {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 28px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .grid-foot-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .skipped-folder {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: var(--tint-1);
+    color: var(--text);
+    font-size: 11px;
+    transition: background-color var(--t-fast) var(--ease);
+  }
+
+  .skipped-folder :global(svg) {
+    color: var(--muted);
+  }
+
+  .skipped-folder:hover {
+    background: var(--tint-2);
+  }
+
+  .marquee {
+    display: none;
+    position: absolute;
+    z-index: 5;
+    border: 1px solid rgba(110, 155, 255, 0.8);
+    border-radius: 2px;
+    background: rgba(110, 155, 255, 0.1);
+    pointer-events: none;
+    animation: fade 120ms var(--ease) both;
+  }
+</style>

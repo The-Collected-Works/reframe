@@ -77,3 +77,85 @@
     {/if}
   {/each}
 </div>
+
+<style>
+  .ctx-menu {
+    position: fixed;
+    z-index: 95;
+    min-width: 220px;
+    padding: 5px;
+    border-radius: 10px;
+    background: rgba(32, 32, 36, 0.92);
+    backdrop-filter: blur(20px) saturate(150%);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 14px 40px rgba(0, 0, 0, 0.5);
+    -webkit-app-region: no-drag;
+    animation: pop-in 130ms var(--ease) both;
+  }
+
+  .ctx-menu:global(.closing) {
+    animation: pop-out 120ms var(--ease) forwards;
+    pointer-events: none;
+  }
+
+  .ctx-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    height: var(--control);
+    padding: 0 10px 0 8px;
+    border-radius: 6px;
+    text-align: left;
+    color: var(--text);
+  }
+
+  .ctx-item.active {
+    background: var(--tint-2);
+  }
+
+  .ctx-item.danger,
+  .ctx-item.danger .ctx-icon,
+  .ctx-item.danger.active .ctx-icon {
+    color: var(--danger);
+  }
+
+  /* Destructive items highlight in their own colour rather than neutral white. */
+  .ctx-item.danger.active {
+    background: rgba(255, 107, 107, 0.12);
+  }
+
+  .ctx-icon {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    color: var(--muted);
+  }
+
+  .ctx-item.active .ctx-icon {
+    color: var(--text);
+  }
+
+  .ctx-label {
+    flex: 1;
+    white-space: nowrap;
+  }
+
+  .ctx-key {
+    color: var(--faint);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ctx-check {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    color: var(--accent);
+  }
+
+  .ctx-sep {
+    height: 1px;
+    margin: 5px 8px;
+    background: var(--tint-2);
+  }
+</style>

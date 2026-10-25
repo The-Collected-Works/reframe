@@ -447,3 +447,53 @@
   {#if readout}<div class="readout" style:left={`${readout.x}px`} style:top={`${readout.y}px`}>{readout.text}</div>{/if}
   {#if !app.focus}<div class="empty-hint">Nothing selected</div>{/if}
 </div>
+
+<style>
+  .stage {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  canvas {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Floating glass over the media. */
+  .zoom-chip {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 13px;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-filter);
+    box-shadow: var(--glass-shadow);
+    font-size: 11px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    animation: rise-in 300ms var(--ease) 140ms both;
+  }
+
+  .zoom-chip:hover {
+    color: var(--text);
+  }
+
+  /* The value being dragged (scale, angle), beside the pointer. */
+  .readout {
+    position: absolute;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    white-space: nowrap;
+    animation: pop-in 140ms var(--ease) both;
+  }
+</style>

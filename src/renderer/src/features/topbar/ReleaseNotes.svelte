@@ -20,3 +20,48 @@
     {/if}
   {/each}
 </div>
+
+<style>
+  .notes {
+    color: var(--muted);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+
+  h4 {
+    margin: 10px 0 2px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  h4:first-child {
+    margin-top: 2px;
+  }
+
+  p,
+  ul {
+    margin: 4px 0;
+  }
+
+  ul {
+    padding-left: 16px;
+  }
+
+  li + li {
+    margin-top: 2px;
+  }
+
+  strong {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  code {
+    padding: 0 4px;
+    border-radius: 4px;
+    background: var(--tint-2);
+    font: 11px var(--font-mono);
+  }
+</style>

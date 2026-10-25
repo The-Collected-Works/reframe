@@ -16,6 +16,7 @@
   const key = $derived(`${JSON.stringify(settings)}|${width}x${FILM_HEIGHT}@${dpr}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}`)
 
   let canvas: HTMLCanvasElement
+  let ready = $state(false)
   let visible = $state(false)
   let drawn = ''
 
@@ -28,7 +29,7 @@
       canvas.height = ph
     }
     drawFrame(canvas.getContext('2d')!, asset.thumb, asset.w, asset.h, board.width, board.height, settings, pw / board.width)
-    canvas.dataset.ready = '1'
+    ready = true
     drawn = key
   }
   const task = () => draw()
@@ -42,5 +43,49 @@
 </script>
 
 <button tabindex={-1} class={['film-item', { on, skipped: settings.skip }]} title={entry.name} onclick={() => app.select(entry.name)}>
-  <canvas bind:this={canvas} {@attach visibility(onVisible)} style:width={`${width}px`} style:height={`${FILM_HEIGHT}px`}></canvas>
+  <canvas bind:this={canvas} data-ready={ready || undefined} {@attach visibility(onVisible)} style:width={`${width}px`} style:height={`${FILM_HEIGHT}px`}></canvas>
 </button>
+
+<style>
+  /* Thumbnails are draggable too, so they keep the strip's grab cursor. */
+  .film-item {
+    position: relative;
+    flex: none;
+    padding: 3px;
+    border-radius: 7px;
+    cursor: inherit;
+  }
+
+  .film-item:hover {
+    background: var(--tint-1);
+  }
+
+  .film-item.on {
+    background: var(--tint-3);
+  }
+
+  canvas {
+    display: block;
+    border-radius: 3px;
+    background: var(--panel);
+    opacity: 0;
+    transition: opacity 260ms var(--ease);
+  }
+
+  canvas[data-ready] {
+    opacity: 1;
+  }
+
+  .skipped canvas[data-ready] {
+    opacity: 0.3;
+  }
+
+  /* Excluded from export: a faint X just over the image, inside the item's padding. */
+  .skipped::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    background: var(--excluded-x) no-repeat center / 100% 100%;
+    pointer-events: none;
+  }
+</style>

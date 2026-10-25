@@ -61,3 +61,103 @@
     <Volume />
   {/if}
 </div>
+
+<style>
+  /* Floating glass over the media. */
+  .player {
+    width: min(720px, calc(100% - 48px));
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px 0 6px;
+    border-radius: 22px;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-filter);
+    box-shadow: var(--glass-shadow);
+  }
+
+  /* Play / pause: a round button whose two glyphs crossfade with a little turn. */
+  .play {
+    position: relative;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--tint-2);
+    color: var(--text);
+    transition: background-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+  }
+
+  .play:hover {
+    background: var(--tint-3);
+  }
+
+  .play:active {
+    transform: scale(0.92);
+  }
+
+  .play.unavailable {
+    color: var(--faint);
+  }
+
+  .glyph {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    transition: opacity 160ms var(--ease), transform 220ms var(--spring);
+  }
+
+  /* The play triangle's optical centre sits right of its box. */
+  .play-glyph {
+    padding-left: 2px;
+  }
+
+  .pause-glyph,
+  .playing .play-glyph {
+    opacity: 0;
+    transform: scale(0.6) rotate(-30deg);
+  }
+
+  .playing .pause-glyph {
+    opacity: 1;
+    transform: none;
+  }
+
+  .loading .glyph {
+    animation: pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  .time {
+    flex: none;
+    width: 48px;
+    text-align: center;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--text);
+  }
+
+  .time.muted {
+    color: var(--muted);
+  }
+
+  /* Round icon buttons here (the volume's too), bright over the media. */
+  .player :global(.icon-btn) {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: var(--text);
+  }
+
+  .player .static {
+    color: var(--faint);
+  }
+</style>
