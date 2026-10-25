@@ -9,7 +9,8 @@
   import Grid from './features/grid/Grid.svelte'
   import { finishPick } from './features/inspector/eyedropper'
   import Inspector from './features/inspector/Inspector.svelte'
-  import { blocked, quiet, SHORTCUTS } from './features/shortcuts'
+  import { GLOBAL } from './features/keymaps'
+  import { blocked, GLOBAL_HANDLERS, quiet } from './features/shortcuts'
   import SingleView from './features/single/SingleView.svelte'
   import TopBar from './features/topbar/TopBar.svelte'
   import { api } from './lib/bridge'
@@ -58,7 +59,7 @@
 
   // The viewport (or the empty state) takes dropped folders, and only it tints: the top bar sits
   // under the OS-drawn window controls, which couldn't follow the tint in step.
-  const keys = keyHandler(SHORTCUTS, { blocked, quiet })
+  const keys = keyHandler(GLOBAL, GLOBAL_HANDLERS, { blocked, quiet })
 
   const drop = new FileDrop((file) => openFolder(api.pathForFile(file)))
 </script>

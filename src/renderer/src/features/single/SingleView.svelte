@@ -15,6 +15,7 @@
   import { shell } from '../../state/shell.svelte'
   import { view } from '../../state/view.svelte'
   import { Button } from '../../ui'
+  import { SINGLE } from '../keymaps'
   import { assetMenu } from '../menus'
   import Filmstrip from './Filmstrip.svelte'
   import { Player } from './player.svelte'
@@ -66,12 +67,12 @@
     if (v && (v.currentTime < start || v.currentTime > end)) player?.seek(start)
   }
 
-  // Space plays and pauses; any arrow steps through the strip.
-  useKeymap([
-    { keys: 'space', run: () => player?.toggle() },
-    { keys: ['arrowright', 'arrowdown'], run: () => selection.step(1) },
-    { keys: ['arrowleft', 'arrowup'], run: () => selection.step(-1) }
-  ])
+  // Space plays and pauses; any arrow steps through the strip. (The stage handles the rest.)
+  useKeymap(SINGLE, {
+    play: () => player?.toggle(),
+    prev: () => selection.step(-1),
+    next: () => selection.step(1)
+  })
 </script>
 
 <div class="single">

@@ -15,7 +15,7 @@
   import { project } from '../../state/project.svelte'
   import { selection } from '../../state/selection.svelte'
   import { shell } from '../../state/shell.svelte'
-  import { Button, ColorField, Icon, NumberField, Segmented, Slider, Tag, Toggle } from '../../ui'
+  import { Button, ColorPicker, Icon, NumberField, Segmented, Slider, Tag, Toggle } from '../../ui'
   import { ZOOM_MAX, ZOOM_MIN } from '../snapping'
   import AnchorGrid from './AnchorGrid.svelte'
   import { pickBackground } from './eyedropper'
@@ -188,10 +188,9 @@
         onChange={(bg) => edit({ bg })}
       />
       {#if s.bg === 'color'}
-        <div class="color-row">
-          <ColorField value={s.bgColor} onChange={(bgColor) => edit({ bgColor })} onReset={back('bgColor')} />
+        <ColorPicker value={s.bgColor} onChange={(bgColor) => edit({ bgColor })} onReset={back('bgColor')}>
           <Button variant="icon" icon="pipette" tone={shell.picking ? 'accent' : undefined} title="Pick from media (I)" onclick={pickBackground} />
-        </div>
+        </ColorPicker>
       {:else}
         <div class="slider-row">
           <Slider value={s.blur} min={0} max={200} step={1} curve={1.6} onChange={(blur) => edit({ blur })} onReset={back('blur')} />
@@ -325,7 +324,6 @@
     gap: 8px;
   }
 
-  .color-row,
   .slider-row {
     display: flex;
     align-items: center;

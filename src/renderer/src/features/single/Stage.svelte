@@ -12,6 +12,7 @@
   import { loadStill } from '../../lib/media'
   import { crossfade, fly, settledRect, snapshot } from '../../lib/motion'
   import type { Asset } from '../../state/library.svelte'
+  import { SINGLE } from '../keymaps'
   import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
   import { camera, type View } from './camera.svelte'
   import { dragTo, hitTest, type DragStart } from './gizmo'
@@ -328,12 +329,12 @@
 
   // ⌘/Ctrl+0 fits; ⌘/Ctrl +/− zoom about the centre. Esc deselects first (before the app's Esc
   // goes back to the grid).
-  useKeymap([
-    { keys: 'mod+0', run: () => fitView() },
-    { keys: ['mod+=', 'mod++'], run: () => zoomView(1.25, width / 2, height / 2) },
-    { keys: 'mod+-', run: () => zoomView(0.8, width / 2, height / 2) },
-    { keys: 'escape', when: () => selected, run: () => (selected = false) }
-  ])
+  useKeymap(SINGLE, {
+    fit: () => fitView(),
+    zoomIn: () => zoomView(1.25, width / 2, height / 2),
+    zoomOut: () => zoomView(0.8, width / 2, height / 2),
+    deselect: { when: () => selected, run: () => (selected = false) }
+  })
 
   /** Drags the view; a click that never moves calls `onClick` instead. */
   function startPan(e: PointerEvent, onClick?: () => void) {

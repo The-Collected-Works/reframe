@@ -1,62 +1,22 @@
-<!-- An info button that toggles a dropdown with the version and every shortcut. -->
+<!-- An info button that toggles a dropdown with the version and every shortcut (from keymaps.ts). -->
 <script lang="ts">
   import { version } from '../../../../../package.json'
-  import { ALT, MOD, SHIFT } from '../../lib/keys'
+  import { chips } from '../../lib/keymap.svelte'
   import { Button, Kbd, Popover } from '../../ui'
+  import { KEYMAPS } from '../keymaps'
 
-  /** Every shortcut, grouped. Keys are shown as separate chips; " / " separates alternatives. */
-  const SHORTCUTS: { title: string; items: [string, string[]][] }[] = [
-    {
-      title: 'View',
-      items: [
-        ['Grid / single view', ['E']],
-        ['Open selected', ['Space']],
-        ['Back to grid, deselect', ['Esc']],
-        ['Previous / next asset', ['←', '→']],
-        ['Switch artboard', [MOD, '1–9']]
-      ]
-    },
-    {
-      title: 'Edit',
-      items: [
-        ['Copy / paste settings', [MOD, 'C', '/', MOD, 'V']],
-        ['Undo / redo', [MOD, 'Z', '/', MOD, SHIFT, 'Z']],
-        ['Select all', [MOD, 'A']],
-        ['Pick background color', ['I']],
-        ['Reset asset to defaults', [MOD, SHIFT, 'R']],
-        ['Reset a value', ['Middle-click']]
-      ]
-    },
-    {
-      title: 'Single view',
-      items: [
-        ['Play / pause', ['Space']],
-        ['Fit to view', [MOD, '0']],
-        ['Zoom in / out', [MOD, '+', '/', MOD, '−']],
-        ['Zoom', ['Scroll wheel', '/', 'Pinch']],
-        ['Pan', ['Two-finger scroll', '/', 'Middle-drag']],
-        ['Scale media', [ALT, 'Scroll']],
-        ['Reset transform', ['Double-click']]
-      ]
-    },
-    {
-      title: 'While dragging',
-      items: [
-        ['Stretch (edges, corners)', [SHIFT]],
-        ['Scale from center', [ALT]],
-        ['Lock axis (move)', [SHIFT]],
-        ['15° steps (rotate)', [SHIFT]],
-        ['No snapping', [MOD]]
-      ]
-    },
-    {
-      title: 'File',
-      items: [
-        ['Open folder', [MOD, 'O']],
-        ['Export', [MOD, 'E']]
+  // Each keymap's actions and unsectioned notes, then its notes under their own sub-headings.
+  const sections = KEYMAPS.map((m) => {
+    const notes = m.notes ?? []
+    const subs = [...new Set(notes.flatMap((n) => n.section ?? []))]
+    return {
+      title: m.title,
+      groups: [
+        { title: '', rows: [...Object.values(m.actions), ...notes.filter((n) => !n.section)] },
+        ...subs.map((t) => ({ title: t, rows: notes.filter((n) => n.section === t) }))
       ]
     }
-  ]
+  })
 
   let open = $state(false)
 </script>
@@ -77,16 +37,19 @@
         <span class="muted">{version}</span>
       </header>
       <div class="scroll">
-        {#each SHORTCUTS as g (g.title)}
+        {#each sections as g (g.title)}
           <section class="keys">
             <h4>{g.title}</h4>
-            {#each g.items as [label, keys] (label)}
-              <div class="key-row">
-                <span>{label}</span>
-                <span class="key-combo">
-                  {#each keys as k, i (i)}{#if k === '/'}<span class="key-or">/</span>{:else}<Kbd>{k}</Kbd>{/if}{/each}
-                </span>
-              </div>
+            {#each g.groups as sub (sub.title)}
+              {#if sub.title}<h5>{sub.title}</h5>{/if}
+              {#each sub.rows as row, r (r)}
+                <div class="key-row">
+                  <span>{row.label}</span>
+                  <span class="key-combo">
+                    {#each chips(row) as k, i (i)}{#if k === '/'}<span class="key-or">/</span>{:else}<Kbd>{k}</Kbd>{/if}{/each}
+                  </span>
+                </div>
+              {/each}
             {/each}
           </section>
         {/each}
@@ -141,6 +104,13 @@
     font-size: 11px;
     font-weight: 600;
     color: var(--muted);
+  }
+
+  h5 {
+    margin: 6px 0 2px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--faint);
   }
 
   .key-row {

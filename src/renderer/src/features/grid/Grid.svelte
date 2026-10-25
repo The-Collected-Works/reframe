@@ -13,6 +13,7 @@
   import { shell } from '../../state/shell.svelte'
   import { view } from '../../state/view.svelte'
   import { Icon } from '../../ui'
+  import { GRID } from '../keymaps'
   import { assetMenu, excludedFolderMenu, folderMenu } from '../menus'
   import { GAP, PAD, provideGrid, scroll } from './context'
   import GridFolder from './GridFolder.svelte'
@@ -47,13 +48,14 @@
 
   // Arrows move the focus (up and down by position on screen); Space opens it, like Quick Look.
   useKeymap(
-    [
-      { keys: 'space', when: () => !!selection.focus, run: () => setMode('single') },
-      { keys: 'arrowright', run: () => selection.step(1) },
-      { keys: 'arrowleft', run: () => selection.step(-1) },
-      { keys: 'arrowdown', run: () => stepRow(1) },
-      { keys: 'arrowup', run: () => stepRow(-1) }
-    ],
+    GRID,
+    {
+      open: { when: () => !!selection.focus, run: () => setMode('single') },
+      prev: () => selection.step(-1),
+      next: () => selection.step(1),
+      up: () => stepRow(-1),
+      down: () => stepRow(1)
+    },
     () => active
   )
 
