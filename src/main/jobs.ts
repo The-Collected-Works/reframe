@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, utilityProcess, type UtilityProcess } from 'electron'
 import type { ColorMeta, PosterResult, VideoExportJob } from '@shared/types'
-import type { WorkerReply } from './worker'
+import type { WorkerReply, WorkerRequest } from './worker'
 
 const OS: Record<string, string> = { win32: 'win', darwin: 'mac', linux: 'linux' }
 
@@ -23,6 +23,9 @@ function ffmpegPath(): string {
   return candidates.find((p) => p && existsSync(p)) ?? 'ffmpeg'
 }
 
+/** Where posters and scrub proxies are cached (the worker writes them; media serves proxies). */
+export const cacheDir = (): string => join(app.getPath('userData'), 'posters')
+
 let worker: UtilityProcess | null = null
 let nextId = 1
 const calls = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; progress?: (p: number) => void }>()
@@ -31,7 +34,7 @@ function ensureWorker(): UtilityProcess {
   if (worker) return worker
   const w = utilityProcess.fork(join(__dirname, 'worker.js'), [], {
     serviceName: 'Reframe media',
-    env: { ...process.env, REFRAME_FFMPEG_BIN: ffmpegPath(), REFRAME_CACHE_DIR: join(app.getPath('userData'), 'posters') }
+    env: { ...process.env, REFRAME_FFMPEG_BIN: ffmpegPath(), REFRAME_CACHE_DIR: cacheDir() }
   })
   w.on('message', (m: WorkerReply) => {
     const call = calls.get(m.id)
@@ -49,7 +52,10 @@ function ensureWorker(): UtilityProcess {
   return (worker = w)
 }
 
-function call<T>(msg: Record<string, unknown>, progress?: (p: number) => void): Promise<T> {
+/** A request as sent (the id is added here). */
+type Request = WorkerRequest extends infer R ? (R extends { id: number } ? Omit<R, 'id'> : never) : never
+
+function call<T>(msg: Request, progress?: (p: number) => void): Promise<T> {
   const id = nextId++
   return new Promise<T>((resolve, reject) => {
     calls.set(id, { resolve: resolve as (v: unknown) => void, reject, progress })
@@ -62,7 +68,24 @@ export const frame = (path: string, time: number, color?: ColorMeta) => call<Uin
 export const scrubProxy = (path: string, w: number, h: number, color?: ColorMeta) => call<string>({ type: 'proxy', path, w, h, color })
 export const exportVideo = (job: VideoExportJob, onProgress: (p: number) => void) =>
   call<void>({ type: 'export', job }, onProgress)
-export const cancelExport = (): void => worker?.postMessage({ type: 'cancel' })
-export const stopWorker = (): void => {
-  worker?.kill()
+export const cancelExport = (): void => worker?.postMessage({ type: 'cancel' } satisfies WorkerRequest)
+
+/**
+ * Asks the worker to stop every ffmpeg and remove half-written files, then waits for it to exit
+ * (killing it after a second if it hasn't).
+ */
+export function stopWorker(): Promise<void> {
+  const w = worker
+  if (!w) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      w.kill()
+      resolve()
+    }, 1000)
+    w.once('exit', () => {
+      clearTimeout(timeout)
+      resolve()
+    })
+    w.postMessage({ type: 'shutdown' } satisfies WorkerRequest)
+  })
 }

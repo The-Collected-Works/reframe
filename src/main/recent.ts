@@ -1,6 +1,7 @@
 import { promises as fs, statSync } from 'node:fs'
 import { basename, join, normalize } from 'node:path'
 import { app, Menu } from 'electron'
+import { writeJsonAtomic } from './fsutil'
 
 /** How many recent folders are remembered (the menus show fewer). */
 const KEEP = 8
@@ -9,12 +10,32 @@ const SHOW = 5
 type State = { lastFolder?: string; recent?: string[] }
 const statePath = () => join(app.getPath('userData'), 'state.json')
 
-export async function readState(): Promise<State> {
-  try {
-    return JSON.parse(await fs.readFile(statePath(), 'utf8'))
-  } catch {
-    return {}
-  }
+/**
+ * The app's own state (last and recent folders), read once and kept in memory. Changes go through
+ * `update`, one after another, each saved atomically, so none is lost to another.
+ */
+let loaded: Promise<State> | null = null
+let changes: Promise<unknown> = Promise.resolve()
+
+export function readState(): Promise<State> {
+  loaded ??= fs.readFile(statePath(), 'utf8').then(
+    (text) => {
+      const v = JSON.parse(text)
+      return v && typeof v === 'object' ? (v as State) : {}
+    },
+    () => ({})
+  )
+  return loaded
+}
+
+function update(fn: (s: State) => State): Promise<void> {
+  const next = changes.then(async () => {
+    const state = fn(await readState())
+    loaded = Promise.resolve(state)
+    await writeJsonAtomic(statePath(), state).catch(() => {})
+  })
+  changes = next.catch(() => {})
+  return next
 }
 
 const same = (a: string, b: string) =>
@@ -31,18 +52,15 @@ export async function recentFolders(): Promise<string[]> {
 
 /** Records an opened folder as the last and most recent one. */
 export async function remember(dir: string): Promise<void> {
-  const state = await readState()
-  const recent = [dir, ...(state.recent ?? []).filter((d) => !same(d, dir))].slice(0, KEEP)
-  await fs.writeFile(statePath(), JSON.stringify({ ...state, lastFolder: dir, recent })).catch(() => {})
+  await update((s) => ({ ...s, lastFolder: dir, recent: [dir, ...(s.recent ?? []).filter((d) => !same(d, dir))].slice(0, KEEP) }))
   await updateSystemMenus()
 }
 
 export async function forget(dir: string): Promise<string[]> {
-  const state = await readState()
-  const recent = (state.recent ?? []).filter((d) => !same(d, dir))
-  await fs.writeFile(statePath(), JSON.stringify({ ...state, recent })).catch(() => {})
-  await updateSystemMenus()
-  return recentFolders()
+  await update((s) => ({ ...s, recent: (s.recent ?? []).filter((d) => !same(d, dir)) }))
+  const folders = await recentFolders()
+  updateSystemMenus(undefined, folders)
+  return folders
 }
 
 let openRequest: (dir: string) => void = () => {}
@@ -52,9 +70,9 @@ let openRequest: (dir: string) => void = () => {}
  * jump list (each relaunches the app with that folder, which a running copy picks up through
  * `second-instance`), and the macOS Dock menu.
  */
-export async function updateSystemMenus(onOpen?: (dir: string) => void): Promise<void> {
+export async function updateSystemMenus(onOpen?: (dir: string) => void, known?: string[]): Promise<void> {
   if (onOpen) openRequest = onOpen
-  const folders = (await recentFolders()).slice(0, SHOW)
+  const folders = (known ?? (await recentFolders())).slice(0, SHOW)
   try {
     if (process.platform === 'win32' && app.isPackaged) {
       app.setJumpList(

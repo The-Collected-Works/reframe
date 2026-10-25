@@ -1,10 +1,11 @@
 import { createReadStream, promises as fs } from 'node:fs'
-import { dirname, extname, isAbsolute, join, normalize, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, join, normalize, relative, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
-import type { ColorMeta, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
+import { mimeOf } from '@shared/media'
+import type { ColorMeta, FolderScan, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
 import { cancelExport, exportVideo, frame, poster, scrubProxy, stopWorker } from './jobs'
-import { markFolder, noteSkipped, saveProject, scanFolder, unmarkFolder, watchFolder } from './folder'
+import { markFolder, noteSkipped, saveProject, scanFolder, setSkipped, unmarkFolder, watchFolder } from './folder'
 import { installUpdate, pollAutoUpdate, updateStatus } from './autoupdate'
 import { folderArg, forget, readState, recentFolders, remember, updateSystemMenus } from './recent'
 import { checkForUpdate, openRelease } from './updates'
@@ -12,13 +13,6 @@ import { checkForUpdate, openRelease } from './updates'
 protocol.registerSchemesAsPrivileged([
   { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
 ])
-
-const MIME: Record<string, string> = {
-  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
-  '.gif': 'image/gif', '.avif': 'image/avif', '.bmp': 'image/bmp',
-  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
-  '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo'
-}
 
 // Dev builds get their own profile, so running dev alongside the packaged app doesn't make the two
 // fight over one cache directory ("Unable to move the cache: Access is denied").
@@ -33,8 +27,6 @@ if (!primary) app.quit()
 const BG = '#111113'
 let win: BrowserWindow | null = null
 let currentDir: string | null = null
-/** The open folder with links resolved, for checking where a path really leads. */
-let currentReal: string | null = null
 
 /** Strictly inside `root` (not `root` itself), by path alone. */
 const within = (root: string, path: string) => {
@@ -43,13 +35,29 @@ const within = (root: string, path: string) => {
 }
 
 /**
- * Whether a file may be read: inside the open folder (any depth), both as written and once links
- * are resolved, so neither ".." nor a link can reach outside it.
+ * The files the renderer may read: exactly the assets of the open folder's latest scan, plus the
+ * scrub proxies handed out for them. Every path the renderer reads comes from one of those, and the
+ * scan never follows links, so one lookup replaces any checking of where a path leads.
  */
-async function inOpenFolder(path: string): Promise<boolean> {
-  if (!currentDir || !currentReal || !within(currentDir, normalize(path))) return false
-  const real = await fs.realpath(path).catch(() => null)
-  return !!real && within(currentReal, real)
+let readable = new Set<string>()
+
+/** Where exports may be written: the folders the export dialog declared (see mark-output). */
+const outputRoots = new Set<string>()
+const inOutput = (path: string) => [...outputRoots].some((root) => within(root, normalize(path)))
+
+function canRead(path: string): boolean {
+  return readable.has(normalize(path))
+}
+
+function mustRead(path: string): void {
+  if (!canRead(path)) throw new Error('Not in the open folder')
+}
+
+/** Makes a scan the one in effect: what the renderer may read, and what the watcher ignores. */
+function adopt(scan: FolderScan): FolderScan {
+  readable = new Set(scan.assets.map((a) => normalize(a.path)))
+  setSkipped(scan.skipped)
+  return scan
 }
 
 /** A folder path from the renderer, relative to the open one ("Shoot A/Rejects"), made absolute. */
@@ -60,31 +68,65 @@ function subfolder(rel: string): string {
   return abs
 }
 
-async function open(path: string) {
-  const dir = (await fs.stat(path)).isDirectory() ? path : dirname(path)
-  const scan = await scanFolder(dir)
-  currentDir = normalize(dir)
-  currentReal = await fs.realpath(dir).catch(() => currentDir)
+/**
+ * Opens a folder: watch it, scan it, remember it. Opens can overlap (the launch reopening the last
+ * folder while another is picked); only the newest takes effect, and an older one fails.
+ */
+let openGen = 0
+async function open(path: string): Promise<FolderScan> {
+  const gen = ++openGen
+  const dir = normalize((await fs.stat(path)).isDirectory() ? path : dirname(path))
+  if (gen !== openGen) throw new Error('superseded')
+  // Watch first, so nothing added during a long scan is missed.
+  currentDir = dir
+  readable = new Set()
   watchFolder(dir, () => win?.webContents.send('folder-changed'))
-  await remember(dir)
-  return scan
+  const scan = await scanFolder(dir)
+  if (gen !== openGen) throw new Error('superseded')
+  remember(dir).catch(() => {})
+  return adopt(scan)
+}
+
+/**
+ * Scans the open folder again. One scan at a time: asked for while one is running, it runs once
+ * more when that finishes, and every caller gets the newest result.
+ */
+let rescanning: Promise<FolderScan | null> | null = null
+let rescanAgain = false
+function rescan(): Promise<FolderScan | null> {
+  if (rescanning) {
+    rescanAgain = true
+    return rescanning
+  }
+  rescanning = (async () => {
+    let scan: FolderScan | null = null
+    do {
+      rescanAgain = false
+      const dir = currentDir
+      scan = dir ? await scanFolder(dir, false) : null
+      if (scan && scan.dir !== currentDir) scan = null
+    } while (rescanAgain)
+    return scan && adopt(scan)
+  })().finally(() => {
+    rescanning = null
+  })
+  return rescanning
 }
 
 function serveMedia(req: Request): Promise<Response> | Response {
   const path = normalize(decodeURIComponent(new URL(req.url).pathname.slice(1)))
-  // The open folder (any depth), plus the scrub proxies made from it.
-  const proxy = dirname(path) === normalize(join(app.getPath('userData'), 'posters', 'scrub'))
-  return (proxy ? Promise.resolve(true) : inOpenFolder(path)).then((allowed) => (allowed ? respond(req, path) : new Response(null, { status: 403 })))
+  return canRead(path) ? respond(req, path) : new Response(null, { status: 403 })
 }
 
 function respond(req: Request, path: string): Promise<Response> {
   return fs.stat(path).then(
     (st) => {
       const headers: Record<string, string> = {
-        'Content-Type': MIME[extname(path).toLowerCase()] ?? 'application/octet-stream',
+        'Content-Type': mimeOf(path),
         'Accept-Ranges': 'bytes',
         'Access-Control-Allow-Origin': '*'
       }
+      if (st.size === 0) return new Response(null, { status: 200, headers: { ...headers, 'Content-Length': '0' } })
       const m = /bytes=(\d*)-(\d*)/.exec(req.headers.get('range') ?? '')
       let start = 0
       let end = st.size - 1
@@ -95,6 +137,7 @@ function respond(req: Request, path: string): Promise<Response> {
         } else if (m[2]) {
           start = Math.max(0, st.size - Number(m[2]))
         }
+        if (start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${st.size}` } })
         headers['Content-Range'] = `bytes ${start}-${end}/${st.size}`
       }
       headers['Content-Length'] = String(end - start + 1)
@@ -128,6 +171,10 @@ function createWindow() {
   // reach the page).
   win.on('will-move', () => win?.webContents.send('window-moving'))
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  // The window only ever shows the app (the dev server's reloads aside).
+  win.webContents.on('will-navigate', (e, url) => {
+    if (!process.env.ELECTRON_RENDERER_URL || !url.startsWith(process.env.ELECTRON_RENDERER_URL)) e.preventDefault()
+  })
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL)
   else win.loadFile(join(__dirname, '../renderer/index.html'))
 }
@@ -153,7 +200,7 @@ ipcMain.handle('open-folder', async () => {
 })
 ipcMain.handle('scan-folder', (_e, dir: string) => open(dir))
 // Rescans the open folder without reopening it (no new watcher, no recent-folders update).
-ipcMain.handle('rescan-folder', () => (currentDir ? scanFolder(currentDir) : null))
+ipcMain.handle('rescan-folder', () => rescan())
 // Leave a subfolder out of the project, or bring it back: the marker travels with the folder.
 ipcMain.handle('exclude-folder', async (_e, rel: string) => {
   await markFolder(subfolder(rel), 'excluded')
@@ -166,6 +213,7 @@ ipcMain.handle('include-folder', (_e, rel: string) => unmarkFolder(subfolder(rel
 ipcMain.handle('mark-output', async (_e, dirs: string[]) => {
   for (const d of dirs) {
     const abs = normalize(d)
+    outputRoots.add(abs)
     if (currentDir && (abs === currentDir || within(abs, currentDir))) continue
     await markFolder(abs, 'export')
     if (currentDir && within(currentDir, abs)) noteSkipped(relative(currentDir, abs).split(/[\\/]/).join('/'))
@@ -187,25 +235,30 @@ ipcMain.handle('choose-export-dir', async (_e, defaultPath?: string) => {
   return res.canceled ? null : res.filePaths[0] ?? null
 })
 ipcMain.handle('write-file', async (_e, path: string, data: ArrayBuffer) => {
+  if (!inOutput(path)) throw new Error('Not in the export folder')
   await fs.mkdir(dirname(path), { recursive: true })
   await fs.writeFile(path, Buffer.from(data))
 })
 ipcMain.handle('export-video', async (e, job: VideoExportJob) => {
+  mustRead(job.input)
+  if (!inOutput(job.output)) throw new Error('Not in the export folder')
   await fs.mkdir(dirname(job.output), { recursive: true })
   await exportVideo(job, (progress) => e.sender.send('export-progress', { id: job.id, progress }))
 })
 ipcMain.handle('cancel-export', () => cancelExport())
-ipcMain.handle('poster', (_e, path: string) => poster(path))
-const inFolder = async (path: string) => {
-  if (!(await inOpenFolder(path))) throw new Error('Not in the open folder')
-}
-ipcMain.handle('frame', async (_e, path: string, time: number, color?: ColorMeta) => {
-  await inFolder(path)
+ipcMain.handle('poster', (_e, path: string) => {
+  mustRead(path)
+  return poster(path)
+})
+ipcMain.handle('frame', (_e, path: string, time: number, color?: ColorMeta) => {
+  mustRead(path)
   return frame(path, time, color)
 })
 ipcMain.handle('scrub-proxy', async (_e, path: string, w: number, h: number, color?: ColorMeta) => {
-  await inFolder(path)
-  return scrubProxy(path, w, h, color)
+  mustRead(path)
+  const proxy = await scrubProxy(path, w, h, color)
+  readable.add(normalize(proxy))
+  return proxy
 })
 // Export progress on the taskbar / Dock icon (-1 clears it).
 ipcMain.handle('set-progress', (e, p: number) => BrowserWindow.fromWebContents(e.sender)?.setProgressBar(p < 0 ? -1 : p))
@@ -257,10 +310,13 @@ ipcMain.handle('check-update', async (e) => {
 })
 ipcMain.handle('install-update', () => installUpdate())
 ipcMain.handle('open-release', () => openRelease())
+// Only things Reframe shows: the open folder and what's in it, and where exports went.
 ipcMain.handle('reveal', async (_e, path: string) => {
-  const st = await fs.stat(path).catch(() => null)
-  if (st?.isDirectory()) await shell.openPath(path)
-  else shell.showItemInFolder(path)
+  const p = normalize(path)
+  if (!(currentDir && (p === currentDir || within(currentDir, p))) && !outputRoots.has(p) && !inOutput(p)) return
+  const st = await fs.stat(p).catch(() => null)
+  if (st?.isDirectory()) await shell.openPath(p)
+  else shell.showItemInFolder(p)
 })
 
 // A second launch focuses this window, opening the folder it was given (a jump list entry).
@@ -278,11 +334,18 @@ app.whenReady().then(() => {
   setMenu()
   createWindow()
   updateSystemMenus((dir) => win?.webContents.send('open-folder-request', dir))
-  app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow())
 })
 
-app.on('window-all-closed', () => {
-  cancelExport()
-  stopWorker()
-  app.quit()
+app.on('window-all-closed', () => app.quit())
+
+// However the app quits (window closed, ⌘Q, restarting into an update), stop the media worker
+// first: it kills any running ffmpeg and removes half-written exports and proxies.
+let stopped = false
+app.on('before-quit', (e) => {
+  if (stopped) return
+  e.preventDefault()
+  stopWorker().finally(() => {
+    stopped = true
+    app.quit()
+  })
 })

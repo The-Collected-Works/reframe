@@ -1,29 +1,11 @@
 import { execFile } from 'node:child_process'
 import { promises as fs, watch, type FSWatcher } from 'node:fs'
-import { extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
+import { kindOf } from '@shared/media'
 import type { AssetEntry, FolderScan, MediaKind, ProjectFile, SkippedFolder } from '@shared/types'
+import { writeJsonAtomic } from './fsutil'
 
 export const PROJECT_FILE = '.reframe.json'
-
-const KINDS: Record<string, MediaKind> = {
-  '.jpg': 'image',
-  '.jpeg': 'image',
-  '.png': 'image',
-  '.webp': 'image',
-  '.gif': 'image',
-  '.avif': 'image',
-  '.bmp': 'image',
-  '.mp4': 'video',
-  '.m4v': 'video',
-  '.mov': 'video',
-  '.webm': 'video',
-  '.mkv': 'video',
-  '.avi': 'video'
-}
-
-export function kindOf(path: string): MediaKind | null {
-  return KINDS[extname(path).toLowerCase()] ?? null
-}
 
 /**
  * Marks a folder as Reframe's own output (or one the user excluded): scans skip it and everything
@@ -34,28 +16,44 @@ export const OUTPUT_MARKER = '.reframe-output'
 const MAX_DEPTH = 8
 const MAX_FILES = 20000
 
-const natural = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
-
-/** Folders skipped by the last scan (relative, "/"-separated), so the watcher can ignore them. */
-let skippedDirs: string[] = []
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+/** Folders read at once while scanning; network drives answer slowly but in parallel. */
+const READ_AHEAD = 8
 
 /**
  * Every image and video in `dir` and its subfolders, in folder order: a folder's own files first,
  * then its subfolders. Names are paths relative to `dir` with "/" separators ("Shoot A/clip.mp4"),
  * so top-level names are unchanged from before subfolders were scanned. Hidden files and folders,
- * and folders holding the output marker, are skipped; links to folders aren't followed.
+ * and folders holding the output marker, are skipped; links to folders aren't followed. Folders
+ * are read several at a time, but the result is in order. `withProject` (when opening) also reads
+ * the project file; rescans don't need it.
  */
-export async function scanFolder(dir: string): Promise<FolderScan> {
-  const project = await readProject(dir)
-  await markLegacyExport(dir, project)
-  const assets: AssetEntry[] = []
-  const skipped: SkippedFolder[] = []
+export async function scanFolder(dir: string, withProject = true): Promise<FolderScan> {
+  const project = withProject ? await readProject(dir) : null
+  if (withProject) await markLegacyExport(dir, project)
+  let found = 0
   let truncated = false
-  const walk = async (abs: string, rel: string, depth: number): Promise<void> => {
-    const entries = await fs.readdir(abs, { withFileTypes: true }).catch(() => [])
-    if (rel && entries.some((e) => e.name === OUTPUT_MARKER)) {
-      skipped.push({ path: rel, reason: await markerReason(join(abs, OUTPUT_MARKER)) })
-      return
+  let reading = 0
+  const waiting: (() => void)[] = []
+  const slot = async () => {
+    if (reading >= READ_AHEAD) await new Promise<void>((r) => waiting.push(r))
+    reading++
+  }
+  const release = () => {
+    reading--
+    waiting.shift()?.()
+  }
+  type Found = { assets: AssetEntry[]; skipped: SkippedFolder[] }
+  const walk = async (abs: string, rel: string, depth: number): Promise<Found> => {
+    await slot()
+    let entries: import('node:fs').Dirent[] = []
+    try {
+      entries = await fs.readdir(abs, { withFileTypes: true }).catch(() => [])
+      if (rel && entries.some((e) => e.name === OUTPUT_MARKER)) {
+        return { assets: [], skipped: [{ path: rel, reason: await markerReason(join(abs, OUTPUT_MARKER)) }] }
+      }
+    } finally {
+      release()
     }
     const files: { name: string; kind: MediaKind }[] = []
     const dirs: string[] = []
@@ -65,22 +63,32 @@ export async function scanFolder(dir: string): Promise<FolderScan> {
       if (kind) files.push({ name: e.name, kind })
       else if (e.isDirectory() && depth < MAX_DEPTH) dirs.push(e.name)
     }
-    files.sort((a, b) => natural(a.name, b.name))
-    dirs.sort(natural)
-    const room = MAX_FILES - assets.length
+    files.sort((a, b) => collator.compare(a.name, b.name))
+    dirs.sort(collator.compare)
+    const room = Math.max(0, MAX_FILES - found)
     if (files.length > room) truncated = true
-    const stats = await Promise.all(files.slice(0, Math.max(0, room)).map((f) => fs.stat(join(abs, f.name)).catch(() => null)))
-    files.slice(0, stats.length).forEach((f, i) => {
+    const kept = files.slice(0, room)
+    found += kept.length
+    const stats = await Promise.all(kept.map((f) => fs.stat(join(abs, f.name)).catch(() => null)))
+    const out: Found = { assets: [], skipped: [] }
+    kept.forEach((f, i) => {
       const st = stats[i]
-      if (st) assets.push({ name: rel ? `${rel}/${f.name}` : f.name, path: join(abs, f.name), kind: f.kind, size: st.size, mtime: st.mtimeMs })
+      if (st) out.assets.push({ name: rel ? `${rel}/${f.name}` : f.name, path: join(abs, f.name), kind: f.kind, size: st.size, mtime: st.mtimeMs })
     })
-    for (const d of dirs) {
-      if (assets.length >= MAX_FILES) return void (truncated = true)
-      await walk(join(abs, d), rel ? `${rel}/${d}` : d, depth + 1)
+    if (found >= MAX_FILES && dirs.length) truncated = true
+    const children = found >= MAX_FILES ? [] : await Promise.all(dirs.map((d) => walk(join(abs, d), rel ? `${rel}/${d}` : d, depth + 1)))
+    for (const c of children) {
+      out.assets.push(...c.assets)
+      out.skipped.push(...c.skipped)
     }
+    return out
   }
-  await walk(dir, '', 0)
-  skippedDirs = skipped.map((f) => f.path)
+  const { assets, skipped } = await walk(dir, '', 0)
+  // Subfolders read in parallel can overshoot the limit a little; keep the first in order.
+  if (assets.length > MAX_FILES) {
+    assets.length = MAX_FILES
+    truncated = true
+  }
   return { dir, assets, project, skipped, truncated }
 }
 
@@ -106,6 +114,14 @@ export async function markFolder(dir: string, reason: SkippedFolder['reason']): 
 
 export async function unmarkFolder(dir: string): Promise<void> {
   await fs.rm(join(dir, OUTPUT_MARKER), { force: true })
+}
+
+/** Folders the open folder's scan skipped (relative, "/"-separated), so the watcher ignores them. */
+let skippedDirs: string[] = []
+
+/** Takes the skipped folders from the scan now in effect. */
+export function setSkipped(folders: SkippedFolder[]): void {
+  skippedDirs = folders.map((f) => f.path)
 }
 
 /** Remembers a folder as skipped straight away, before the next scan notices its marker. */
@@ -135,35 +151,46 @@ async function readProject(dir: string): Promise<ProjectFile | null> {
   }
 }
 
-export async function saveProject(dir: string, project: ProjectFile): Promise<void> {
-  const target = join(dir, PROJECT_FILE)
-  const tmp = target + '.tmp'
-  await fs.writeFile(tmp, JSON.stringify(project, null, 2))
-  await fs.rename(tmp, target)
+export function saveProject(dir: string, project: ProjectFile): Promise<void> {
+  return writeJsonAtomic(join(dir, PROJECT_FILE), project, true)
 }
 
 let watcher: FSWatcher | null = null
 let timer: NodeJS.Timeout | null = null
 
 /**
- * Watches `dir` and its subfolders. Changes to media, to folders (names without an extension) and
- * to markers trigger a rescan; hidden files and anything inside skipped folders (exports being
- * written, for one) don't.
+ * Watches `dir` and its subfolders. Changes to media, to markers and to folders trigger a rescan;
+ * hidden files and anything inside skipped folders (exports being written, for one) don't. A name
+ * that isn't media might be a folder ("Day 1.5"), so it's checked. If the folder itself goes away
+ * (deleted, renamed, drive ejected) the watcher stops instead of erroring.
  */
 export function watchFolder(dir: string, onChange: () => void): void {
   watcher?.close()
+  watcher = null
+  const trigger = () => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(onChange, 400)
+  }
   try {
-    watcher = watch(dir, { recursive: true }, (_event, file) => {
+    const w = watch(dir, { recursive: true }, (_event, file) => {
       if (!file) return
       const parts = file.split(/[\\/]/)
       const rel = parts.join('/')
+      if (parts.some((p) => p.startsWith('.') && p !== OUTPUT_MARKER)) return
       if (skippedDirs.some((d) => rel === d || rel.startsWith(d + '/'))) return
       const name = parts[parts.length - 1]
-      const relevant = name === OUTPUT_MARKER || (!parts.some((p) => p.startsWith('.')) && (kindOf(name) || !extname(name)))
-      if (!relevant) return
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(onChange, 400)
+      if (name === OUTPUT_MARKER || kindOf(name)) return trigger()
+      // Maybe a folder (added, removed or renamed): rescan unless it's plainly another file.
+      fs.stat(join(dir, file)).then(
+        (st) => st.isDirectory() && trigger(),
+        () => trigger()
+      )
     })
+    w.on('error', () => {
+      w.close()
+      if (watcher === w) watcher = null
+    })
+    watcher = w
   } catch {
     watcher = null
   }

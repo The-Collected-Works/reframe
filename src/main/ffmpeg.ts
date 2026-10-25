@@ -1,64 +1,138 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { promises as fs } from 'node:fs'
+import { promises as fs, type Stats } from 'node:fs'
 import { constants as os, setPriority } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { inColor, OUT_TAGS, parseColor } from '@shared/color'
 import { videoArgs } from '@shared/filtergraph'
 import { posterTime } from '@shared/media'
 import type { ColorMeta, PosterResult, VideoExportJob } from '@shared/types'
+import { writeJsonAtomic } from './fsutil'
 
 // Runs inside the media worker (see worker.ts); the main process passes these in.
 const FFMPEG = process.env.REFRAME_FFMPEG_BIN || 'ffmpeg'
 const CACHE = process.env.REFRAME_CACHE_DIR || ''
+const SCRUB = join(CACHE, 'scrub')
 
-function run(args: string[], onStdout?: (chunk: string) => void): { proc: ChildProcess; done: Promise<{ code: number; stdout: Buffer; stderr: string }> } {
+type Kind = 'probe' | 'poster' | 'frame' | 'proxy' | 'export'
+type Result = { code: number; stdout: Buffer; stderr: string }
+
+/**
+ * Every ffmpeg this worker has running, by what it's for, so cancelling an export, superseding a
+ * frame and shutting down each stop exactly the right ones. Files being written that should go if
+ * they're cut short are tracked too.
+ */
+const running = new Map<ChildProcess, Kind>()
+const partFiles = new Set<string>()
+
+/** Runs ffmpeg. Output a caller streams (`onStdout`) isn't also kept in memory. */
+function run(kind: Kind, args: string[], onStdout?: (chunk: string) => void): { proc: ChildProcess; done: Promise<Result> } {
   const proc = spawn(FFMPEG, args, { windowsHide: true })
+  running.set(proc, kind)
   const out: Buffer[] = []
   let stderr = ''
-  proc.stdout!.on('data', (d: Buffer) => {
-    out.push(d)
-    onStdout?.(d.toString())
-  })
+  proc.stdout!.on('data', (d: Buffer) => (onStdout ? onStdout(d.toString()) : out.push(d)))
   proc.stderr!.on('data', (d: Buffer) => {
     stderr = (stderr + d.toString()).slice(-20000)
   })
-  const done = new Promise<{ code: number; stdout: Buffer; stderr: string }>((resolve, reject) => {
-    proc.on('error', reject)
-    proc.on('close', (code) => resolve({ code: code ?? -1, stdout: Buffer.concat(out), stderr }))
+  const done = new Promise<Result>((resolve, reject) => {
+    proc.on('error', (e) => {
+      running.delete(proc)
+      reject(e)
+    })
+    proc.on('close', (code) => {
+      running.delete(proc)
+      resolve({ code: code ?? -1, stdout: Buffer.concat(out), stderr })
+    })
   })
   return { proc, done }
 }
 
-let current: { proc: ChildProcess; output: string } | null = null
-let cancelled = false
+const kill = (kind: Kind) => running.forEach((k, p) => k === kind && p.kill('SIGKILL'))
 
+/** Stops everything and removes anything left half-written. */
+export async function shutdown(): Promise<void> {
+  running.forEach((_, p) => p.kill('SIGKILL'))
+  await Promise.all([...partFiles].map((f) => fs.rm(f, { force: true })))
+}
+
+// ---------- export ----------
+
+let exportCancelled = false
+
+/**
+ * Renders one video. It's written beside the output and renamed into place only once it's
+ * complete, so a cancelled or failed export never touches an earlier good file of the same name.
+ */
 export async function exportVideo(job: VideoExportJob, onProgress: (p: number) => void): Promise<void> {
-  cancelled = false
+  exportCancelled = false
+  const part = job.output.replace(/(\.[^./\\]+)?$/, '.part$1')
   const total = Math.max(0.01, (job.clip.end ?? job.duration) - job.clip.start)
-  const { proc, done } = run(videoArgs(job), (chunk) => {
-    const m = [...chunk.matchAll(/out_time_us=(\d+)/g)].pop()
-    if (m) onProgress(Math.min(1, Number(m[1]) / 1e6 / total))
+  let line = ''
+  const { done } = run('export', videoArgs({ ...job, output: part }), (chunk) => {
+    // Progress arrives as key=value lines, which can be split across chunks.
+    const lines = (line + chunk).split('\n')
+    line = lines.pop() ?? ''
+    for (const l of lines) {
+      const m = /^out_time_us=(\d+)/.exec(l)
+      if (m) onProgress(Math.min(1, Number(m[1]) / 1e6 / total))
+    }
   })
-  current = { proc, output: job.output }
-  const res = await done
-  current = null
-  if (cancelled) {
-    await fs.rm(job.output, { force: true })
-    throw new Error('cancelled')
+  partFiles.add(part)
+  try {
+    const res = await done
+    if (exportCancelled) throw new Error('cancelled')
+    if (res.code !== 0) {
+      const lines = res.stderr.trim().split('\n')
+      throw new Error(lines.slice(-3).join(' ').slice(0, 400) || `ffmpeg exited with ${res.code}`)
+    }
+    await fs.rename(part, job.output)
+    onProgress(1)
+  } finally {
+    partFiles.delete(part)
+    await fs.rm(part, { force: true })
   }
-  if (res.code !== 0) {
-    await fs.rm(job.output, { force: true })
-    const lines = res.stderr.trim().split('\n')
-    throw new Error(lines.slice(-3).join(' ').slice(0, 400) || `ffmpeg exited with ${res.code}`)
-  }
-  onProgress(1)
 }
 
 export function cancelExport(): void {
-  cancelled = true
-  current?.proc.kill('SIGKILL')
+  exportCancelled = true
+  kill('export')
 }
+
+// ---------- caches ----------
+
+/** Cache file name for a source file as it is now (a changed file gets a new entry). */
+const cacheKey = (tag: string, path: string, st: Stats) => createHash('sha1').update(`${tag}|${path}|${st.size}|${st.mtimeMs}`).digest('hex')
+
+/** Marks a cache entry as just used, so pruning keeps what's in use rather than what's newest. */
+const touch = (...files: string[]) => {
+  const now = new Date()
+  return Promise.all(files.map((f) => fs.utimes(f, now, now).catch(() => {})))
+}
+
+/** Deletes the least recently used files in `dir` beyond `maxBytes` (and any stray partial files). */
+async function prune(dir: string, maxBytes: number): Promise<void> {
+  const names = await fs.readdir(dir).catch(() => [] as string[])
+  const files = await Promise.all(
+    names.map(async (name) => {
+      const st = await fs.stat(join(dir, name)).catch(() => null)
+      return st?.isFile() ? { path: join(dir, name), name, size: st.size, used: st.mtimeMs } : null
+    })
+  )
+  let total = 0
+  const doomed: string[] = []
+  for (const f of files.filter((x) => x !== null).sort((a, b) => b.used - a.used)) {
+    if (f.name.includes('.part.') && !partFiles.has(f.path)) doomed.push(f.path)
+    else if ((total += f.size) > maxBytes) doomed.push(f.path)
+  }
+  await Promise.all(doomed.map((f) => fs.rm(f, { force: true })))
+}
+
+const POSTER_BYTES = 1024 ** 3
+const SCRUB_BYTES = 2 * 1024 ** 3
+let posterPrune: NodeJS.Timeout | undefined
+
+// ---------- posters and frames ----------
 
 /** Average frame rate of the first video stream ("29.97 fps"), falling back to its tbr. */
 function parseFps(stderr: string): number {
@@ -72,6 +146,15 @@ function parseDuration(stderr: string): number {
   return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0
 }
 
+/** One frame as JPEG (full resolution, pixel aspect applied), decoded the way export decodes. */
+const grabFrame = (kind: Kind, path: string, time: number, color: ColorMeta | undefined, quality: number) =>
+  run(kind, [
+    '-hide_banner', '-loglevel', 'error',
+    '-ss', Math.max(0, time).toFixed(3), '-i', path,
+    '-frames:v', '1', '-vf', `scale=iw*sar:ih:${inColor(color)},format=rgb24,setsar=1`,
+    '-f', 'image2pipe', '-c:v', 'mjpeg', '-q:v', String(quality), 'pipe:1'
+  ]).done
+
 /**
  * First meaningful frame (full resolution, rotation and pixel aspect applied), duration and
  * colour metadata. The frame goes through RGB using the source's own matrix and range, so the
@@ -79,64 +162,54 @@ function parseDuration(stderr: string): number {
  */
 export async function poster(path: string): Promise<PosterResult> {
   const st = await fs.stat(path)
-  const key = createHash('sha1').update(`v2|${path}|${st.size}|${st.mtimeMs}`).digest('hex')
-  const dir = CACHE
-  const jpg = join(dir, key + '.jpg')
-  const meta = join(dir, key + '.json')
+  const key = cacheKey('v3', path, st)
+  const jpg = join(CACHE, key + '.jpg')
+  const meta = join(CACHE, key + '.json')
   try {
     const [data, info] = await Promise.all([fs.readFile(jpg), fs.readFile(meta, 'utf8')])
     const { duration, color, audio, fps } = JSON.parse(info)
-    if (color && typeof audio === 'boolean') {
-      if (typeof fps === 'number') return { data, duration, color, audio, fps }
-      // Cached before frame rates were recorded: probe again (quick) rather than redo the poster.
-      const rate = parseFps((await run(['-hide_banner', '-i', path]).done).stderr)
-      await fs.writeFile(meta, JSON.stringify({ duration, color, audio, fps: rate })).catch(() => {})
-      return { data, duration, color, audio, fps: rate }
-    }
+    touch(jpg, meta)
+    return { data, duration, color, audio, fps }
   } catch {
     // not cached
   }
 
-  const probe = await run(['-hide_banner', '-i', path]).done
+  const probe = await run('probe', ['-hide_banner', '-i', path]).done
   const duration = parseDuration(probe.stderr)
   const color = parseColor(probe.stderr)
   const audio = /Stream #.*Audio:/.test(probe.stderr)
   const fps = parseFps(probe.stderr)
-  const grab = (t: number) =>
-    run([
-      '-hide_banner', '-loglevel', 'error',
-      '-ss', t.toFixed(3), '-i', path,
-      '-frames:v', '1', '-vf', `scale=iw*sar:ih:${inColor(color)},format=rgb24,setsar=1`,
-      '-f', 'image2pipe', '-c:v', 'mjpeg', '-q:v', '3', 'pipe:1'
-    ]).done
-  let res = await grab(posterTime(duration))
-  if (!res.stdout.length) res = await grab(0)
+  let res = await grabFrame('poster', path, posterTime(duration), color, 3)
+  if (!res.stdout.length) res = await grabFrame('poster', path, 0, color, 3)
   if (!res.stdout.length) throw new Error('Could not read video')
 
-  await fs.mkdir(dir, { recursive: true })
-  await Promise.all([fs.writeFile(jpg, res.stdout), fs.writeFile(meta, JSON.stringify({ duration, color, audio, fps }))]).catch(() => {})
+  await fs.mkdir(CACHE, { recursive: true })
+  await Promise.all([fs.writeFile(jpg, res.stdout), writeJsonAtomic(meta, { duration, color, audio, fps })]).catch(() => {})
+  clearTimeout(posterPrune)
+  posterPrune = setTimeout(() => prune(CACHE, POSTER_BYTES), 5000)
   return { data: res.stdout, duration, color, audio, fps }
 }
 
-/** One frame as JPEG, decoded with the source's colour metadata (what export sees). */
+/**
+ * One frame as JPEG, decoded with the source's colour metadata (what export sees). Only the newest
+ * request matters (it's the frame on screen), so a new one stops any still decoding.
+ */
 export async function frame(path: string, time: number, color?: ColorMeta): Promise<Buffer> {
-  const res = await run([
-    '-hide_banner', '-loglevel', 'error',
-    '-ss', Math.max(0, time).toFixed(3), '-i', path,
-    '-frames:v', '1', '-vf', `scale=iw*sar:ih:${inColor(color)},format=rgb24,setsar=1`,
-    '-f', 'image2pipe', '-c:v', 'mjpeg', '-q:v', '2', 'pipe:1'
-  ]).done
+  kill('frame')
+  const res = await grabFrame('frame', path, time, color, 2)
   if (!res.stdout.length) throw new Error('Could not read frame')
   return res.stdout
 }
 
-// Scrub proxies: one built at a time, and a queued request that's been superseded (the user
-// moved on to another video) is dropped before it starts.
-const proxies = new Map<string, Promise<string>>()
+// ---------- scrub proxies ----------
+
+// Built one at a time; a queued request that's been superseded (the user moved on to another
+// video) is dropped before it starts. Only builds in progress are remembered: a finished proxy is
+// found on disk, so a pruned one is simply built again.
+const building = new Map<string, Promise<string>>()
 let proxyChain: Promise<unknown> = Promise.resolve()
 let wantedProxy = ''
 const PROXY_EDGE = 800
-const PROXY_KEEP = 30
 
 /**
  * A small copy of a video where every frame is a keyframe, for scrubbing: any frame decodes on
@@ -144,26 +217,25 @@ const PROXY_KEEP = 30
  * export converts, so it matches the real frame it stands in for. Cached beside the posters.
  */
 export async function scrubProxy(path: string, w: number, h: number, color?: ColorMeta): Promise<string> {
-  const st = await fs.stat(path)
-  const key = createHash('sha1').update(`scrub1|${path}|${st.size}|${st.mtimeMs}`).digest('hex')
-  const dir = join(CACHE, 'scrub')
-  const out = join(dir, key + '.mp4')
+  const out = join(SCRUB, cacheKey('scrub1', path, await fs.stat(path)) + '.mp4')
   wantedProxy = out
-  const known = proxies.get(out)
-  if (known) return known
-  const job = (async () => {
-    if (await fs.access(out).then(() => true, () => false)) return out
-    await (proxyChain = proxyChain.catch(() => {}).then(() => buildProxy(path, out, w, h, color)))
+  if (await fs.access(out).then(() => true, () => false)) {
+    touch(out)
     return out
-  })()
-  proxies.set(out, job)
-  job.catch(() => proxies.delete(out))
+  }
+  let job = building.get(out)
+  if (!job) {
+    job = proxyChain.catch(() => {}).then(() => buildProxy(path, out, w, h, color)).then(() => out)
+    proxyChain = job
+    building.set(out, job)
+    job.finally(() => building.delete(out)).catch(() => {})
+  }
   return job
 }
 
 async function buildProxy(path: string, out: string, w: number, h: number, color?: ColorMeta): Promise<void> {
   if (wantedProxy !== out) throw new Error('superseded')
-  await fs.mkdir(dirname(out), { recursive: true })
+  await fs.mkdir(SCRUB, { recursive: true })
   const s = Math.min(1, PROXY_EDGE / Math.max(w, h, 1))
   const even = (n: number) => Math.max(2, Math.round((n * s) / 2) * 2)
   const part = out.replace(/\.mp4$/, '.part.mp4')
@@ -176,7 +248,7 @@ async function buildProxy(path: string, out: string, w: number, h: number, color
     ...OUT_TAGS, '-movflags', '+faststart', part
   ]
   const attempt = async (hw: boolean) => {
-    const { proc, done } = run(args(hw))
+    const { proc, done } = run('proxy', args(hw))
     // Background work: keep it out of the way of the UI and of exports.
     try {
       if (proc.pid) setPriority(proc.pid, os.priority.PRIORITY_BELOW_NORMAL)
@@ -185,18 +257,14 @@ async function buildProxy(path: string, out: string, w: number, h: number, color
     }
     return (await done).code === 0
   }
-  // Hardware decoding where it works, else software.
-  if (!(await attempt(true)) && !(await attempt(false))) {
+  partFiles.add(part)
+  try {
+    // Hardware decoding where it works, else software.
+    if (!(await attempt(true)) && !(await attempt(false))) throw new Error('Could not build scrub proxy')
+    await fs.rename(part, out)
+  } finally {
+    partFiles.delete(part)
     await fs.rm(part, { force: true })
-    throw new Error('Could not build scrub proxy')
   }
-  await fs.rename(part, out)
-  await pruneProxies(dirname(out))
-}
-
-async function pruneProxies(dir: string): Promise<void> {
-  const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => !n.includes('.part.'))
-  const files = await Promise.all(names.map(async (n) => ({ p: join(dir, n), t: (await fs.stat(join(dir, n)).catch(() => null))?.mtimeMs ?? 0 })))
-  files.sort((a, b) => b.t - a.t)
-  await Promise.all(files.slice(PROXY_KEEP).map((f) => fs.rm(f.p, { force: true })))
+  await prune(SCRUB, SCRUB_BYTES)
 }
