@@ -590,6 +590,12 @@ input {
   padding: 8px 0 10px;
 }
 
+/* Ending in a subfolder, whose box already has that room and spans the same width, a folder ends
+   with it (as its sides do), rather than stacking another gap under it at each level. */
+.folder-body:has(> .grid-folder:last-child) {
+  padding-bottom: 0;
+}
+
 /* Headers reach out through the scroller's padding (and as wide as that makes it): to the window's
    left edge and up to the scrollbar; the text lines up with the thumbnails. They stick while their
    folder scrolls by, a subfolder's sliding over its parent's, so the top bar always shows the full
