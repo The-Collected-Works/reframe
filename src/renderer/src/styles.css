@@ -578,7 +578,7 @@ input {
   margin-top: 18px;
 }
 
-.grid-folder:has(> .grid-section:not(.excluded):hover) {
+.grid-folder:has(> .grid-section:hover) {
   background-color: rgba(255, 255, 255, 0.025);
 }
 

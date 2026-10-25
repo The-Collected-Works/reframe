@@ -130,8 +130,9 @@ export async function excludeFolder(folder: string): Promise<void> {
 export async function excludedFolderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
   const st = useStore.getState()
   const id = await showMenu(at.x, at.y, [
-    { id: 'include', label: 'Include in Reframe', icon: 'show' },
-    { id: 'reveal', label: revealLabel, icon: 'reveal' }
+    { id: 'reveal', label: revealLabel, icon: 'reveal' },
+    { separator: true },
+    { id: 'include', label: 'Include in Reframe', icon: 'show' }
   ])
   if (id === 'include') includeFolder(folder)
   else if (id === 'reveal') api.reveal(st.dir + sep + folder.split('/').join(sep))

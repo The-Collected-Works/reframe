@@ -284,8 +284,9 @@ function FolderName({ folder }: { folder: string }) {
 
 /**
  * An excluded folder (or Reframe's exports), dimmed in its place among the folders, with a tag
- * saying why. Deliberately inert (clicking a bar is how other folders collapse, so a click here
- * shouldn't quietly bring it back): including it again is in its right-click menu.
+ * saying why. It tints on hover like any folder, but a click does nothing (clicking a bar is how
+ * other folders collapse, so a click here shouldn't quietly bring it back): including it again is
+ * in its right-click menu.
  */
 function ExcludedBar({ folder }: { folder: SkippedFolder }) {
   const exports = folder.reason === 'export'
