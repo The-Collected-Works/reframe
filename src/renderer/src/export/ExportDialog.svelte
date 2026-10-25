@@ -1,14 +1,14 @@
 <script lang="ts">
   import { untrack } from 'svelte'
+  import { SvelteSet } from 'svelte/reactivity'
   import { api } from '../media'
+  import { closing } from '../motion'
   import { join } from '../paths'
   import { app } from '../store.svelte'
   import Icon from '../ui/Icon.svelte'
   import Segmented from '../ui/Segmented.svelte'
   import Slider from '../ui/Slider.svelte'
   import { plan, renderImage, renderVideo, type Item, type Status } from './plan'
-
-  let { closing = false }: { closing?: boolean } = $props()
 
   const QUALITY: { value: string; label: string; crf: number }[] = [
     { value: 'high', label: 'High', crf: 16 },
@@ -20,7 +20,7 @@
   const prefs = $derived(project.export)
   const out = $derived(prefs.dir ?? join(app.dir!, 'export'))
 
-  let boards = $state(new Set(untrack(() => app.project.artboards.map((b) => b.id))))
+  const boards = new SvelteSet(untrack(() => app.project.artboards.map((b) => b.id)))
   // What the grid shows (filters, collapsed folders); offered as a scope when it differs from all.
   const visible = $derived(app.visible)
   let scope = $state<'all' | 'visible' | 'selected'>(
@@ -123,8 +123,9 @@
 <svelte:window {onkeydown} />
 
 <div
-  class={'modal-backdrop' + (closing ? ' closing' : '')}
+  class="modal-backdrop"
   role="presentation"
+  out:closing|global={{ duration: 180 }}
   onpointerdown={(e) => e.target === e.currentTarget && phase !== 'running' && app.setExportOpen(false)}
 >
   <div class="modal">
@@ -157,16 +158,11 @@
           <div class="field-label">Artboards</div>
           <div class="checks">
             {#each project.artboards as b (b.id)}
-              <label class={'check' + (boards.has(b.id) ? ' on' : '')}>
+              <label class={['check', { on: boards.has(b.id) }]}>
                 <input
                   type="checkbox"
                   checked={boards.has(b.id)}
-                  onchange={(e) => {
-                    const next = new Set(boards)
-                    if (e.currentTarget.checked) next.add(b.id)
-                    else next.delete(b.id)
-                    boards = next
-                  }}
+                  onchange={(e) => (e.currentTarget.checked ? boards.add(b.id) : boards.delete(b.id))}
                 />
                 <span class="box"><Icon name="check" size={12} /></span>
                 <span>{b.name}</span>
@@ -245,7 +241,7 @@
         <div class="jobs">
           {#each list as i (i.id)}
             {@const st = status[i.id]}
-            <div class={'job ' + (st?.state ?? '')} title={st?.error}>
+            <div class={['job', st?.state]} title={st?.error}>
               <span class="job-name">{i.asset.name}</span>
               <span class="muted small">{i.board.name}</span>
               <span class="job-state">

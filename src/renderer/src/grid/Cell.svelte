@@ -1,10 +1,14 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
+  import { cubicOut } from 'svelte/easing'
+  import { Tween } from 'svelte/motion'
   import { drawFrame, resolveSettings } from '@shared/layout'
   import { posterTime } from '@shared/media'
   import type { Artboard, AssetEntry } from '@shared/types'
   import { fmtTime } from '../format'
   import { dragOffset, NO_GUIDES, type Guides } from '../interact'
-  import { observeVisibility, scheduleDraw } from '../lazydraw'
+  import { visibility } from '../attach'
+  import { scheduleDraw } from '../lazydraw'
   import { mediaUrl, prioritize } from '../media'
   import { assetMenu } from '../menus'
   import { app, baseName, folderOf, hasOverrides, withMeta } from '../store.svelte'
@@ -42,14 +46,16 @@
   const k = $derived(width / board.width)
 
   let canvas: HTMLCanvasElement
-  let frame: HTMLDivElement
   // Hover preview: `live` is the playing video, crossfaded over the thumbnail by `fade` (0..1).
   let live: HTMLVideoElement | null = null
-  let fade = 0
-  let fadeRaf = 0
+  const fade = new Tween(0, { duration: 180, easing: cubicOut })
+  $effect(() => {
+    void fade.current
+    if (live) untrack(draw)
+  })
   let layer: OffscreenCanvas | null = null
   let guides: Guides = NO_GUIDES
-  let visible = false
+  let visible = $state(false)
   // What's on the canvas, so unchanged cells skip redrawing.
   let drawn = ''
   const key = $derived(
@@ -69,8 +75,8 @@
     if (!canvas.dataset.ready && asset.thumb) canvas.dataset.ready = '1'
     const ctx = canvas.getContext('2d')!
     const kk = k * dpr
-    const video = fade > 0 ? live : null
-    if (video && fade >= 1) {
+    const video = fade.current > 0 ? live : null
+    if (video && fade.current >= 1) {
       drawFrame(ctx, video, asset.w, asset.h, board.width, board.height, settings, kk)
     } else {
       drawFrame(ctx, asset.thumb, asset.w, asset.h, board.width, board.height, settings, kk)
@@ -79,7 +85,7 @@
         // directly would also fade in its background fill and darken the blend mid-way.
         if (!layer || layer.width !== pw || layer.height !== ph) layer = new OffscreenCanvas(pw, ph)
         drawFrame(layer.getContext('2d')!, video, asset.w, asset.h, board.width, board.height, settings, kk)
-        ctx.globalAlpha = fade
+        ctx.globalAlpha = fade.current
         ctx.drawImage(layer, 0, 0)
         ctx.globalAlpha = 1
       }
@@ -104,24 +110,15 @@
     drawn = video || g.x.length || g.y.length ? '' : key
   }
 
+  // Drawn (in the shared per-frame budget) whenever what it shows changes while it's on screen.
   const task = () => draw()
-  function request() {
-    if (active && visible && (drawn !== key || live)) scheduleDraw(task)
-  }
-  // Whenever what's drawn would change (or the grid shows again).
   $effect(() => {
-    void key
-    void active
-    request()
+    if (active && visible && drawn !== key) scheduleDraw(task)
   })
-
-  $effect(() =>
-    observeVisibility(frame, (v) => {
-      visible = v
-      if (v && !asset.thumb) prioritize(asset.path)
-      request()
-    })
-  )
+  const onVisible = (v: boolean) => {
+    visible = v
+    if (v && !asset.thumb) prioritize(asset.path)
+  }
 
   // A hover becomes a preview only once the pointer has rested on the thumbnail and the grid has
   // stopped scrolling: thumbnails sliding under a still pointer mid-scroll shouldn't each start
@@ -164,21 +161,6 @@
     v.currentTime = Math.min(Math.max(posterTime(asset.duration), start), Math.max(start, end - 0.1))
     let alive = true
 
-    // One fade per cell at a time; starting a new one supersedes any in flight.
-    const fadeTo = (target: number, done?: () => void) => {
-      cancelAnimationFrame(fadeRaf)
-      const from = fade
-      const t0 = performance.now()
-      const step = () => {
-        const t = Math.min(1, (performance.now() - t0) / 180)
-        fade = from + (target - from) * (1 - Math.pow(1 - t, 3))
-        draw()
-        if (t < 1) fadeRaf = requestAnimationFrame(step)
-        else done?.()
-      }
-      fadeRaf = requestAnimationFrame(step)
-    }
-
     // Redraw on every presented video frame, looping within the trim.
     const onFrame = () => {
       if (!alive) return
@@ -191,7 +173,7 @@
       // A previous hover may still be fading out; this one takes over from its current opacity.
       if (live && live !== v) release(live)
       live = v
-      fadeTo(1)
+      fade.target = 1
       onFrame()
     }
     v.play()
@@ -203,7 +185,7 @@
       if (live !== v) return release(v)
       // Hold the last frame and fade back to the thumbnail.
       v.pause()
-      fadeTo(0, () => {
+      fade.set(0).then(() => {
         if (live === v) live = null
         release(v)
       })
@@ -256,10 +238,10 @@
     e.preventDefault()
     assetMenu(asset.name, asset.path, { x: e.clientX, y: e.clientY })
   }}
-  class={'cell' + (selected ? ' selected' : '') + (focused ? ' focused' : '') + (settings.skip ? ' skipped' : '')}
+  class={['cell', { selected, focused, skipped: settings.skip }]}
 >
   <div
-    bind:this={frame}
+    {@attach visibility(onVisible)}
     class="frame"
     role="presentation"
     style:height={`${height}px`}

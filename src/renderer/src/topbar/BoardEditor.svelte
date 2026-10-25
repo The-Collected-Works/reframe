@@ -26,7 +26,7 @@
   <div class="presets">
     {#each PRESETS as p (p.name)}
       <button
-        class={'chip' + (p.width === board.width && p.height === board.height ? ' on' : '')}
+        class={['chip', { on: p.width === board.width && p.height === board.height }]}
         onclick={() => app.updateBoard(board.id, { width: p.width, height: p.height })}
       >
         {p.width}×{p.height}

@@ -152,10 +152,10 @@
         </div>
       {/if}
       <div class="tool-grid">
-        <button class={'tool' + (s.flipX ? ' on' : '')} title="Flip horizontal" onclick={() => app.editEach((x) => ({ flipX: !x.flipX }))}>
+        <button class={['tool', { on: s.flipX }]} title="Flip horizontal" onclick={() => app.editEach((x) => ({ flipX: !x.flipX }))}>
           <Icon name="flipH" />
         </button>
-        <button class={'tool' + (s.flipY ? ' on' : '')} title="Flip vertical" onclick={() => app.editEach((x) => ({ flipY: !x.flipY }))}>
+        <button class={['tool', { on: s.flipY }]} title="Flip vertical" onclick={() => app.editEach((x) => ({ flipY: !x.flipY }))}>
           <Icon name="flipV" />
         </button>
         <button class="tool" title="Rotate left" onclick={() => app.editEach((x) => ({ rotation: normDeg(x.rotation - 90) }))}>
@@ -179,7 +179,7 @@
       {#if s.bg === 'color'}
         <div class="color-row">
           <ColorField value={s.bgColor} onChange={(bgColor) => app.edit({ bgColor })} onReset={back('bgColor')} />
-          <button class={'icon-btn' + (app.picking ? ' armed' : '')} title="Pick from media (I)" onclick={pickBackground}>
+          <button class={['icon-btn', { armed: app.picking }]} title="Pick from media (I)" onclick={pickBackground}>
             <Icon name="pipette" />
           </button>
         </div>

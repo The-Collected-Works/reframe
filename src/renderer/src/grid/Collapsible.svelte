@@ -28,6 +28,6 @@
   })
 </script>
 
-<div class={'collapsible' + (expanded ? ' open' : '')}>
+<div class={['collapsible', { open: expanded }]}>
   <div class="collapsible-inner">{#if mounted}{@render children()}{/if}</div>
 </div>

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { drawFrame, resolveSettings } from '@shared/layout'
   import type { Artboard, AssetEntry } from '@shared/types'
-  import { observeVisibility, scheduleDraw } from '../lazydraw'
+  import { visibility } from '../attach'
+  import { scheduleDraw } from '../lazydraw'
   import { prioritize } from '../media'
   import { app, withMeta } from '../store.svelte'
   import { FILM_HEIGHT } from './film'
@@ -15,7 +16,7 @@
   const key = $derived(`${JSON.stringify(settings)}|${width}x${FILM_HEIGHT}@${dpr}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}`)
 
   let canvas: HTMLCanvasElement
-  let visible = false
+  let visible = $state(false)
   let drawn = ''
 
   function draw() {
@@ -31,22 +32,15 @@
     drawn = key
   }
   const task = () => draw()
-  function request() {
-    if (visible && drawn !== key) scheduleDraw(task)
-  }
   $effect(() => {
-    void key
-    request()
+    if (visible && drawn !== key) scheduleDraw(task)
   })
-  $effect(() =>
-    observeVisibility(canvas, (v) => {
-      visible = v
-      if (v && !asset.thumb) prioritize(asset.path)
-      request()
-    })
-  )
+  const onVisible = (v: boolean) => {
+    visible = v
+    if (v && !asset.thumb) prioritize(asset.path)
+  }
 </script>
 
-<button tabindex={-1} class={'film-item' + (on ? ' on' : '') + (settings.skip ? ' skipped' : '')} title={entry.name} onclick={() => app.select(entry.name)}>
-  <canvas bind:this={canvas} style:width={`${width}px`} style:height={`${FILM_HEIGHT}px`}></canvas>
+<button tabindex={-1} class={['film-item', { on, skipped: settings.skip }]} title={entry.name} onclick={() => app.select(entry.name)}>
+  <canvas bind:this={canvas} {@attach visibility(onVisible)} style:width={`${width}px`} style:height={`${FILM_HEIGHT}px`}></canvas>
 </button>

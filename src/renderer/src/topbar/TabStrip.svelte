@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import type { Attachment } from 'svelte/attachments'
   import { reducedMotion } from '../motion'
   import { app } from '../store.svelte'
 
@@ -13,38 +14,31 @@
   let fade = $state({ left: false, right: false })
   const count = $derived(app.project.artboards.length)
 
-  $effect(() => {
-    void count
-    // Compares the outermost tabs with the strip's edges rather than scroll arithmetic, which can
-    // be off by a fraction of a pixel at fractional display scaling.
-    const update = () => {
-      const tabs = el.querySelectorAll('.tab-wrap')
-      if (!tabs.length) return (fade = { left: false, right: false })
-      const strip = el.getBoundingClientRect()
-      fade = {
-        left: tabs[0].getBoundingClientRect().left < strip.left - 1,
-        right: tabs[tabs.length - 1].getBoundingClientRect().right > strip.right + 1
-      }
+  // Compares the outermost tabs with the strip's edges rather than scroll arithmetic, which can be
+  // off by a fraction of a pixel at fractional display scaling.
+  function update() {
+    const tabs = el.querySelectorAll('.tab-wrap')
+    if (!tabs.length) return (fade = { left: false, right: false })
+    const strip = el.getBoundingClientRect()
+    fade = {
+      left: tabs[0].getBoundingClientRect().left < strip.left - 1,
+      right: tabs[tabs.length - 1].getBoundingClientRect().right > strip.right + 1
     }
-    update()
+  }
+  // Again whenever the strip or the tabs inside it change size (tabs added, removed, renamed).
+  const watchSize: Attachment<HTMLElement> = (node) => {
     const ro = new ResizeObserver(update)
-    ro.observe(el)
-    el.addEventListener('scroll', update, { passive: true })
-    el.addEventListener('scrollend', update)
-    const wheel = (e: WheelEvent) => {
-      const d = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX
-      if (!d || el.scrollWidth <= el.clientWidth) return
-      e.preventDefault()
-      el.scrollLeft += d
-    }
-    el.addEventListener('wheel', wheel, { passive: false })
-    return () => {
-      ro.disconnect()
-      el.removeEventListener('scroll', update)
-      el.removeEventListener('scrollend', update)
-      el.removeEventListener('wheel', wheel)
-    }
-  })
+    ro.observe(node)
+    void count
+    node.querySelectorAll('.tab-wrap').forEach((t) => ro.observe(t))
+    return () => ro.disconnect()
+  }
+  function onwheel(e: WheelEvent) {
+    const d = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+    if (!d || el.scrollWidth <= el.clientWidth) return
+    e.preventDefault()
+    el.scrollLeft += d
+  }
 
   const intoView = (tab: Element | null | undefined) =>
     tab?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' })
@@ -91,6 +85,15 @@
   }
 </script>
 
-<nav bind:this={el} class={'tabs' + (fade.left ? ' fade-left' : '') + (fade.right ? ' fade-right' : '')} {onpointerdown} {onclickcapture}>
+<nav
+  bind:this={el}
+  class={['tabs', { 'fade-left': fade.left, 'fade-right': fade.right }]}
+  {@attach watchSize}
+  onscroll={update}
+  onscrollend={update}
+  {onwheel}
+  {onpointerdown}
+  {onclickcapture}
+>
   {@render children()}
 </nav>

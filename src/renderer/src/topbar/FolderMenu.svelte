@@ -12,9 +12,10 @@
   let { dir, onOpen }: { dir: string | null; onOpen: (dir?: string) => void } = $props()
   let open = $state(false)
   let recent = $state<string[]>([])
-  $effect(() => {
+  const toggle = () => {
+    open = !open
     if (open) api.recentFolders().then((r) => (recent = r), () => {})
-  })
+  }
   const shown = $derived(recent.slice(0, 5))
   const pick = (d?: string) => {
     open = false
@@ -33,7 +34,7 @@
 </script>
 
 <div class="tab-wrap">
-  <button class={'folder' + (open ? ' open' : '')} title={dir ?? undefined} onclick={() => (open = !open)}>
+  <button class={['folder', { open }]} title={dir ?? undefined} onclick={toggle}>
     <Icon name="folder" size={15} />
     <span>{dir ? basename(dir) : 'Open folder'}</span>
   </button>

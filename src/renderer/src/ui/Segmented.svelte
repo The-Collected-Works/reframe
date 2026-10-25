@@ -10,7 +10,7 @@
 <div class="seg">
   <Indicator selector=":scope > button.on" key={`${value}/${options.length}`} />
   {#each options as o (o.value)}
-    <button title={o.title} disabled={o.disabled} class={o.value === value ? 'on' : ''} onclick={() => onChange(o.value)}>
+    <button title={o.title} disabled={o.disabled} class={{ on: o.value === value }} onclick={() => onChange(o.value)}>
       {#if o.icon}<Icon name={o.icon} size={15} />{/if}{o.label ?? ''}
     </button>
   {/each}

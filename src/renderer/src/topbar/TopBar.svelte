@@ -20,7 +20,7 @@
   const boards = $derived(app.project.artboards)
 </script>
 
-<header class={'topbar ' + api.platform}>
+<header class={['topbar', api.platform]}>
   <FolderMenu dir={app.dir} {onOpen} />
 
   {#if app.dir}
@@ -29,7 +29,7 @@
         {#each boards as b, i (b.id)}
           <div class="tab-wrap">
             <button
-              class={'tab' + (b.id === app.boardId ? ' on' : '') + (app.boardEditor === b.id ? ' editing' : '')}
+              class={['tab', { on: b.id === app.boardId, editing: app.boardEditor === b.id }]}
               title={b.id === app.boardId ? 'Edit artboard' : i < 9 ? combo(MOD, String(i + 1)) : undefined}
               onclick={() => (b.id === app.boardId ? app.setBoardEditor(app.boardEditor === b.id ? null : b.id) : app.setBoard(b.id))}
               oncontextmenu={(e) => {

@@ -6,7 +6,7 @@
 <div class="anchor">
   {#each cells as [ax, ay] (`${ax}${ay}`)}
     <button
-      class={Math.abs(ax - x) < 0.01 && Math.abs(ay - y) < 0.01 ? 'on' : ''}
+      class={{ on: Math.abs(ax - x) < 0.01 && Math.abs(ay - y) < 0.01 }}
       aria-label={`Anchor ${ax}, ${ay}`}
       onclick={() => onChange(ax, ay)}><span></span></button
     >

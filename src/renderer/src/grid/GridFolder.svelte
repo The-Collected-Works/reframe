@@ -52,7 +52,7 @@
     </div>
   </div>
 {:else}
-  <div class={'grid-folder' + (node.collapsed ? ' collapsed' : '')} data-folder={node.folder}>
+  <div class={['grid-folder', { collapsed: node.collapsed }]} data-folder={node.folder}>
     <!--
       The folder's header. It sticks to the top while its folder scrolls by; a subfolder's header
       slides over it there while the subfolder passes, so one bar always says where you are. The
@@ -61,7 +61,7 @@
       collapsed.
     -->
     <button
-      class={'grid-section' + (node.collapsed ? ' collapsed' : '')}
+      class={['grid-section', { collapsed: node.collapsed }]}
       title={`${node.folder ? `${g.rootName}/${node.folder}` : g.rootName}. Click to ${node.collapsed ? 'expand' : 'collapse'}`}
       aria-expanded={!node.collapsed}
       onpointerdown={(e) => e.stopPropagation()}

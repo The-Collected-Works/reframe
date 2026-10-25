@@ -10,7 +10,7 @@
   import { crossfade, fly, settledRect, snapshot } from '../motion'
   import { app, clipFor } from '../store.svelte'
   import Icon from '../ui/Icon.svelte'
-  import { eased, type View } from './camera.svelte'
+  import { camera, type View } from './camera.svelte'
   import Filmstrip from './Filmstrip.svelte'
   import { bitmapProxy } from './proxy.svelte'
   import Timeline from './Timeline.svelte'
@@ -61,7 +61,9 @@
 
   let stage: HTMLDivElement
   let canvas: HTMLCanvasElement
-  let size = $state({ w: 0, h: 0 })
+  let stageW = $state(0)
+  let stageH = $state(0)
+  const size = $derived({ w: stageW, h: stageH })
   let still = $state.raw<Blob | null>(null)
   let video = $state.raw<HTMLVideoElement | null>(null)
   let playing = $state(false)
@@ -85,11 +87,11 @@
   let cursor = $state('default')
   let readout = $state<{ x: number; y: number; text: string } | null>(null)
   // Figma-style: handles, the overflow ghost and the handle-revealing framing appear only while
-  // the media is selected. Click it to select; click empty space (or Esc) to deselect.
-  let selected = $state(false)
-  $effect(() => {
+  // the media is selected. Click it to select; click empty space (or Esc) to deselect. Another
+  // asset starts deselected.
+  let selected = $derived.by(() => {
     void app.focus
-    selected = false
+    return false
   })
   let hoverMedia = false
   let dragging = false
@@ -107,12 +109,6 @@
   // While a trim handle is dragged its value lives here, and is saved once on release.
   let trimDraft = $state<{ start: number; end: number } | null>(null)
   const clip = $derived(asset && isVideo ? (trimDraft ?? clipFor(app.project, asset.name, asset.duration)) : { start: 0, end: 0 })
-
-  $effect(() => {
-    const ro = new ResizeObserver(() => (size = { w: stage.clientWidth, h: stage.clientHeight }))
-    ro.observe(stage)
-    return () => ro.disconnect()
-  })
 
   // View: the board stays centred. While selected it zooms out enough that the media's corners
   // (and so the handles) are on screen. Held still while interacting, then eased to the new framing.
@@ -141,10 +137,9 @@
   const tby = $derived(target.by)
   // Camera: Fit (above: auto-framed, eased) or Manual, where you've scrolled, pinched or panned to.
   // A new asset goes back to Fit; in Manual, selecting no longer moves the view.
-  let manual = $state.raw<View | null>(null)
-  $effect(() => {
+  let manual = $derived.by((): View | null => {
     void app.focus
-    manual = null
+    return null
   })
   // Resizing in Manual keeps the same point centred.
   let lastSize = { w: 0, h: 0 }
@@ -155,14 +150,14 @@
     })
     lastSize = { w, h }
   })
-  const camera = eased(
+  const view = camera(
     () => ({ k: tk, bx: tbx, by: tby }),
     () => `${size.w}x${size.h}/${asset?.name}/${board.id}`,
     () => manual
   )
-  const k = $derived(camera.current.k)
-  const bx = $derived(camera.current.bx)
-  const by = $derived(camera.current.by)
+  const k = $derived(view.current.k)
+  const bx = $derived(view.current.bx)
+  const by = $derived(view.current.by)
   const endInteraction = () => {
     interacting = false
     settled++
@@ -199,11 +194,6 @@
       })
     })
   })
-  // What leaving needs, kept current (the view may be torn down by then).
-  let leaving = untrack(() => ({ name: '', board, k: 0, bx: 0, by: 0 }))
-  $effect(() => {
-    leaving = { name: name ?? '', board, k, bx, by }
-  })
   // Where the stage is on screen; by the time the view is torn down it's already out of the page.
   let stageRect = new DOMRect()
   $effect(() => {
@@ -216,15 +206,16 @@
     const host = stage.closest<HTMLElement>('.content')
     return () => {
       // Leaving: capture the board as drawn, then land it on its grid cell once the grid is back.
-      const { name, board: b, k: kk, bx: x, by: y } = leaving
-      if (!name || !c.width || !host) return
-      const s0 = stageRect
-      const from = new DOMRect(s0.left + x, s0.top + y, b.width * kk, b.height * kk)
-      const still = snapshot(c, x * dpr, y * dpr, b.width * kk * dpr, b.height * kk * dpr)
+      const leaving = name
+      if (!leaving || !c.width || !host) return
+      const w = board.width * k
+      const h = board.height * k
+      const from = new DOMRect(stageRect.left + bx, stageRect.top + by, w, h)
+      const still = snapshot(c, bx * dpr, by * dpr, w * dpr, h * dpr)
       requestAnimationFrame(() =>
         requestAnimationFrame(async () => {
           if (app.view !== 'grid') return
-          const cell = document.querySelector<HTMLCanvasElement>(`.cell[data-name="${CSS.escape(name)}"] canvas`)
+          const cell = document.querySelector<HTMLCanvasElement>(`.cell[data-name="${CSS.escape(leaving)}"] canvas`)
           if (!cell) return
           cell.style.opacity = '0'
           // The grid is still growing back from its receded scale; aim for where the cell settles.
@@ -332,7 +323,25 @@
     }
   })
 
-  function draw() {
+  // Everything a frame is drawn from; the canvas redraws whenever it changes.
+  const scene = $derived({
+    asset,
+    size,
+    video,
+    stillBitmap: stillProxy.bitmap,
+    exact,
+    exactBitmap: exactProxy.bitmap,
+    k,
+    bx,
+    by,
+    board,
+    settings,
+    picking: app.picking,
+    selected
+  })
+  $effect(() => draw(scene))
+
+  function draw({ asset, size, video, stillBitmap, exact, exactBitmap, k, bx, by, board, settings, picking, selected } = scene) {
     if (!canvas || !asset || size.w === 0) return
     const pw = Math.round(size.w * dpr)
     const ph = Math.round(size.h * dpr)
@@ -341,7 +350,6 @@
       canvas.width = pw
       canvas.height = ph
     }
-    const exactBitmap = exactProxy.bitmap
     const useExact = exact && exactBitmap && video?.paused && Math.abs(exact.t - video.currentTime) < 0.001
     // Mid-seek, a video has no frame to give. Keep what's on screen (it repaints on 'seeked')
     // rather than flash a stand-in like the poster, which made scrubbing flicker.
@@ -350,14 +358,14 @@
     const ctx = canvas.getContext('2d')!
     ctx.clearRect(0, 0, pw, ph)
     const scrubFrame = scrubSrc && scrubSrc.readyState >= 2 ? scrubSrc : null
-    const src: CanvasImageSource | null = scrubFrame ?? (useExact ? exactBitmap : video && video.readyState >= 2 ? video : (stillProxy.bitmap ?? asset.thumb))
+    const src: CanvasImageSource | null = scrubFrame ?? (useExact ? exactBitmap : video && video.readyState >= 2 ? video : (stillBitmap ?? asset.thumb))
     const kk = k * dpr
     const ox = bx * dpr
     const oy = by * dpr
     const W = board.width
     const H = board.height
     const p = asset.w ? computeLayout(W, H, asset.w, asset.h, settings) : null
-    const active = (selected || dragging) && !app.picking
+    const active = (selected || dragging) && !picking
 
     // Overflow outside the board, faintly.
     if (src && p && active) {
@@ -379,7 +387,7 @@
     ctx.restore()
 
     // Hovering an unselected image: a thin outline, like Figma.
-    if (p && !active && hoverMedia && !app.picking) {
+    if (p && !active && hoverMedia && !picking) {
       const pts = corners(p).map((pt) => ({ x: ox + pt.x * kk, y: oy + pt.y * kk }))
       ctx.save()
       ctx.lineWidth = dpr
@@ -436,12 +444,6 @@
     ctx.stroke()
     ctx.restore()
   }
-  // Redraws whenever anything it draws from changes.
-  $effect(() => {
-    void [asset, size.w, size.h, video, stillProxy.bitmap, exact, exactProxy.bitmap, k, bx, by, board, settings, app.picking, selected]
-    untrack(draw)
-  })
-
   // Preview audio: silent if the export is muted; otherwise the global preview volume.
   $effect(() => {
     if (!video) return
@@ -449,18 +451,13 @@
     video.muted = settings.mute || app.volume === 0
   })
 
-  $effect(() => {
-    if (!selected) return
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || app.picking || (e.target as HTMLElement).closest?.('input, textarea')) return
-      e.preventDefault()
-      e.stopImmediatePropagation()
-      selected = false
-    }
-    // Capture phase, so Esc deselects before the app-wide Esc (back to grid) sees it.
-    window.addEventListener('keydown', key, true)
-    return () => window.removeEventListener('keydown', key, true)
-  })
+  // Esc deselects first (in the capture phase, before the app-wide Esc goes back to the grid).
+  function onkeydowncapture(e: KeyboardEvent) {
+    if (!selected || e.key !== 'Escape' || app.picking || (e.target as HTMLElement).closest?.('input, textarea')) return
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    selected = false
+  }
 
   // The eyedropper samples the screen; pause so it sees the exact frame, not the browser's decode.
   $effect(() => {
@@ -715,43 +712,37 @@
   // wheel zooms. Mouse notches come in whole multiples of 120 with no sideways component; once a
   // gesture looks like a trackpad it stays one, so momentum never flips into zooming.
   // Alt+scroll still scales the image itself.
-  $effect(() => {
-    let trackpadUntil = 0
-    let wheelIdle: ReturnType<typeof setTimeout> | undefined
-    const wheel = (e: WheelEvent) => {
-      e.preventDefault()
-      const r = stage.getBoundingClientRect()
-      const sx = e.clientX - r.left
-      const sy = e.clientY - r.top
-      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1
-      const dx = e.deltaX * unit
-      const dy = e.deltaY * unit
-      const now = performance.now()
-      if (e.altKey) {
-        const a = asset
-        if (!a?.w) return
-        interacting = true
-        clearTimeout(wheelIdle)
-        wheelIdle = setTimeout(endInteraction, 500)
-        const zoom = snapZoom(settings.zoom * Math.exp(-dy * 0.0015), true)
-        app.editAsset(a.name, zoomAbout(settings, board.width, board.height, a.w, a.h, zoom, toBoard(e.clientX, e.clientY)))
-        return
-      }
-      const legacy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY ?? 0
-      const notch = e.deltaMode !== 0 || (e.deltaX === 0 && legacy !== 0 && legacy % 120 === 0)
-      if (e.ctrlKey || e.metaKey) zoomView(Math.exp(-dy * (notch ? 0.0015 : 0.01)), sx, sy)
-      else if (notch && now > trackpadUntil) zoomView(Math.exp(-dy * 0.0015), sx, sy)
-      else {
-        trackpadUntil = now + 300
-        panView(-dx, -dy)
-      }
-    }
-    stage.addEventListener('wheel', wheel, { passive: false })
-    return () => {
+  let trackpadUntil = 0
+  let wheelIdle: ReturnType<typeof setTimeout> | undefined
+  $effect(() => () => clearTimeout(wheelIdle))
+  function onwheel(e: WheelEvent) {
+    e.preventDefault()
+    const r = stage.getBoundingClientRect()
+    const sx = e.clientX - r.left
+    const sy = e.clientY - r.top
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1
+    const dx = e.deltaX * unit
+    const dy = e.deltaY * unit
+    const now = performance.now()
+    if (e.altKey) {
+      const a = asset
+      if (!a?.w) return
+      interacting = true
       clearTimeout(wheelIdle)
-      stage.removeEventListener('wheel', wheel)
+      wheelIdle = setTimeout(endInteraction, 500)
+      const zoom = snapZoom(settings.zoom * Math.exp(-dy * 0.0015), true)
+      app.editAsset(a.name, zoomAbout(settings, board.width, board.height, a.w, a.h, zoom, toBoard(e.clientX, e.clientY)))
+      return
     }
-  })
+    const legacy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY ?? 0
+    const notch = e.deltaMode !== 0 || (e.deltaX === 0 && legacy !== 0 && legacy % 120 === 0)
+    if (e.ctrlKey || e.metaKey) zoomView(Math.exp(-dy * (notch ? 0.0015 : 0.01)), sx, sy)
+    else if (notch && now > trackpadUntil) zoomView(Math.exp(-dy * 0.0015), sx, sy)
+    else {
+      trackpadUntil = now + 300
+      panView(-dx, -dy)
+    }
+  }
 
   function onkeydown(e: KeyboardEvent) {
     // Space plays and pauses.
@@ -940,14 +931,17 @@
   }
 </script>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydown} {onkeydowncapture} />
 
 <div class="loupe">
   <div
     class="stage"
     role="presentation"
     bind:this={stage}
+    bind:clientWidth={stageW}
+    bind:clientHeight={stageH}
     style:cursor
+    {onwheel}
     {onpointerdown}
     {onpointermove}
     onpointerleave={() => {
@@ -982,7 +976,7 @@
       <div class="player">
         <!-- Both glyphs stay mounted and crossfade, so the button never pops. -->
         <button
-          class={'play' + (playing || queued ? ' playing' : '') + (queued ? ' loading' : '') + (unplayable ? ' unavailable' : '')}
+          class={['play', { playing: playing || queued, loading: queued, unavailable: unplayable }]}
           onclick={toggle}
           title={unplayable ? 'This format can’t play here yet' : 'Play / Pause (Space)'}
         >

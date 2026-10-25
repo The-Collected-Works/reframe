@@ -38,7 +38,7 @@
 
 <div class="tab-wrap">
   <button
-    class={'icon-btn view-btn' + (open ? ' on' : '') + (prefs.filter !== 'all' ? ' filtered' : '')}
+    class={['icon-btn view-btn', { on: open, filtered: prefs.filter !== 'all' }]}
     title={prefs.filter !== 'all' ? `View options (showing ${filter.label.toLowerCase()})` : 'View options'}
     onclick={() => (open = !open)}
     oncontextmenu={async (e) => {

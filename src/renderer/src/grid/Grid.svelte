@@ -25,13 +25,9 @@
 
   let el: HTMLDivElement
   let marquee: HTMLDivElement
-  let width = $state(0)
-  $effect(() => {
-    // The scroller's content box: inside its padding and the scrollbar lane (see .grid-scroll).
-    const ro = new ResizeObserver(([e]) => (width = e.contentRect.width))
-    ro.observe(el)
-    return () => ro.disconnect()
-  })
+  // The scroller's content box: inside its padding and the scrollbar lane (see .grid-scroll).
+  let content = $state<DOMRectReadOnly>()
+  const width = $derived(content?.width ?? 0)
 
   // Cells are sized so the artboard's longer side is roughly `cellSize`.
   const g: GridLayout = $derived.by(() => {
@@ -123,7 +119,8 @@
 
 <div
   bind:this={el}
-  class={'grid-scroll' + (sectioned ? ' sectioned' : '') + (active ? '' : ' inactive')}
+  bind:contentRect={content}
+  class={['grid-scroll', { sectioned, inactive: !active }]}
   role="presentation"
   {onpointerdown}
   onscroll={() => (scroll.last = performance.now())}

@@ -37,7 +37,7 @@
 
 <div class="update-wrap" role="presentation" onpointerenter={enter} onpointerleave={leave}>
   <button
-    class={'update' + (downloading ? ' downloading' : '')}
+    class={['update', { downloading }]}
     style:--p={status.state === 'downloading' ? `${status.percent}%` : undefined}
     title={open ? undefined : ready ? 'Restart Reframe to finish updating' : `Reframe ${update.version} is available`}
     onclick={act}

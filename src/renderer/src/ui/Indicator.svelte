@@ -4,21 +4,22 @@
   position.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte'
+  import type { Attachment } from 'svelte/attachments'
+
   let { selector, key, class: className = '' }: { selector: string; key: unknown; class?: string } = $props()
 
-  let el: HTMLSpanElement
   let box = $state<{ x: number; y: number; w: number; h: number } | null>(null)
   let ready = $state(false)
 
-  $effect(() => {
+  // Layout offsets (summed up to the host, in case the target sits in its own positioned wrapper),
+  // not screen rects: rects include transforms, so measuring while a button is pressed (scaled
+  // down) or a popover is scaling in left the pill off-centre.
+  const track: Attachment<HTMLElement> = (el) => {
     void key
     const host = el.parentElement!
-    // Layout offsets (summed up to the host, in case the target sits in its own positioned
-    // wrapper), not screen rects: rects include transforms, so measuring while a button is pressed
-    // (scaled down) or a popover is scaling in left the pill off-centre.
     const measure = () => {
       const on = host.querySelector<HTMLElement>(selector)
-      if (!on) return (box = null)
       let x = 0
       let y = 0
       let n: HTMLElement | null = on
@@ -27,23 +28,20 @@
         y += n.offsetTop
         n = n.offsetParent as HTMLElement | null
       }
-      box = n === host ? { x, y, w: on.offsetWidth, h: on.offsetHeight } : null
+      box = on && n === host ? { x, y, w: on.offsetWidth, h: on.offsetHeight } : null
+      if (box && !ready) requestAnimationFrame(() => (ready = true))
     }
-    measure()
+    untrack(measure)
     const ro = new ResizeObserver(measure)
     ro.observe(host)
     host.querySelectorAll(':scope > *').forEach((c) => ro.observe(c))
     return () => ro.disconnect()
-  })
-
-  $effect(() => {
-    if (box && !ready) requestAnimationFrame(() => (ready = true))
-  })
+  }
 </script>
 
 <span
-  bind:this={el}
   aria-hidden="true"
-  class={'indicator ' + className + (ready ? ' ready' : '')}
+  class={['indicator', className, { ready }]}
   style={box ? `width: ${box.w}px; height: ${box.h}px; transform: translate(${box.x}px, ${box.y}px)` : 'opacity: 0'}
+  {@attach track}
 ></span>

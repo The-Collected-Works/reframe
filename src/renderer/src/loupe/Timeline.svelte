@@ -90,7 +90,7 @@
 </script>
 
 <div
-  class={'timeline' + (active ? ' active' : '')}
+  class={['timeline', { active }]}
   role="presentation"
   onpointerdown={(e) => drag(e, 'seek')}
   onpointermove={(e) => !active && (hover = Math.min(end, Math.max(start, at(e.clientX))))}
@@ -102,8 +102,8 @@
       <div class="tl-played" style:left={pct(start)} style:width={pct(Math.max(0, time - start))}></div>
     </div>
     <div class="tl-head" style:left={pct(time)}></div>
-    <div class={'tl-handle in' + (active === 'in' ? ' on' : '')} style:left={pct(start)} role="presentation" onpointerdown={(e) => drag(e, 'in')} title="Trim start"></div>
-    <div class={'tl-handle out' + (active === 'out' ? ' on' : '')} style:left={pct(end)} role="presentation" onpointerdown={(e) => drag(e, 'out')} title="Trim end"></div>
+    <div class={['tl-handle in', { on: active === 'in' }]} style:left={pct(start)} role="presentation" onpointerdown={(e) => drag(e, 'in')} title="Trim start"></div>
+    <div class={['tl-handle out', { on: active === 'out' }]} style:left={pct(end)} role="presentation" onpointerdown={(e) => drag(e, 'out')} title="Trim end"></div>
     {#if bubble != null}
       <div class="tl-bubble" style:left={pct(bubble)}>{fmtTime(Math.max(0, bubble - start))}</div>
     {/if}

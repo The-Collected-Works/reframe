@@ -4,69 +4,53 @@
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import type { Attachment } from 'svelte/attachments'
+  import { portal } from '../attach'
   import { api } from '../media'
-  import { presence } from '../presence.svelte'
-  import { portal } from './portal'
+  import { closing } from '../motion'
 
   let { open = true, onClose, children, class: className = '' }: { open?: boolean; onClose: () => void; children: Snippet; class?: string } = $props()
 
-  let el = $state<HTMLDivElement>()
   let placeholder: HTMLSpanElement
-  let pos = $state<{ left: number; top: number } | null>(null)
-  const shown = presence(() => open, 120)
+  let el = $state<HTMLDivElement>()
+  const anchor = () => placeholder.parentElement!
 
-  $effect.pre(() => {
-    if (!shown.mounted) pos = null
-  })
-  $effect(() => {
-    if (!shown.mounted || !el) return
-    const anchor = placeholder.parentElement!.getBoundingClientRect()
-    const left = Math.max(8, Math.min(anchor.left, window.innerWidth - el.offsetWidth - 8))
-    // Anchored in the top bar: open clear of the bar's edge, not just below the anchor.
+  // Below the anchor, kept inside the window; anchored in the top bar, it opens clear of the bar's
+  // edge rather than just below the anchor.
+  const place: Attachment<HTMLElement> = (node) => {
+    const a = anchor().getBoundingClientRect()
     const bar = placeholder.closest('.topbar')?.getBoundingClientRect()
-    pos = { left, top: Math.max(anchor.bottom + 8, bar ? bar.bottom + 6 : 0) }
-  })
+    node.style.left = `${Math.max(8, Math.min(a.left, window.innerWidth - node.offsetWidth - 8))}px`
+    node.style.top = `${Math.max(a.bottom + 8, bar ? bar.bottom + 6 : 0)}px`
+    node.style.visibility = ''
+  }
 
-  // Registered while open, in the capture phase (so nothing that stops propagation can keep it
-  // open), ignoring the press that opened it. Presses on the anchor are left to the anchor's own
-  // click, so it toggles rather than closing here and immediately reopening.
+  // Any press outside closes it (in the capture phase, so nothing that stops propagation can keep
+  // it open). Presses on the anchor are left to the anchor's own click, so it toggles rather than
+  // closing here and immediately reopening.
+  function onpointerdowncapture(e: PointerEvent) {
+    const t = e.target as Node
+    if (open && !el?.contains(t) && !anchor().contains(t)) onClose()
+  }
+  // Esc closes the popover and stops there (the app's own Esc would also deselect, or leave single
+  // view).
+  function onkeydowncapture(e: KeyboardEvent) {
+    if (!open || e.key !== 'Escape') return
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    onClose()
+  }
+  // Clicks on the title bar's drag region never reach the page, but dragging the window closes it.
   $effect(() => {
-    if (!open) return
-    const opened = performance.now()
-    const down = (e: PointerEvent) => {
-      const t = e.target as Node
-      const anchor = placeholder?.parentElement
-      if (e.timeStamp < opened || el?.contains(t) || anchor?.contains(t)) return
-      onClose()
-    }
-    // Esc closes the popover and stops there (the app's own Esc would also deselect, or leave
-    // single view).
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      e.stopImmediatePropagation()
-      onClose()
-    }
-    window.addEventListener('pointerdown', down, true)
-    window.addEventListener('keydown', key, true)
-    // Clicks on the title bar's drag region never reach the page, but dragging the window closes it.
-    const offMove = api.onWindowMoving(() => onClose())
-    return () => {
-      window.removeEventListener('pointerdown', down, true)
-      window.removeEventListener('keydown', key, true)
-      offMove()
-    }
+    if (open) return api.onWindowMoving(onClose)
   })
 </script>
 
+<svelte:window {onpointerdowncapture} {onkeydowncapture} />
+
 <span bind:this={placeholder} hidden></span>
-{#if shown.mounted}
-  <div
-    bind:this={el}
-    use:portal
-    class={'popover ' + className + (shown.closing ? ' closing' : '')}
-    style={pos ? `left: ${pos.left}px; top: ${pos.top}px` : 'visibility: hidden'}
-  >
+{#if open}
+  <div bind:this={el} class={['popover', className]} style="visibility: hidden" {@attach portal} {@attach place} out:closing={{ duration: 120 }}>
     {@render children()}
   </div>
 {/if}

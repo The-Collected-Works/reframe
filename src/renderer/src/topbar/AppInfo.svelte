@@ -64,7 +64,7 @@
 
 <div class="update-wrap">
   <button
-    class={'icon-btn' + (open ? ' on' : '')}
+    class={['icon-btn', { on: open }]}
     title="About Reframe and keyboard shortcuts"
     aria-label="About Reframe and keyboard shortcuts"
     onclick={() => (open = !open)}

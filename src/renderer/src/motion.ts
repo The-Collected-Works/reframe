@@ -1,8 +1,10 @@
+import { prefersReducedMotion } from 'svelte/motion'
+
 /** Shared motion helpers. Everything here is skipped when the OS asks for reduced motion. */
 
 const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
 
-export const reducedMotion = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches
+export const reducedMotion = (): boolean => prefersReducedMotion.current
 
 /** A copy of a canvas region, or of the whole canvas. */
 export function snapshot(src: HTMLCanvasElement, sx = 0, sy = 0, sw = src.width, sh = src.height): HTMLCanvasElement {
@@ -74,4 +76,13 @@ export function crossfade(canvas: HTMLCanvasElement, duration = 180): void {
   Object.assign(still.style, { width: canvas.style.width, height: canvas.style.height })
   canvas.parentElement.insertBefore(still, canvas.nextSibling)
   still.animate([{ opacity: 1 }, { opacity: 0 }], { duration, easing: 'ease-out' }).finished.finally(() => still.remove())
+}
+
+/**
+ * An outro that hands the exit to CSS: the element gets `closing` (see the exits in styles.css)
+ * and stays until its animation has run.
+ */
+export function closing(node: Element, { duration }: { duration: number }): { duration: number } {
+  node.classList.add('closing')
+  return { duration: reducedMotion() ? 0 : duration }
 }

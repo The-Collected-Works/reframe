@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import type { ProjectFile } from '@shared/types'
   import ExportDialog from './export/ExportDialog.svelte'
   import Grid from './grid/Grid.svelte'
@@ -8,13 +8,11 @@
   import { resetSelection } from './menus'
   import { api, cancelPick, pickBackground, rescanFolder } from './media'
   import { basename } from './paths'
-  import { presence } from './presence.svelte'
   import { app } from './store.svelte'
   import TopBar from './topbar/TopBar.svelte'
   import ContextMenu from './ui/ContextMenu.svelte'
   import Icon from './ui/Icon.svelte'
 
-  const exportShown = presence(() => app.exportOpen, 180)
   let dropping = $state(false)
   let booted = $state(false)
 
@@ -34,21 +32,17 @@
     if (scan && n === opening) app.load(scan)
   }
 
-  $effect(() => {
-    // A folder picked from the taskbar's or Dock's recent folders while the app is running.
-    const offOpen = api.onOpenFolderRequest((dir) => openDir(dir))
-    // Pick up files added to or removed from the folder.
-    const offChanged = api.onFolderChanged(rescanFolder)
-    // Reopen the last folder on launch.
+  // Reopen the last folder on launch.
+  onMount(() => {
     api.lastFolder().then(async (d) => {
       if (d) await openDir(d)
       booted = true
     })
-    return () => {
-      offOpen()
-      offChanged()
-    }
   })
+  // A folder picked from the taskbar's or Dock's recent folders while the app is running.
+  $effect(() => api.onOpenFolderRequest((dir) => openDir(dir)))
+  // Pick up files added to or removed from the folder.
+  $effect(() => api.onFolderChanged(rescanFolder))
 
   // Autosave the project next to the assets, shortly after edits settle. A save still waiting is
   // written straight away when another folder is opened or the window closes.
@@ -141,16 +135,9 @@
 
   // Focus rings only while navigating with Tab, as in native apps; any pointer use hides them.
   // (Otherwise a clicked button shows a ring as soon as an arrow key is pressed.)
+  let keyboardNav = $state(false)
   $effect(() => {
-    const root = document.documentElement
-    const key = (e: KeyboardEvent) => e.key === 'Tab' && root.classList.add('keyboard-nav')
-    const pointer = () => root.classList.remove('keyboard-nav')
-    window.addEventListener('keydown', key, true)
-    window.addEventListener('pointerdown', pointer, true)
-    return () => {
-      window.removeEventListener('keydown', key, true)
-      window.removeEventListener('pointerdown', pointer, true)
-    }
+    document.documentElement.classList.toggle('keyboard-nav', keyboardNav)
   })
 
   // The folder in the window title (taskbar, Mission Control, window menus).
@@ -192,7 +179,6 @@
       if (file) openDir(api.pathForFile(file))
     }
   }
-  const zone = (name: string) => name + ' drop-zone' + (dropping ? ' dropping' : '')
   // Elsewhere, files are refused (a not-allowed cursor) rather than opened by the browser, which
   // would navigate the window away from the app.
   const refuse = (e: DragEvent) => {
@@ -202,20 +188,27 @@
   }
 </script>
 
-<svelte:window {onkeydown} ondragover={refuse} ondrop={refuse} onpagehide={flush} />
+<svelte:window
+  {onkeydown}
+  onkeydowncapture={(e) => e.key === 'Tab' && (keyboardNav = true)}
+  onpointerdowncapture={() => (keyboardNav = false)}
+  ondragover={refuse}
+  ondrop={refuse}
+  onpagehide={flush}
+/>
 
 <div class="app">
   <TopBar onOpen={openDir} />
   {#if app.dir}
     <main class="workspace">
-      <section class={zone('content')} {...dropZone}>
+      <section class={['content drop-zone', { dropping }]} {...dropZone}>
         <Grid active={app.view === 'grid'} />
         {#if app.view === 'loupe'}<Loupe />{/if}
       </section>
       <Inspector />
     </main>
   {:else if booted}
-    <main class={zone('empty')} {...dropZone}>
+    <main class={['empty drop-zone', { dropping }]} {...dropZone}>
       <button class="empty-drop" onclick={() => openDir()}>
         <Icon name="folder" size={28} />
         <span>Open a folder</span>
@@ -224,7 +217,7 @@
     </main>
   {/if}
   {#if app.dir && app.assets.length === 0}<div class="empty-hint center">No images or videos in this folder</div>{/if}
-  {#if exportShown.mounted}<ExportDialog closing={exportShown.closing} />{/if}
+  {#if app.exportOpen}<ExportDialog />{/if}
   {#if app.hud}
     {#key app.hud.n}<div class="hud" role="status">{app.hud.text}</div>{/key}
   {/if}
