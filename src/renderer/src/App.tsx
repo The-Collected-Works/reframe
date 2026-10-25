@@ -9,6 +9,7 @@ import { Icon } from './components/ui'
 import { resetSelection } from './menus'
 import { api, cancelPick, pickBackground, rescanFolder } from './media'
 import { usePresence } from './motion'
+import { basename } from './paths'
 import type { ProjectFile } from '@shared/types'
 import { useStore } from './store'
 
@@ -149,7 +150,7 @@ export function App() {
 
   // The folder in the window title (taskbar, Mission Control, window menus).
   useEffect(() => {
-    document.title = dir ? `${dir.split(/[\\/]/).filter(Boolean).pop()} — Reframe` : 'Reframe'
+    document.title = dir ? `${basename(dir)} — Reframe` : 'Reframe'
   }, [dir])
 
   // Keep the focused cell in view when navigating by keyboard.

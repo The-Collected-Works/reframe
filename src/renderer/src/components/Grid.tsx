@@ -5,6 +5,7 @@ import { dragOffset, NO_GUIDES, type Guides } from '../interact'
 import { posterTime } from '@shared/media'
 import { observeVisibility, scheduleDraw } from '../lazydraw'
 import { mediaUrl, prioritize } from '../media'
+import { basename } from '../paths'
 import { assetMenu, excludedFolderMenu, folderMenu, includeFolder } from '../menus'
 import { baseName, folderOf, hasOverrides, layoutOf, useBoard, useStore, withMeta, type FolderNode } from '../store'
 import { fmtTime, Icon } from './ui'
@@ -34,7 +35,7 @@ export function Grid({ active }: { active: boolean }) {
   // A flat folder needs no headers; as soon as there are subfolders (or excluded ones), every
   // folder gets one.
   const sectioned = viewPrefs.group && (tree.length > 1 || (tree.length === 1 && tree[0].folder !== ''))
-  const rootName = dir?.split(/[\\/]/).filter(Boolean).pop() ?? ''
+  const rootName = dir ? basename(dir) : ''
   const cellSize = useStore((s) => s.cellSize)
   const current = useBoard()
   const frozen = useRef(current)

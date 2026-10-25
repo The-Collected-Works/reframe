@@ -94,7 +94,7 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
  * A pill that slides to whichever child matches `selector` inside the nearest positioned
  * container. It measures after layout, and only animates once it has a first position.
  */
-export function Indicator({ selector, deps, className }: { selector: string; deps: unknown[]; className?: string }) {
+function Indicator({ selector, deps, className }: { selector: string; deps: unknown[]; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null)
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const [ready, setReady] = useState(false)
@@ -163,7 +163,6 @@ const round = (v: number, step: number) => {
   return Number(v.toFixed(d))
 }
 
-/** Numeric input that commits on enter/blur, steps with arrow keys, and scrubs by dragging its label. */
 /**
  * Middle-click resets a value field. Handled on press so the browser's autoscroll (and, on
  * Linux, primary-selection paste) never starts.
@@ -180,6 +179,7 @@ function middleReset(onReset?: () => void) {
   }
 }
 
+/** Numeric input that commits on enter/blur, steps with arrow keys, and scrubs by dragging its label. */
 export function NumberField({
   value,
   onChange,
@@ -260,8 +260,6 @@ export function Slider({
   max,
   step,
   onChange,
-  display,
-  parse,
   curve = 1,
   onReset
 }: {
@@ -270,9 +268,6 @@ export function Slider({
   max: number
   step: number
   onChange: (v: number) => void
-  display?: (v: number) => number
-  parse?: (v: number) => number
-  suffix?: string
   /** >1 gives more resolution at the low end. */
   curve?: number
   onReset?: () => void
@@ -291,9 +286,7 @@ export function Slider({
       {...middleReset(onReset)}
       onChange={(e) => {
         const v = fromPos(Number(e.target.value) / 1000)
-        const shown = display ? display(v) : v
-        const snapped = Math.round(shown / step) * step
-        onChange(parse ? parse(snapped) : snapped)
+        onChange(Math.round(v / step) * step)
       }}
     />
   )

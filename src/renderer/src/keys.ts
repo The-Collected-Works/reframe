@@ -1,6 +1,4 @@
-import { api } from './media'
-
-const mac = api.platform === 'darwin'
+import { mac } from './paths'
 
 /** Modifier names as each platform writes them. */
 export const MOD = mac ? '⌘' : 'Ctrl'

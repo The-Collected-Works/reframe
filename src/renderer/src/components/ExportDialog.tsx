@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { drawFrame, resolveSettings } from '@shared/layout'
 import type { Artboard, AssetEntry, Clip, CropSettings, ExportPrefs } from '@shared/types'
 import { api, loadImage, videoInfo } from '../media'
+import { join } from '../paths'
 import { useStore, useVisible, withMeta, type Asset, type AssetMeta } from '../store'
 import { Icon, Segmented, Slider } from './ui'
 
@@ -19,8 +20,6 @@ interface Item {
 
 type Status = { state: 'queued' | 'running' | 'done' | 'error'; progress: number; error?: string }
 
-const sep = api.platform === 'win32' ? '\\' : '/'
-const join = (...parts: string[]) => parts.map((p, i) => (i ? p.replace(/^[\\/]+/, '') : p.replace(/[\\/]+$/, ''))).join(sep)
 const safe = (s: string) => s.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').trim() || 'Artboard'
 const stem = (name: string) => name.replace(/\.[^.]+$/, '')
 
@@ -183,7 +182,6 @@ export function ExportDialog({ closing = false }: { closing?: boolean }) {
   }
 
   const done = Object.values(status).filter((s) => s.state === 'done').length
-  const failedCount = Object.values(status).filter((s) => s.state === 'error').length
   const failed = Object.values(status).filter((s) => s.state === 'error').length
   const overall = list.length ? list.reduce((acc, i) => acc + (status[i.id]?.progress ?? 0), 0) / list.length : 0
   const imgCount = items.filter((i) => i.asset.kind === 'image').length
@@ -197,8 +195,8 @@ export function ExportDialog({ closing = false }: { closing?: boolean }) {
   // Finished while you were in another app: tell the OS.
   useEffect(() => {
     if (phase !== 'done' || cancelled.current || document.hasFocus()) return
-    const n = new Notification(failedCount ? 'Export finished with errors' : 'Export complete', {
-      body: failedCount ? `${done} exported, ${failedCount} failed` : `${done} file${done === 1 ? '' : 's'} exported`,
+    const n = new Notification(failed ? 'Export finished with errors' : 'Export complete', {
+      body: failed ? `${done} exported, ${failed} failed` : `${done} file${done === 1 ? '' : 's'} exported`,
       silent: false
     })
     n.onclick = () => api.focusWindow()

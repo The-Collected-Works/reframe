@@ -3,12 +3,12 @@ import type { Artboard, ReleaseNote, UpdateStatus } from '@shared/types'
 import { version } from '../../../../package.json'
 import { ALT, combo, MOD, SHIFT } from '../keys'
 import { api } from '../media'
-import { boardMenu, showMenu } from '../menus'
+import { boardMenu, deleteBoard, showMenu } from '../menus'
 import { reducedMotion } from '../motion'
+import { basename, samePath } from '../paths'
 import { PRESETS, useStore, VIEW_DEFAULTS, type FilterKey, type SortKey, type ViewPrefs } from '../store'
 import { Icon, NumberField, Popover, Segmented } from './ui'
 
-const basename = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 
 export function TopBar({ onOpen }: { onOpen: (dir?: string) => void }) {
   const dir = useStore((s) => s.dir)
@@ -253,8 +253,6 @@ function FolderMenu({ dir, onOpen }: { dir: string | null; onOpen: (dir?: string
     </div>
   )
 }
-
-const samePath = (a: string, b: string) => a.replace(/[\\/]+$/, '').toLowerCase() === b.replace(/[\\/]+$/, '').toLowerCase()
 
 /** The folder's parent, keeping its last two parts: "…\Clients\Acme". */
 function shortParent(path: string): string {
@@ -617,7 +615,7 @@ function TabStrip({ children }: { children: React.ReactNode }) {
 }
 
 function BoardEditor({ board, open, canDelete }: { board: Artboard; open: boolean; canDelete: boolean }) {
-  const { updateBoard, duplicateBoard, removeBoard, setBoardEditor } = useStore.getState()
+  const { updateBoard, duplicateBoard, setBoardEditor } = useStore.getState()
   const size = (n: number) => Math.max(16, Math.min(8192, Math.round(n)))
   return (
     <Popover open={open} onClose={() => setBoardEditor(null)} className="board-editor">
@@ -656,10 +654,7 @@ function BoardEditor({ board, open, canDelete }: { board: Artboard; open: boolea
         {canDelete && (
           <button
             className="ghost danger"
-            onClick={() => {
-              removeBoard(board.id)
-              useStore.getState().showHud(`Deleted “${board.name}” · ${combo(MOD, 'Z')} to undo`)
-            }}
+            onClick={() => deleteBoard(board.id)}
           >
             <Icon name="trash" size={14} />
             Delete

@@ -2,9 +2,9 @@ import { DEFAULT_SETTINGS, resolveSettings } from '@shared/layout'
 import type { SettingKey } from '@shared/types'
 import { combo, MOD, SHIFT } from './keys'
 import { api, rescanFolder } from './media'
+import { inside, mac } from './paths'
 import { baseName, currentBoard, folderOf, hasOverrides, layoutOf, useStore, type AppMenuItem } from './store'
 
-const mac = api.platform === 'darwin'
 const revealLabel = mac ? 'Reveal in Finder' : api.platform === 'win32' ? 'Show in Explorer' : 'Show in Folder'
 const key = (k: string) => combo(MOD, k)
 
@@ -91,14 +91,17 @@ export async function boardMenu(boardId: string, at: { x: number; y: number }): 
     s.setBoard(boardId)
     s.setBoardEditor(boardId)
   } else if (id === 'duplicate') s.duplicateBoard(boardId)
-  else if (id === 'delete') {
-    s.removeBoard(boardId)
-    s.showHud(`Deleted “${board.name}” · ${key('Z')} to undo`)
-  }
+  else if (id === 'delete') deleteBoard(boardId)
 }
 
-const sep = api.platform === 'win32' ? '\\' : '/'
-const lastPart = (folder: string) => folder.slice(folder.lastIndexOf('/') + 1)
+/** Deletes an artboard, saying how to get it back. */
+export function deleteBoard(boardId: string): void {
+  const s = useStore.getState()
+  const board = s.project.artboards.find((b) => b.id === boardId)
+  if (!board) return
+  s.removeBoard(boardId)
+  s.showHud(`Deleted “${board.name}” · ${key('Z')} to undo`)
+}
 
 /** Right-click on a folder's section header in the grid. */
 export async function folderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
@@ -114,7 +117,7 @@ export async function folderMenu(folder: string, at: { x: number; y: number }): 
     ...(folder ? [{ separator: true }, { id: 'exclude', label: 'Exclude from Reframe', icon: 'exclude' as const }] : [])
   ])
   if (id === 'select') useStore.getState().setSelection(names)
-  else if (id === 'reveal') api.reveal(folder ? st.dir + sep + folder.split('/').join(sep) : st.dir!)
+  else if (id === 'reveal') api.reveal(inside(st.dir!, folder))
   else if (id === 'exclude') excludeFolder(folder)
 }
 
@@ -122,7 +125,7 @@ export async function folderMenu(folder: string, at: { x: number; y: number }): 
 export async function excludeFolder(folder: string): Promise<void> {
   await api.excludeFolder(folder)
   await rescanFolder()
-  useStore.getState().showHud(`Excluded “${lastPart(folder)}” · right-click its bar to bring it back`)
+  useStore.getState().showHud(`Excluded “${baseName(folder)}” · right-click its bar to bring it back`)
 }
 
 /** Right-click on an excluded folder's bar in the grid. */
@@ -134,12 +137,12 @@ export async function excludedFolderMenu(folder: string, at: { x: number; y: num
     { id: 'include', label: 'Include in Reframe', icon: 'show' }
   ])
   if (id === 'include') includeFolder(folder)
-  else if (id === 'reveal') api.reveal(st.dir + sep + folder.split('/').join(sep))
+  else if (id === 'reveal') api.reveal(inside(st.dir!, folder))
 }
 
 /** Brings an excluded (or export) folder back into the project. */
 export async function includeFolder(folder: string): Promise<void> {
   await api.includeFolder(folder)
   await rescanFolder()
-  useStore.getState().showHud(`Included “${lastPart(folder)}”`)
+  useStore.getState().showHud(`Included “${baseName(folder)}”`)
 }

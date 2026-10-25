@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 /** Shared motion helpers. Everything here is skipped when the OS asks for reduced motion. */
 
-export const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
+const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
 
 export const reducedMotion = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches
 
