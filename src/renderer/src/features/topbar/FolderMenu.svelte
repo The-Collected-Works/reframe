@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
   import { combo, MOD } from '../../lib/keys'
-  import { api } from '../../state/loading'
+  import { api } from '../../lib/bridge'
   import { basename, samePath } from '../../lib/paths'
   import Icon from '../../ui/Icon.svelte'
   import Popover from '../../ui/Popover.svelte'

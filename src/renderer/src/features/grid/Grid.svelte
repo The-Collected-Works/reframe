@@ -3,7 +3,7 @@
   scroll position. While hidden its board is frozen, so edits don't redraw every cell.
 -->
 <script lang="ts">
-  import { includeFolder } from '../menus'
+  import { includeFolder } from '../../state/actions'
   import { basename } from '../../lib/paths'
   import { app } from '../../state/app.svelte'
   import Icon from '../../ui/Icon.svelte'

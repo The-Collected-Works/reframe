@@ -3,15 +3,17 @@
   import type { ProjectFile } from '@shared/types'
   import ExportDialog from './features/export/ExportDialog.svelte'
   import Grid from './features/grid/Grid.svelte'
+  import { cancelPick, pickBackground } from './features/inspector/eyedropper'
   import Inspector from './features/inspector/Inspector.svelte'
   import SingleView from './features/single/SingleView.svelte'
-  import { resetSelection } from './features/menus'
-  import { api, cancelPick, pickBackground, rescanFolder } from './state/loading'
-  import { basename } from './lib/paths'
-  import { app } from './state/app.svelte'
   import TopBar from './features/topbar/TopBar.svelte'
+  import { api } from './lib/bridge'
+  import { basename } from './lib/paths'
+  import { openFolder, rescanFolder, resetSelection } from './state/actions'
+  import { app } from './state/app.svelte'
   import ContextMenu from './ui/ContextMenu.svelte'
   import Icon from './ui/Icon.svelte'
+  import Toast from './ui/Toast.svelte'
 
   let dropping = $state(false)
   let booted = $state(false)
@@ -22,25 +24,15 @@
     api.setOverlayTint(app.exportOpen ? 'dim' : 'none')
   })
 
-  // Not while exporting (the export reads the open folder). Opens can overlap (the launch reopening
-  // the last folder while another is picked); only the newest one's result is applied.
-  let opening = 0
-  async function openDir(path?: string) {
-    if (app.exportOpen) return
-    const n = ++opening
-    const scan = await (path ? api.scanFolder(path) : api.openFolder()).catch(() => null)
-    if (scan && n === opening) app.load(scan)
-  }
-
   // Reopen the last folder on launch.
   onMount(() => {
     api.lastFolder().then(async (d) => {
-      if (d) await openDir(d)
+      if (d) await openFolder(d)
       booted = true
     })
   })
   // A folder picked from the taskbar's or Dock's recent folders while the app is running.
-  $effect(() => api.onOpenFolderRequest((dir) => openDir(dir)))
+  $effect(() => api.onOpenFolderRequest((dir) => openFolder(dir)))
   // Pick up files added to or removed from the folder.
   $effect(() => api.onFolderChanged(rescanFolder))
 
@@ -74,7 +66,7 @@
     const typing = (e.target as HTMLElement).closest('input, textarea, [contenteditable]')
     if (mod && e.key.toLowerCase() === 'o') {
       e.preventDefault()
-      return openDir()
+      return openFolder()
     }
     if (typing || !app.dir || app.exportOpen) return
     if (app.picking) {
@@ -176,7 +168,7 @@
       e.preventDefault()
       endDrop()
       const file = e.dataTransfer?.files[0]
-      if (file) openDir(api.pathForFile(file))
+      if (file) openFolder(api.pathForFile(file))
     }
   }
   // Elsewhere, files are refused (a not-allowed cursor) rather than opened by the browser, which
@@ -198,7 +190,7 @@
 />
 
 <div class="app">
-  <TopBar onOpen={openDir} />
+  <TopBar onOpen={openFolder} />
   {#if app.dir}
     <main class="workspace">
       <section class={['content drop-zone', { dropping }]} {...dropZone}>
@@ -209,7 +201,7 @@
     </main>
   {:else if booted}
     <main class={['empty drop-zone', { dropping }]} {...dropZone}>
-      <button class="empty-drop" onclick={() => openDir()}>
+      <button class="empty-drop" onclick={() => openFolder()}>
         <Icon name="folder" size={28} />
         <span>Open a folder</span>
         <span class="muted small">or drop one here</span>
@@ -218,8 +210,6 @@
   {/if}
   {#if app.dir && app.assets.length === 0}<div class="empty-hint center">No images or videos in this folder</div>{/if}
   {#if app.exportOpen}<ExportDialog />{/if}
-  {#if app.hud}
-    {#key app.hud.n}<div class="hud" role="status">{app.hud.text}</div>{/key}
-  {/if}
+  <Toast />
   <ContextMenu />
 </div>

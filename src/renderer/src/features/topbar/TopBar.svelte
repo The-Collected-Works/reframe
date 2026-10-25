@@ -1,8 +1,9 @@
 <script lang="ts">
   import { combo, MOD } from '../../lib/keys'
-  import { api } from '../../state/loading'
+  import { api } from '../../lib/bridge'
   import { boardMenu } from '../menus'
-  import { app, PRESETS } from '../../state/app.svelte'
+  import { app } from '../../state/app.svelte'
+  import { PRESETS } from '../../state/project'
   import Icon from '../../ui/Icon.svelte'
   import Popover from '../../ui/Popover.svelte'
   import Segmented from '../../ui/Segmented.svelte'

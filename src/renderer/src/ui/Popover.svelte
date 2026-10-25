@@ -6,7 +6,7 @@
   import type { Snippet } from 'svelte'
   import type { Attachment } from 'svelte/attachments'
   import { portal } from '../lib/attach'
-  import { api } from '../state/loading'
+  import { api } from '../lib/bridge'
   import { closing } from '../lib/motion'
 
   let { open = true, onClose, children, class: className = '' }: { open?: boolean; onClose: () => void; children: Snippet; class?: string } = $props()

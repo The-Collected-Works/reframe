@@ -1,8 +1,6 @@
-import { api } from '../state/loading'
+import { mac, win } from './bridge'
 
 /** File paths as the OS writes them. Asset and folder names in the project are "/"-separated. */
-export const mac = api.platform === 'darwin'
-const win = api.platform === 'win32'
 export const sep = win ? '\\' : '/'
 
 export const join = (...parts: string[]): string =>

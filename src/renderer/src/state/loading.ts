@@ -1,9 +1,11 @@
 import type { AssetEntry, ColorMeta } from '@shared/types'
+import { api, mediaUrl } from '../lib/bridge'
 import { app, type AssetMeta } from './app.svelte'
 
-export const api = window.reframe
-
-export const mediaUrl = (path: string): string => 'media://f/' + encodeURIComponent(path)
+/**
+ * Loading what the app shows of each asset: thumbnails and details for the grid (queued, what's on
+ * screen first), full-size stills for the single view, and images for export.
+ */
 
 /** Long edge of grid thumbnails: enough for the largest cell size at this display density. */
 const THUMB = Math.round(Math.min(960, 480 * (window.devicePixelRatio || 1)))
@@ -103,15 +105,6 @@ export function hydrate(entries: AssetEntry[], fresh: boolean): void {
   pump()
 }
 
-/**
- * Scans the open folder again and applies the result (the main process runs one scan at a time and
- * hands every caller the newest). Ignored if another folder was opened meanwhile.
- */
-export async function rescanFolder(): Promise<void> {
-  const scan = await api.rescanFolder().catch(() => null)
-  if (scan && scan.dir === app.dir) app.rescan(scan)
-}
-
 /** A video's poster as an encoded JPEG. */
 const posterBlob = (data: Uint8Array) => new Blob([data as BlobPart], { type: 'image/jpeg' })
 
@@ -134,33 +127,4 @@ export function loadStill(a: AssetEntry): Promise<Blob> {
     if (stills.size > 6) stills.delete(stills.keys().next().value!)
   }
   return p
-}
-
-type EyeDropperCtor = new () => { open(options?: { signal?: AbortSignal }): Promise<{ sRGBHex: string }> }
-
-let pickAbort: AbortController | null = null
-
-export function cancelPick(): void {
-  pickAbort?.abort()
-}
-
-/**
- * Native eyedropper for the background colour. Grid thumbnails and the paused single-view frame
- * are decoded exactly as export decodes them, so screen pixels there are the real colours. While
- * it's open, `picking` pauses playback and hover previews, whose browser decode can be off.
- */
-export async function pickBackground(): Promise<void> {
-  const EyeDropper = (window as unknown as { EyeDropper?: EyeDropperCtor }).EyeDropper
-  if (!EyeDropper || app.picking) return
-  app.setPicking(true)
-  pickAbort = new AbortController()
-  try {
-    const { sRGBHex } = await new EyeDropper().open({ signal: pickAbort.signal })
-    if (/^#[0-9a-f]{6}$/i.test(sRGBHex)) app.edit({ bg: 'color', bgColor: sRGBHex.toLowerCase() })
-  } catch {
-    // Cancelled.
-  } finally {
-    pickAbort = null
-    app.setPicking(false)
-  }
 }

@@ -1,0 +1,108 @@
+import { DEFAULT_SETTINGS } from '@shared/layout'
+import type { Artboard, CropSettings, ProjectFile, SettingKey } from '@shared/types'
+
+/**
+ * The project: artboards (each with default settings and per-asset overrides), video trims and
+ * export preferences, saved next to the assets. Everything here is plain data in, plain data out.
+ */
+
+export const PRESETS: { name: string; width: number; height: number }[] = [
+  { name: 'Square', width: 1080, height: 1080 },
+  { name: 'Portrait', width: 1080, height: 1350 },
+  { name: 'Story', width: 1080, height: 1920 },
+  { name: 'Landscape', width: 1920, height: 1080 },
+  { name: 'Wide', width: 2560, height: 1080 },
+  { name: 'Classic', width: 1440, height: 1080 }
+]
+
+/** Every setting that frames an asset (all but whether it's exported). */
+export const FRAMING_KEYS = (Object.keys(DEFAULT_SETTINGS) as SettingKey[]).filter((k) => k !== 'skip')
+
+export const uid = (): string => Math.random().toString(36).slice(2, 10)
+
+export function newBoard(name: string, width: number, height: number, defaults: CropSettings = DEFAULT_SETTINGS): Artboard {
+  return { id: uid(), name, width, height, defaults: { ...defaults }, overrides: {} }
+}
+
+export function emptyProject(): ProjectFile {
+  return {
+    version: 1,
+    artboards: [newBoard('Square', 1080, 1080)],
+    clips: {},
+    export: { dir: null, imageFormat: 'png', imageQuality: 0.92, videoCrf: 18 }
+  }
+}
+
+const KNOWN = new Set(Object.keys(DEFAULT_SETTINGS))
+/** Drops settings this version doesn't know (e.g. ones removed since the file was saved). */
+const known = (o: object | undefined): Partial<CropSettings> =>
+  Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => KNOWN.has(k))) as Partial<CropSettings>
+
+/** A project file as saved (possibly by another version), made whole. */
+export function normalizeProject(p: ProjectFile | null): ProjectFile {
+  const base = emptyProject()
+  if (!p || !p.artboards?.length) return base
+  return {
+    version: 1,
+    artboards: p.artboards.map((b) => ({
+      ...b,
+      defaults: { ...DEFAULT_SETTINGS, ...known(b.defaults) },
+      overrides: Object.fromEntries(
+        Object.entries(b.overrides ?? {})
+          .map(([n, o]) => [n, known(o)] as const)
+          .filter(([, o]) => Object.keys(o).length)
+      )
+    })),
+    clips: p.clips ?? {},
+    export: { ...base.export, ...p.export }
+  }
+}
+
+/** Whether applying `patch` to `o` would change it. */
+export const changes = <T extends object>(o: T | undefined, patch: Partial<T>): boolean =>
+  Object.entries(patch).some(([k, v]) => !o || o[k as keyof T] !== v)
+
+/**
+ * Sets overrides on `names`. An override is set by editing an asset and removed only by an
+ * explicit reset, even if its value happens to equal the default, so it never silently starts
+ * following defaults. The overrides map is copied once, however many assets change; nothing
+ * changing returns the same board.
+ */
+export function withOverrides(b: Artboard, names: string[], patch: Partial<CropSettings> | ((name: string) => Partial<CropSettings>)): Artboard {
+  let overrides: Artboard['overrides'] | null = null
+  for (const name of names) {
+    const p = typeof patch === 'function' ? patch(name) : patch
+    if (!changes(b.overrides[name], p) && b.overrides[name]) continue
+    overrides ??= { ...b.overrides }
+    overrides[name] = { ...b.overrides[name], ...p }
+    if (!Object.keys(overrides[name]).length) delete overrides[name]
+  }
+  return overrides ? { ...b, overrides } : b
+}
+
+/** Removes overrides for `keys` on `names`, so they follow the defaults again. */
+export function withoutOverrides(b: Artboard, names: string[], keys: SettingKey[]): Artboard {
+  let overrides: Artboard['overrides'] | null = null
+  for (const name of names) {
+    const current = b.overrides[name]
+    if (!current || !keys.some((k) => k in current)) continue
+    overrides ??= { ...b.overrides }
+    const o = { ...current }
+    for (const k of keys) delete o[k]
+    if (Object.keys(o).length) overrides[name] = o
+    else delete overrides[name]
+  }
+  return overrides ? { ...b, overrides } : b
+}
+
+/**
+ * Whether an asset's framing has been adjusted away from the artboard's defaults. Being left out
+ * of the export isn't an adjustment: it's about the asset, not how it's framed.
+ */
+export const hasOverrides = (board: Artboard, name: string): boolean => Object.keys(board.overrides[name] ?? {}).some((k) => k !== 'skip')
+
+/** A video's trim, filled in: from 0 and to the end unless trimmed. */
+export const clipFor = (project: ProjectFile, name: string, duration: number): { start: number; end: number } => {
+  const c = project.clips[name]
+  return { start: c?.start ?? 0, end: c?.end ?? duration }
+}

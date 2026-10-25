@@ -9,9 +9,12 @@
   import { dragOffset, NO_GUIDES, type Guides } from '../single/snapping'
   import { visibility } from '../../lib/attach'
   import { scheduleDraw } from '../../lib/draw-queue'
-  import { mediaUrl, prioritize } from '../../state/loading'
+  import { mediaUrl } from '../../lib/bridge'
+  import { prioritize } from '../../state/loading'
   import { assetMenu } from '../menus'
-  import { app, baseName, folderOf, hasOverrides, withMeta } from '../../state/app.svelte'
+  import { app, withMeta } from '../../state/app.svelte'
+  import { baseName, folderOf } from '../../state/library'
+  import { hasOverrides } from '../../state/project'
   import { scroll } from './shared'
 
   const SCROLL_SETTLE = 250

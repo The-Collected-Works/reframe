@@ -1,5 +1,5 @@
 import type { ReleaseNote, UpdateStatus } from '@shared/types'
-import { api } from '../../state/loading'
+import { api } from '../../lib/bridge'
 
 export type Update = { version: string; notes: ReleaseNote[]; status: UpdateStatus }
 

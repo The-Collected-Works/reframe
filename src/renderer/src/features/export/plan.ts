@@ -1,8 +1,9 @@
 import { drawFrame, resolveSettings } from '@shared/layout'
 import type { Artboard, AssetEntry, Clip, CropSettings, ExportPrefs } from '@shared/types'
-import { api, loadImage, videoInfo } from '../../state/loading'
+import { api } from '../../lib/bridge'
+import { loadImage, videoInfo } from '../../state/loading'
 import { join } from '../../lib/paths'
-import { withMeta, type Asset, type AssetMeta } from '../../state/app.svelte'
+import { type Asset, type AssetMeta, withMeta } from '../../state/app.svelte'
 
 export interface Item {
   id: string

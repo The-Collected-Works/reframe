@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Artboard } from '@shared/types'
-  import { deleteBoard } from '../menus'
-  import { app, PRESETS } from '../../state/app.svelte'
+  import { deleteBoard } from '../../state/actions'
+  import { app } from '../../state/app.svelte'
+  import { PRESETS } from '../../state/project'
   import Icon from '../../ui/Icon.svelte'
   import NumberField from '../../ui/NumberField.svelte'
   import Popover from '../../ui/Popover.svelte'

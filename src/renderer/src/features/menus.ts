@@ -1,41 +1,17 @@
 import { resolveSettings } from '@shared/layout'
+import { api, mac, win } from '../lib/bridge'
 import { combo, MOD, SHIFT } from '../lib/keys'
-import { api, rescanFolder } from '../state/loading'
-import { inside, mac } from '../lib/paths'
-import { app, baseName, folderOf, FRAMING_KEYS, hasOverrides, type AppMenuItem } from '../state/app.svelte'
+import { inside } from '../lib/paths'
+import { deleteBoard, excludeFolder, includeFolder, resetSelection } from '../state/actions'
+import { app } from '../state/app.svelte'
+import { folderOf } from '../state/library'
+import { hasOverrides } from '../state/project'
+import { showMenu } from '../ui/menu.svelte'
 
-const revealLabel = mac ? 'Reveal in Finder' : api.platform === 'win32' ? 'Show in Explorer' : 'Show in Folder'
+/** The right-click menus: on assets (grid and single view), artboard tabs, and folder headers. */
+
+const revealLabel = mac ? 'Reveal in Finder' : win ? 'Show in Explorer' : 'Show in Folder'
 const key = (k: string) => combo(MOD, k)
-
-/**
- * Back to the artboard's framing for every selected asset; undoable, and says so. Whether each is
- * exported stays as it is.
- */
-export function resetSelection(): void {
-  const board = app.board
-  const names = app.selection.filter((n) => hasOverrides(board, n))
-  if (!names.length) return
-  app.resetKeys(FRAMING_KEYS, names)
-  app.showHud(`Reset ${names.length === 1 ? baseName(names[0]) : `${names.length} assets`} · ${key('Z')} to undo`)
-}
-
-let resolver: ((id: string | null) => void) | null = null
-
-/** Opens the app's context menu at a point; resolves with the chosen item's id, or null. */
-export function showMenu(x: number, y: number, items: AppMenuItem[]): Promise<string | null> {
-  resolver?.(null)
-  return new Promise((resolve) => {
-    resolver = resolve
-    app.contextMenu = { x, y, items }
-  })
-}
-
-export function closeMenu(id: string | null): void {
-  const r = resolver
-  resolver = null
-  app.contextMenu = null
-  r?.(id)
-}
 
 /** Right-click menu for an asset. Right-clicking outside the selection selects it first. */
 export async function assetMenu(name: string, path: string, at: { x: number; y: number }, inSingle = false): Promise<void> {
@@ -90,14 +66,6 @@ export async function boardMenu(boardId: string, at: { x: number; y: number }): 
   else if (id === 'delete') deleteBoard(boardId)
 }
 
-/** Deletes an artboard, saying how to get it back. */
-export function deleteBoard(boardId: string): void {
-  const board = app.project.artboards.find((b) => b.id === boardId)
-  if (!board) return
-  app.removeBoard(boardId)
-  app.showHud(`Deleted “${board.name}” · ${key('Z')} to undo`)
-}
-
 /** Right-click on a folder's section header in the grid. */
 export async function folderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
   // What's visible in the folder and the folders inside it (selecting hidden assets would let edits
@@ -115,13 +83,6 @@ export async function folderMenu(folder: string, at: { x: number; y: number }): 
   else if (id === 'exclude') excludeFolder(folder)
 }
 
-/** Leaves a folder (and everything in it) out of the project; its bar stays, dimmed, to bring it back. */
-export async function excludeFolder(folder: string): Promise<void> {
-  await api.excludeFolder(folder)
-  await rescanFolder()
-  app.showHud(`Excluded “${baseName(folder)}” · right-click its bar to bring it back`)
-}
-
 /** Right-click on an excluded folder's bar in the grid. */
 export async function excludedFolderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
   const id = await showMenu(at.x, at.y, [
@@ -131,11 +92,4 @@ export async function excludedFolderMenu(folder: string, at: { x: number; y: num
   ])
   if (id === 'include') includeFolder(folder)
   else if (id === 'reveal') api.reveal(inside(app.dir!, folder))
-}
-
-/** Brings an excluded (or export) folder back into the project. */
-export async function includeFolder(folder: string): Promise<void> {
-  await api.includeFolder(folder)
-  await rescanFolder()
-  app.showHud(`Included “${baseName(folder)}”`)
 }

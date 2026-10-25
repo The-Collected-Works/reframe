@@ -5,11 +5,14 @@
   import { fmtTime } from '../../lib/format'
   import { dragOffset, NO_GUIDES, rotateAbout, snapAngle, snapScale, snapZoom, withPivot, zoomAbout, ZOOM_MAX, ZOOM_MIN, type Guides } from './snapping'
   import { combo, MOD } from '../../lib/keys'
-  import { api, loadStill, mediaUrl } from '../../state/loading'
+  import { api, mediaUrl } from '../../lib/bridge'
+  import { loadStill } from '../../state/loading'
   import { assetMenu } from '../menus'
   import { crossfade, fly, settledRect, snapshot } from '../../lib/motion'
-  import { app, clipFor } from '../../state/app.svelte'
+  import { app } from '../../state/app.svelte'
+  import { clipFor } from '../../state/project'
   import Icon from '../../ui/Icon.svelte'
+  import { showToast } from '../../ui/toast.svelte'
   import { camera, type View } from './camera.svelte'
   import Filmstrip from './Filmstrip.svelte'
   import { bitmapProxy } from './proxy.svelte'
@@ -631,7 +634,7 @@
   }
 
   function toggle() {
-    if (unplayable) return app.showHud('Can’t play this format here yet · scrubbing, trimming and export still work')
+    if (unplayable) return showToast('Can’t play this format here yet · scrubbing, trimming and export still work')
     if (!video) return void (queued = !queued)
     if (video.paused) video.play().catch(() => {})
     else video.pause()

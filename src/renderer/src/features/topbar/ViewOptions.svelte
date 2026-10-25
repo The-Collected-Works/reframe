@@ -4,8 +4,9 @@
   hiding something.
 -->
 <script lang="ts">
-  import { showMenu } from '../menus'
-  import { app, VIEW_DEFAULTS, type FilterKey, type SortKey, type ViewPrefs } from '../../state/app.svelte'
+  import { showMenu } from '../../ui/menu.svelte'
+  import { app } from '../../state/app.svelte'
+  import { type FilterKey, type SortKey, VIEW_DEFAULTS, type ViewPrefs } from '../../state/prefs'
   import Icon from '../../ui/Icon.svelte'
   import Popover from '../../ui/Popover.svelte'
 

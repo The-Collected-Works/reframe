@@ -1,8 +1,11 @@
 import { SvelteMap } from 'svelte/reactivity'
-import { DEFAULT_SETTINGS, resolveSettings } from '@shared/layout'
-import type { IconName } from '../ui/icons'
+import { resolveSettings } from '@shared/layout'
 import type { Artboard, AssetEntry, Clip, ColorMeta, CropSettings, ExportPrefs, FolderScan, ProjectFile, SettingKey, SkippedFolder } from '@shared/types'
+import { showToast } from '../ui/toast.svelte'
+import { folderOf, layout } from './library'
 import { hydrate } from './loading'
+import { storeCollapsed, storedCollapsed, storedView, storedVolume, storeView, storeVolume, VIEW_DEFAULTS, type ViewPrefs } from './prefs'
+import { changes, emptyProject, FRAMING_KEYS, newBoard, normalizeProject, uid, withOverrides, withoutOverrides } from './project'
 
 /**
  * What loading an asset finds out (size, timing, colour, thumbnail). Kept apart from the scanned
@@ -28,152 +31,7 @@ const NO_META: AssetMeta = { w: 0, h: 0, duration: 0, thumb: null, error: false 
 
 export const withMeta = (entry: AssetEntry, meta: AssetMeta | undefined): Asset => ({ ...entry, ...(meta ?? NO_META) })
 
-type View = 'grid' | 'single'
-
-export interface AppMenuItem {
-  id?: string
-  label?: string
-  icon?: IconName
-  shortcut?: string
-  /** Present makes it a toggle, shown with a trailing check. */
-  checked?: boolean
-  enabled?: boolean
-  /** Destructive: shown in red. */
-  danger?: boolean
-  separator?: boolean
-}
-
-export const PRESETS: { name: string; width: number; height: number }[] = [
-  { name: 'Square', width: 1080, height: 1080 },
-  { name: 'Portrait', width: 1080, height: 1350 },
-  { name: 'Story', width: 1080, height: 1920 },
-  { name: 'Landscape', width: 1920, height: 1080 },
-  { name: 'Wide', width: 2560, height: 1080 },
-  { name: 'Classic', width: 1440, height: 1080 }
-]
-
-const uid = () => Math.random().toString(36).slice(2, 10)
-
-function newBoard(name: string, width: number, height: number, defaults: CropSettings = DEFAULT_SETTINGS): Artboard {
-  return { id: uid(), name, width, height, defaults: { ...defaults }, overrides: {} }
-}
-
-function emptyProject(): ProjectFile {
-  return {
-    version: 1,
-    artboards: [newBoard('Square', 1080, 1080)],
-    clips: {},
-    export: { dir: null, imageFormat: 'png', imageQuality: 0.92, videoCrf: 18 }
-  }
-}
-
-const KNOWN = new Set(Object.keys(DEFAULT_SETTINGS))
-/** Drops settings this version doesn't know (e.g. ones removed since the file was saved). */
-const known = (o: object | undefined): Partial<CropSettings> =>
-  Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => KNOWN.has(k))) as Partial<CropSettings>
-
-function normalizeProject(p: ProjectFile | null): ProjectFile {
-  const base = emptyProject()
-  if (!p || !p.artboards?.length) return base
-  return {
-    version: 1,
-    artboards: p.artboards.map((b) => ({
-      ...b,
-      defaults: { ...DEFAULT_SETTINGS, ...known(b.defaults) },
-      overrides: Object.fromEntries(
-        Object.entries(b.overrides ?? {})
-          .map(([n, o]) => [n, known(o)] as const)
-          .filter(([, o]) => Object.keys(o).length)
-      )
-    })),
-    clips: p.clips ?? {},
-    export: { ...base.export, ...p.export }
-  }
-}
-
-export type SortKey = 'name' | 'date' | 'type'
-export type FilterKey = 'all' | 'images' | 'videos' | 'adjusted' | 'excluded'
-export interface ViewPrefs {
-  filter: FilterKey
-  sort: SortKey
-  /** Sections per folder; off, one continuous grid. */
-  group: boolean
-  /** File names under thumbnails. */
-  names: boolean
-}
-export const VIEW_DEFAULTS: ViewPrefs = { filter: 'all', sort: 'name', group: true, names: true }
-
-function read<T>(key: string, fallback: T): T {
-  try {
-    const v = JSON.parse(localStorage.getItem(key) ?? 'null')
-    return v ?? fallback
-  } catch {
-    return fallback
-  }
-}
-
-function store(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value))
-  } catch {
-    // Not persisted; fine.
-  }
-}
-
-const FILTERS: FilterKey[] = ['all', 'images', 'videos', 'adjusted', 'excluded']
-const SORTS: SortKey[] = ['name', 'date', 'type']
-
-/** Stored view options, each checked (a value from another version falls back to the default). */
-function storedView(): ViewPrefs {
-  const v = read<Partial<ViewPrefs>>('reframe.view', {})
-  return {
-    filter: FILTERS.includes(v.filter as FilterKey) ? (v.filter as FilterKey) : VIEW_DEFAULTS.filter,
-    sort: SORTS.includes(v.sort as SortKey) ? (v.sort as SortKey) : VIEW_DEFAULTS.sort,
-    group: typeof v.group === 'boolean' ? v.group : VIEW_DEFAULTS.group,
-    names: typeof v.names === 'boolean' ? v.names : VIEW_DEFAULTS.names
-  }
-}
-const storedCollapsed = (dir: string): string[] => {
-  const v = read<unknown>('reframe.collapsed:' + dir, [])
-  return Array.isArray(v) ? v.filter((f): f is string => typeof f === 'string') : []
-}
-
-function storedVolume(): number {
-  const v = Number(read<unknown>('reframe.volume', 0.8))
-  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.8
-}
-
-/** Whether applying `patch` to `o` would change it. */
-const changes = <T extends object>(o: T | undefined, patch: Partial<T>) => Object.entries(patch).some(([k, v]) => !o || o[k as keyof T] !== v)
-
-// An override is set by editing an asset and removed only by an explicit reset, even if its value
-// happens to equal the default, so it never silently starts following defaults. The overrides map
-// is copied once, however many assets change.
-function withOverrides(b: Artboard, names: string[], patch: Partial<CropSettings> | ((name: string) => Partial<CropSettings>)): Artboard {
-  let overrides: Artboard['overrides'] | null = null
-  for (const name of names) {
-    const p = typeof patch === 'function' ? patch(name) : patch
-    if (!changes(b.overrides[name], p) && b.overrides[name]) continue
-    overrides ??= { ...b.overrides }
-    overrides[name] = { ...b.overrides[name], ...p }
-    if (!Object.keys(overrides[name]).length) delete overrides[name]
-  }
-  return overrides ? { ...b, overrides } : b
-}
-
-function withoutOverrides(b: Artboard, names: string[], keys: SettingKey[]): Artboard {
-  let overrides: Artboard['overrides'] | null = null
-  for (const name of names) {
-    const current = b.overrides[name]
-    if (!current || !keys.some((k) => k in current)) continue
-    overrides ??= { ...b.overrides }
-    const o = { ...current }
-    for (const k of keys) delete o[k]
-    if (Object.keys(o).length) overrides[name] = o
-    else delete overrides[name]
-  }
-  return overrides ? { ...b, overrides } : b
-}
+export type View = 'grid' | 'single'
 
 /**
  * The app's state, and every change to it. Each field is reactive on its own (replaced, never
@@ -206,10 +64,6 @@ class AppState {
   boardEditor = $state.raw<string | null>(null)
   /** Eyedropper armed: the next click on media samples the background colour. */
   picking = $state.raw(false)
-  /** Brief confirmation shown over the content (copy, paste, undo). `n` restarts it. */
-  hud = $state.raw<{ text: string; n: number } | null>(null)
-  /** The open context menu (see menus.ts / ContextMenu.svelte). */
-  contextMenu = $state.raw<{ x: number; y: number; items: AppMenuItem[] } | null>(null)
   /** Preview playback volume, shared by every video and remembered between sessions. */
   volume = $state.raw(storedVolume())
   lastVolume = $state.raw(storedVolume() || 0.8)
@@ -273,7 +127,7 @@ class AppState {
 
   #setCollapsed(next: string[]) {
     this.collapsed = next
-    if (this.dir) store('reframe.collapsed:' + this.dir, next)
+    if (this.dir) storeCollapsed(this.dir, next)
     this.#keepVisibleSelection()
   }
 
@@ -332,14 +186,14 @@ class AppState {
 
   setViewPrefs(patch: Partial<ViewPrefs>) {
     this.viewPrefs = { ...this.viewPrefs, ...patch }
-    store('reframe.view', this.viewPrefs)
+    storeView(this.viewPrefs)
     this.#keepVisibleSelection()
   }
 
   /** Default filter, sort, grouping and captions, and every folder open. */
   resetView() {
     this.viewPrefs = { ...VIEW_DEFAULTS }
-    store('reframe.view', VIEW_DEFAULTS)
+    storeView(VIEW_DEFAULTS)
     this.#setCollapsed([])
   }
 
@@ -424,7 +278,7 @@ class AppState {
     const source = resolveSettings(board, focus && selection.includes(focus) ? focus : selection[0])
     const values = Object.fromEntries(keys.map((k) => [k, source[k]])) as Partial<CropSettings>
     this.#mapBoard((b) => withoutOverrides({ ...b, defaults: { ...b.defaults, ...values } }, selection, keys))
-    this.showHud(`Now the default for ${board.name}`)
+    showToast(`Now the default for ${board.name}`)
   }
 
   /** Removes overrides so the keys follow the defaults again. Defaults to the selection. */
@@ -441,14 +295,14 @@ class AppState {
     const { skip: _skip, ...overrides } = this.board.overrides[this.focus] ?? {}
     this.clipboard = overrides
     const n = Object.keys(overrides).length
-    this.showHud(n ? `Copied ${n} setting${n === 1 ? '' : 's'}` : 'Copied defaults')
+    showToast(n ? `Copied ${n} setting${n === 1 ? '' : 's'}` : 'Copied defaults')
   }
 
   paste() {
     const { clipboard, selection } = this
     if (!clipboard || !selection.length) return
     this.#mapBoard((b) => withOverrides(withoutOverrides(b, selection, FRAMING_KEYS), selection, clipboard))
-    this.showHud(selection.length > 1 ? `Pasted to ${selection.length} items` : 'Pasted')
+    showToast(selection.length > 1 ? `Pasted to ${selection.length} items` : 'Pasted')
   }
 
   setClip(name: string, clip: Clip | null) {
@@ -512,11 +366,7 @@ class AppState {
     const v = Math.min(1, Math.max(0, volume))
     this.volume = v
     if (v > 0) this.lastVolume = v
-    store('reframe.volume', v)
-  }
-
-  showHud(text: string) {
-    this.hud = { text, n: (this.hud?.n ?? 0) + 1 }
+    storeVolume(v)
   }
 
   // Export preferences aren't edits: undo and redo leave them as they are.
@@ -529,7 +379,7 @@ class AppState {
     this.future = [project, ...this.future]
     this.project = { ...prev, export: project.export }
     if (!prev.artboards.some((b) => b.id === this.boardId)) this.boardId = prev.artboards[0].id
-    this.showHud('Undo')
+    showToast('Undo')
   }
 
   redo() {
@@ -541,7 +391,7 @@ class AppState {
     this.future = this.future.slice(1)
     this.project = { ...next, export: project.export }
     if (!next.artboards.some((b) => b.id === this.boardId)) this.boardId = next.artboards[0].id
-    this.showHud('Redo')
+    showToast('Redo')
   }
 
   /** An asset with what's been loaded about it. */
@@ -552,125 +402,3 @@ class AppState {
 }
 
 export const app = new AppState()
-
-/**
- * Whether an asset's framing has been adjusted away from the artboard's defaults. Being left out
- * of the export isn't an adjustment: it's about the asset, not how it's framed.
- */
-export const hasOverrides = (board: Artboard, name: string): boolean => Object.keys(board.overrides[name] ?? {}).some((k) => k !== 'skip')
-
-/** Every setting that frames an asset (all but whether it's exported). */
-export const FRAMING_KEYS = (Object.keys(DEFAULT_SETTINGS) as SettingKey[]).filter((k) => k !== 'skip')
-
-export const clipFor = (project: ProjectFile, name: string, duration: number): { start: number; end: number } => {
-  const c = project.clips[name]
-  return { start: c?.start ?? 0, end: c?.end ?? duration }
-}
-
-/** An asset's file name, without the folders it's in ("Shoot A/clip.mp4" → "clip.mp4"). */
-export const baseName = (name: string): string => name.slice(name.lastIndexOf('/') + 1)
-
-/** The folder an asset is in, relative to the open one ("" for the top level). */
-export const folderOf = (name: string): string => name.slice(0, Math.max(0, name.lastIndexOf('/')))
-
-// One collator for every comparison (localeCompare with options builds one each call: ~15× slower).
-const natural = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare
-
-/**
- * A folder in the grid: its own assets (filtered and sorted) and its subfolders, as the tree it is
- * on disk. `count` is everything inside it. Excluded folders are leaves, marked with why.
- */
-export interface FolderNode {
-  /** Relative path, "/"-separated; "" is the top level's own files. */
-  folder: string
-  name: string
-  assets: AssetEntry[]
-  children: FolderNode[]
-  count: number
-  collapsed: boolean
-  excluded?: SkippedFolder
-}
-
-type Layout = { tree: FolderNode[]; visible: AssetEntry[] }
-
-/**
- * What the grid shows, from the assets and the view options. Grouped, a tree of folders: the top
- * level's own files first (if any), then each top-level folder with its subfolders inside it.
- * Not grouped, one node holding everything. Also the flat list of visible assets in on-screen
- * order (a folder's files, then its subfolders; nothing inside a collapsed folder), which the
- * filmstrip, arrow keys, Select All, shift-click ranges and the export dialog's "Visible" scope
- * all follow. `board` is only given when the filter looks at edits.
- */
-function layout(assets: AssetEntry[], prefs: ViewPrefs, collapsed: string[], skipped: SkippedFolder[], board: Artboard | null): Layout {
-  const { filter, sort, group } = prefs
-  const pass = (a: AssetEntry) =>
-    filter === 'images'
-      ? a.kind === 'image'
-      : filter === 'videos'
-        ? a.kind === 'video'
-        : filter === 'adjusted'
-          ? !!board && hasOverrides(board, a.name)
-          : filter === 'excluded'
-            ? !!board && resolveSettings(board, a.name).skip
-            : true
-  const byName = (a: AssetEntry, b: AssetEntry) => natural(baseName(a.name), baseName(b.name)) || natural(folderOf(a.name), folderOf(b.name))
-  const cmp =
-    sort === 'date'
-      ? (a: AssetEntry, b: AssetEntry) => b.mtime - a.mtime || byName(a, b)
-      : sort === 'type'
-        ? (a: AssetEntry, b: AssetEntry) => natural(a.kind, b.kind) || byName(a, b)
-        : byName
-  const node = (folder: string): FolderNode => ({
-    folder,
-    name: folder.slice(folder.lastIndexOf('/') + 1),
-    assets: [],
-    children: [],
-    count: 0,
-    collapsed: collapsed.includes(folder)
-  })
-  if (!group) {
-    const all = { ...node(''), collapsed: false, assets: assets.filter(pass).sort(cmp) }
-    all.count = all.assets.length
-    return { tree: [all], visible: all.assets }
-  }
-
-  // Build the tree: every folder with something to show, and the folders leading to it.
-  const nodes = new Map<string, FolderNode>()
-  const top = node('')
-  const ensure = (folder: string): FolderNode => {
-    let n = nodes.get(folder)
-    if (!n) {
-      n = node(folder)
-      nodes.set(folder, n)
-      const parent = folderOf(folder)
-      if (parent) ensure(parent).children.push(n)
-    }
-    return n
-  }
-  for (const a of assets) {
-    if (!pass(a)) continue
-    const folder = folderOf(a.name)
-    ;(folder ? ensure(folder) : top).assets.push(a)
-  }
-  for (const f of skipped) ensure(f.path).excluded = f
-  const roots = [...nodes.values()].filter((n) => !n.folder.includes('/'))
-  const finish = (n: FolderNode): number => {
-    n.assets.sort(cmp)
-    n.children.sort((a, b) => natural(a.name, b.name))
-    n.count = n.assets.length + n.children.reduce((sum, c) => sum + finish(c), 0)
-    return n.count
-  }
-  roots.sort((a, b) => natural(a.name, b.name)).forEach(finish)
-  top.assets.sort(cmp)
-  top.count = top.assets.length
-  const tree = [...(top.assets.length ? [top] : []), ...roots]
-
-  const visible: AssetEntry[] = []
-  const walk = (n: FolderNode) => {
-    if (n.collapsed || n.excluded) return
-    visible.push(...n.assets)
-    n.children.forEach(walk)
-  }
-  tree.forEach(walk)
-  return { tree, visible }
-}

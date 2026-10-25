@@ -4,7 +4,7 @@
   once the installed app has downloaded the update itself, restarts into it.
 -->
 <script lang="ts">
-  import { api } from '../../state/loading'
+  import { api } from '../../lib/bridge'
   import Icon from '../../ui/Icon.svelte'
   import Popover from '../../ui/Popover.svelte'
   import ReleaseNotes from './ReleaseNotes.svelte'

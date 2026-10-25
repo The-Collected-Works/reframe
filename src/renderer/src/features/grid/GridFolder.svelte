@@ -5,7 +5,8 @@
 -->
 <script lang="ts">
   import { excludedFolderMenu, folderMenu } from '../menus'
-  import { app, type FolderNode } from '../../state/app.svelte'
+  import { app } from '../../state/app.svelte'
+  import { type FolderNode } from '../../state/library'
   import Icon from '../../ui/Icon.svelte'
   import Thumbnail from './Thumbnail.svelte'
   import Collapsible from './Collapsible.svelte'

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { SvelteSet } from 'svelte/reactivity'
-  import { api } from '../../state/loading'
+  import { api } from '../../lib/bridge'
   import { closing } from '../../lib/motion'
   import { join } from '../../lib/paths'
   import { app } from '../../state/app.svelte'

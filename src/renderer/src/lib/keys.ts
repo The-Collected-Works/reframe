@@ -1,4 +1,4 @@
-import { mac } from './paths'
+import { mac } from './bridge'
 
 /** Modifier names as each platform writes them. */
 export const MOD = mac ? '⌘' : 'Ctrl'

@@ -1,11 +1,11 @@
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'
-  import { api } from '../state/loading'
+  import { api } from '../lib/bridge'
   import { closing } from '../lib/motion'
-  import { app, type AppMenuItem } from '../state/app.svelte'
   import Icon from './Icon.svelte'
+  import { contextMenu, type OpenMenu } from './menu.svelte'
 
-  let { menu, onChoose }: { menu: { x: number; y: number; items: AppMenuItem[] }; onChoose: (id: string | null) => void } = $props()
+  let { menu, onChoose }: { menu: OpenMenu; onChoose: (id: string | null) => void } = $props()
   // Fixed for the menu's life (a new menu is a new instance), and kept while it animates out.
   // svelte-ignore state_referenced_locally
   const self = menu
@@ -15,7 +15,7 @@
   let active = $state(-1)
   const usable = items.map((it, i) => (!it.separator && it.enabled !== false ? i : -1)).filter((i) => i >= 0)
   // Only while it's the open menu: one animating out (closed, or replaced by another) is inert.
-  const open = () => app.contextMenu === self
+  const open = () => contextMenu.open === self
   const choose = (id: string | null) => open() && onChoose(id)
 
   // Open at the pointer, flipping left/up when it would leave the window.
