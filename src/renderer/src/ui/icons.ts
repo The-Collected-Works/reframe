@@ -11,8 +11,6 @@ import {
   Eye,
   EyeOff,
   FileOutput,
-  FlipHorizontal2,
-  FlipVertical2,
   Folder,
   FolderOpen,
   Info,
@@ -29,7 +27,9 @@ import {
   Share,
   SlidersHorizontal,
   Square,
-  Trash2,
+  Trash,
+  TrianglesCenterlineDashedHorizontal,
+  TrianglesCenterlineDashedVertical,
   Volume1,
   Volume2,
   VolumeX,
@@ -54,7 +54,7 @@ export const ICONS = {
   chevronDown: ChevronDown,
   edit: SlidersHorizontal,
   duplicate: CopyPlus,
-  trash: Trash2,
+  trash: Trash,
   reveal: FolderOpen,
   include: FileOutput,
   export: Share,
@@ -71,9 +71,9 @@ export const ICONS = {
   volumeOff: VolumeX,
   rotateL: RotateCcwSquare,
   rotateR: RotateCwSquare,
-  // Lucide names these by the axis line, not the motion: mirroring left-right is the vertical-axis glyph.
-  flipH: FlipVertical2,
-  flipV: FlipHorizontal2
+  // Named by the axis line, not the motion: mirroring left-right is the vertical-axis glyph.
+  flipH: TrianglesCenterlineDashedVertical,
+  flipV: TrianglesCenterlineDashedHorizontal
 }
 
 /** Drawn solid rather than outlined. */
