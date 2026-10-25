@@ -1,6 +1,6 @@
 import { resolveSettings } from '@shared/layout'
 import { api, mac, win } from '../lib/bridge'
-import { combo, MOD, SHIFT } from '../lib/keys'
+import { hint } from '../lib/keymap.svelte'
 import { inside } from '../lib/paths'
 import { copy, deleteBoard, duplicateBoard, edit, excludeFolder, includeFolder, paste, resetSelection, setMode } from '../state/actions'
 import { library } from '../state/library.svelte'
@@ -11,11 +11,11 @@ import { selection } from '../state/selection.svelte'
 import { shell } from '../state/shell.svelte'
 import { view } from '../state/view.svelte'
 import { showMenu } from '../ui'
+import { GLOBAL, GRID } from './keymaps'
 
 /** The right-click menus: on assets (grid and single view), artboard tabs, and folder headers. */
 
 const revealLabel = mac ? 'Reveal in Finder' : win ? 'Show in Explorer' : 'Show in Folder'
-const key = (k: string) => combo(MOD, k)
 
 /** Right-click menu for an asset. Right-clicking outside the selection selects it first. */
 export async function assetMenu(name: string, path: string, at: { x: number; y: number }, inSingle = false): Promise<void> {
@@ -24,24 +24,24 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
   const sel = selection.names
   const skip = resolveSettings(board, name).skip
   const id = await showMenu(at.x, at.y, [
-    ...(inSingle ? [] : [{ id: 'open', label: 'Open', icon: 'open' as const, shortcut: 'Space' }, { separator: true }]),
-    { id: 'copy', label: 'Copy Settings', icon: 'copy', shortcut: key('C'), enabled: sel.length === 1 },
+    ...(inSingle ? [] : [{ id: 'open', label: 'Open', icon: 'open' as const, shortcut: hint(GRID.actions.open) }, { separator: true }]),
+    { id: 'copy', label: 'Copy Settings', icon: 'copy', shortcut: hint(GLOBAL.actions.copy), enabled: sel.length === 1 },
     {
       id: 'paste',
       label: sel.length > 1 ? `Paste Settings to ${sel.length}` : 'Paste Settings',
       icon: 'paste',
-      shortcut: key('V'),
+      shortcut: hint(GLOBAL.actions.paste),
       enabled: !!project.clipboard
     },
     {
       id: 'reset',
       label: 'Reset to Defaults',
       icon: 'reset',
-      shortcut: combo(MOD, SHIFT, 'R'),
+      shortcut: hint(GLOBAL.actions.reset),
       enabled: sel.some((n) => hasOverrides(board, n))
     },
     { separator: true },
-    { id: 'include', label: 'Include in Export', icon: 'include', checked: !skip },
+    { id: 'leaveOut', label: 'Leave Out of Export', icon: 'leaveOut', checked: skip },
     { separator: true },
     { id: 'reveal', label: revealLabel, icon: 'reveal' }
   ])
@@ -49,7 +49,7 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
   else if (id === 'copy') copy()
   else if (id === 'paste') paste()
   else if (id === 'reset') resetSelection()
-  else if (id === 'include') edit({ skip: !skip })
+  else if (id === 'leaveOut') edit({ skip: !skip })
   else if (id === 'reveal') api.reveal(path)
 }
 

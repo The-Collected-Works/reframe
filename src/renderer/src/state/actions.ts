@@ -1,6 +1,6 @@
 import type { CropSettings, FolderScan, SettingKey } from '@shared/types'
 import { api } from '../lib/bridge'
-import { combo, MOD } from '../lib/keys'
+import { hint } from '../lib/keymap.svelte'
 import { showToast } from '../ui'
 import { library } from './library.svelte'
 import { baseName } from './model/tree'
@@ -10,13 +10,14 @@ import { project } from './project.svelte'
 import { selection } from './selection.svelte'
 import { shell } from './shell.svelte'
 import { view, type Mode } from './view.svelte'
+import { GLOBAL } from '../features/keymaps'
 
 /**
  * What the app does across more than one store, or with the main process, or saying so in a
  * toast. Each store changes only itself; anything that touches several goes through here.
  */
 
-const undoHint = `${combo(MOD, 'Z')} to undo`
+const undoHint = `${hint(GLOBAL.actions.undo)} to undo`
 
 // ---- the folder
 

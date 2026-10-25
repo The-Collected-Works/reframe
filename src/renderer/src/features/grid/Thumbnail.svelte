@@ -7,7 +7,9 @@
   import { drawFrame, resolveSettings } from '@shared/layout'
   import type { AssetEntry } from '@shared/types'
   import { visibility } from '../../lib/attach'
+  import { trackPointer } from '../../lib/drag'
   import { scheduleDraw } from '../../lib/draw-queue'
+  import { themeColor } from '../../lib/theme'
   import { fmtTime } from '../../lib/format'
   import { hasOverrides } from '../../state/model/project'
   import { baseName, folderOf } from '../../state/model/tree'
@@ -76,7 +78,7 @@
     }
     const g = guides
     if (g.x.length || g.y.length) {
-      ctx.strokeStyle = '#ff4f8b'
+      ctx.strokeStyle = themeColor('--guide')
       ctx.lineWidth = dpr
       ctx.beginPath()
       for (const x of g.x) {
@@ -110,36 +112,28 @@
     g.press(asset.name, mode)
     if (mode !== 'replace' || !asset.w) return
 
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
     const start = resolveSettings(board, asset.name)
     const { w, h, name } = asset
     const kk = k
-    const x0 = e.clientX
-    const y0 = e.clientY
-    let dragging = false
-    const move = (ev: PointerEvent) => {
-      const dx = (ev.clientX - x0) / kk
-      const dy = (ev.clientY - y0) / kk
-      if (!dragging && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return
-      if (!dragging) preview.hold(true)
-      dragging = true
-      const r = dragOffset(start, board.width, board.height, w, h, dx, dy, 5 / kk, { shift: ev.shiftKey, alt: ev.altKey })
-      guides = r.guides
-      g.move(name, r.patch)
-    }
-    const up = () => {
-      guides = NO_GUIDES
-      draw()
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerup', up)
-      el.removeEventListener('pointercancel', up)
-      if (dragging) preview.hold(false)
-      else g.click(name)
-    }
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
-    el.addEventListener('pointercancel', up)
+    trackPointer(e, {
+      slop: 4,
+      // A playing hover preview holds still while it's dragged.
+      start: () => preview.hold(true),
+      move: (ev) => {
+        const r = dragOffset(start, board.width, board.height, w, h, (ev.clientX - e.clientX) / kk, (ev.clientY - e.clientY) / kk, 5 / kk, {
+          shift: ev.shiftKey,
+          alt: ev.altKey
+        })
+        guides = r.guides
+        g.move(name, r.patch)
+      },
+      end: (dragged) => {
+        guides = NO_GUIDES
+        draw()
+        if (dragged) preview.hold(false)
+        else g.click(name)
+      }
+    })
   }
 </script>
 

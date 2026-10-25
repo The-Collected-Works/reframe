@@ -1,4 +1,4 @@
-import { ALT, MOD, SHIFT } from './keys'
+import { ALT, combo, MOD, SHIFT } from './keys'
 
 /**
  * Keyboard shortcuts as data. A keymap is a titled list of actions (keys and a label) and notes
@@ -162,3 +162,6 @@ export function chips(item: Action | Note): string[] {
     return i ? ['/', ...keys] : keys
   })
 }
+
+/** An action's key as tooltips and menus write it ("⌘E", "Ctrl+Shift+R"): its first key, or its `n`th. */
+export const hint = (a: Action, n = 0): string => combo(...chips({ keys: list(a.keys)[n], label: a.label }))

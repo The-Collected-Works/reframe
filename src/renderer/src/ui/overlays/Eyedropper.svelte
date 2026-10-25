@@ -23,7 +23,7 @@
   /** A canvas can change under the pointer (a paused video's exact frame landing): re-read it this often. */
   const STALE = 150
 
-  let loupe: HTMLCanvasElement
+  let zoomed: HTMLCanvasElement
   let at = $state<{ x: number; y: number } | null>(null)
   let hex = $state<string | null>(null)
   let over = $state(false)
@@ -50,7 +50,7 @@
     const px = Math.floor(((x - r.left) * c.width) / r.width)
     const py = Math.floor(((y - r.top) * c.height) / r.height)
     const img = pixels(c).getImageData(px - R, py - R, N, N)
-    loupe.getContext('2d')!.putImageData(img, 0, 0)
+    zoomed.getContext('2d')!.putImageData(img, 0, 0)
     const d = img.data
     const i = (R * N + R) * 4
     // Only solid pixels: outside the artboard in the single view is see-through, not media.
@@ -85,9 +85,9 @@
 <svelte:window {onkeydowncapture} onblur={onCancel} />
 
 <div class="eyedropper" role="presentation" {onpointerdown} onpointermove={(e) => sample(e.clientX, e.clientY)} oncontextmenu={(e) => e.preventDefault()}>
-  <div class={['loupe', { hidden: !over }]} style:left={`${left}px`} style:top={`${top}px`}>
+  <div class={['magnifier', { hidden: !over }]} style:left={`${left}px`} style:top={`${top}px`}>
     <div class="zoom">
-      <canvas bind:this={loupe} width={N} height={N} style:width={`${SIZE}px`} style:height={`${SIZE}px`}></canvas>
+      <canvas bind:this={zoomed} width={N} height={N} style:width={`${SIZE}px`} style:height={`${SIZE}px`}></canvas>
       <span class="target" style:left={`${R * ZOOM}px`} style:top={`${R * ZOOM}px`} style:width={`${ZOOM}px`} style:height={`${ZOOM}px`}></span>
     </div>
     <div class="readout">
@@ -105,7 +105,7 @@
     cursor: crosshair;
   }
 
-  .loupe {
+  .magnifier {
     position: fixed;
     pointer-events: none;
     padding: 4px;
@@ -116,7 +116,7 @@
       0 8px 24px rgba(0, 0, 0, 0.5);
   }
 
-  .loupe.hidden {
+  .magnifier.hidden {
     visibility: hidden;
   }
 

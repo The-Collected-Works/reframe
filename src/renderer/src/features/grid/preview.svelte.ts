@@ -4,17 +4,12 @@ import { Tween } from 'svelte/motion'
 import { posterTime } from '@shared/media'
 import type { Clip } from '@shared/types'
 import { mediaUrl } from '../../lib/bridge'
+import { releaseVideo, silentVideo } from '../../lib/media'
 import type { Asset } from '../../state/library.svelte'
 import { scroll } from './context'
 
 const SCROLL_SETTLE = 250
 const DWELL = 150
-
-const release = (v: HTMLVideoElement) => {
-  v.pause()
-  v.removeAttribute('src')
-  v.load()
-}
 
 /**
  * A video thumbnail playing in place while hovered. A hover becomes a preview only once the pointer
@@ -55,12 +50,7 @@ export class HoverPreview {
     $effect(() => {
       const a = asset()
       if (!this.ready || !enabled() || a.kind !== 'video' || !a.w) return
-      const v = document.createElement('video')
-      v.crossOrigin = 'anonymous'
-      v.muted = true
-      v.playsInline = true
-      v.preload = 'auto'
-      v.src = mediaUrl(a.path)
+      const v = silentVideo(mediaUrl(a.path))
       const start = clip()?.start ?? 0
       const end = clip()?.end ?? a.duration
       v.currentTime = Math.min(Math.max(posterTime(a.duration), start), Math.max(start, end - 0.1))
@@ -75,7 +65,7 @@ export class HoverPreview {
       const first = () => {
         if (!alive) return
         // A previous hover may still be fading out; this one takes over from its current opacity.
-        if (this.video && this.video !== v) release(this.video)
+        if (this.video && this.video !== v) releaseVideo(this.video)
         if (this.held) v.pause()
         this.video = v
         this.fade.target = 1
@@ -86,11 +76,11 @@ export class HoverPreview {
         .catch(() => {})
       return () => {
         alive = false
-        if (this.video !== v) return release(v)
+        if (this.video !== v) return releaseVideo(v)
         v.pause()
         this.fade.set(0).then(() => {
           if (this.video === v) this.video = null
-          release(v)
+          releaseVideo(v)
         })
       }
     })

@@ -7,8 +7,8 @@
   import { untrack } from 'svelte'
   import { bounds, computeLayout, type Point } from '@shared/layout'
   import type { Artboard, CropSettings, SettingKey } from '@shared/types'
-  import { useKeymap } from '../../lib/keymap.svelte'
-  import { combo, MOD } from '../../lib/keys'
+  import { trackPointer } from '../../lib/drag'
+  import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { loadStill } from '../../lib/media'
   import { crossfade, fly, settledRect, snapshot } from '../../lib/motion'
   import type { Asset } from '../../state/library.svelte'
@@ -338,27 +338,16 @@
 
   /** Drags the view; a click that never moves calls `onClick` instead. */
   function startPan(e: PointerEvent, onClick?: () => void) {
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
     let last = { x: e.clientX, y: e.clientY }
-    let moved = false
-    const move = (ev: PointerEvent) => {
-      if (!moved && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 3) return
-      if (!moved) cursor = 'grabbing'
-      moved = true
-      panView(ev.clientX - last.x, ev.clientY - last.y)
-      last = { x: ev.clientX, y: ev.clientY }
-    }
-    const up = () => {
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerup', up)
-      el.removeEventListener('pointercancel', up)
-      if (moved) cursor = 'default'
-      else onClick?.()
-    }
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
-    el.addEventListener('pointercancel', up)
+    trackPointer(e, {
+      slop: 3,
+      start: () => (cursor = 'grabbing'),
+      move: (ev) => {
+        panView(ev.clientX - last.x, ev.clientY - last.y)
+        last = { x: ev.clientX, y: ev.clientY }
+      },
+      end: (dragged) => (dragged ? (cursor = 'default') : onClick?.())
+    })
   }
 
   function onpointermove(e: PointerEvent) {
@@ -386,8 +375,6 @@
     if (mode.kind === 'none') return startPan(e, () => (selected = false))
     // Editing defaults (the asset is on screen but not selected): clicking it selects it again.
     onSelect()
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
     selected = true
     const start: DragStart = { mode, start: settings, board, sw: a.w, sh: a.h, k, at }
     const stageRect = stage.getBoundingClientRect()
@@ -402,7 +389,6 @@
       readout = r.readout ? { x: clientX - stageRect.left + 16, y: clientY - stageRect.top + 16, text: r.readout } : null
       onEdit(r.patch)
     }
-    const move = (ev: PointerEvent) => apply(ev.clientX, ev.clientY, ev)
     // Pressing or releasing a modifier re-applies the whole drag at once, without waiting for the
     // pointer to move.
     const modifiers = (ke: KeyboardEvent) => {
@@ -411,23 +397,19 @@
       apply(last.clientX, last.clientY, ke)
       draw()
     }
-    const up = () => {
-      endDrag = null
-      dragging = false
-      endInteraction()
-      guides = NO_GUIDES
-      readout = null
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerup', up)
-      el.removeEventListener('pointercancel', up)
-      window.removeEventListener('keydown', modifiers, true)
-      window.removeEventListener('keyup', modifiers, true)
-      draw()
-    }
-    endDrag = up
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
-    el.addEventListener('pointercancel', up)
+    endDrag = trackPointer(e, {
+      move: (ev) => apply(ev.clientX, ev.clientY, ev),
+      end: () => {
+        endDrag = null
+        dragging = false
+        endInteraction()
+        guides = NO_GUIDES
+        readout = null
+        window.removeEventListener('keydown', modifiers, true)
+        window.removeEventListener('keyup', modifiers, true)
+        draw()
+      }
+    })
     window.addEventListener('keydown', modifiers, true)
     window.addEventListener('keyup', modifiers, true)
     draw()
@@ -464,7 +446,7 @@
   {#if asset}
     <button
       class="zoom-chip"
-      title={manual ? `Fit to view (${combo(MOD, '0')})` : 'Actual pixels'}
+      title={manual ? `Fit to view (${hint(SINGLE.actions.fit)})` : 'Actual pixels'}
       onpointerdown={(e) => e.stopPropagation()}
       onclick={() => (manual ? fitView() : actualPixels())}
     >

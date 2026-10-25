@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { trackPointer } from '../../lib/drag'
   import { fmtTime } from '../../lib/format'
 
   let {
@@ -47,8 +48,6 @@
   function drag(e: PointerEvent, kind: 'seek' | 'in' | 'out') {
     if (e.button !== 0) return
     e.stopPropagation()
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
     active = kind
     if (kind === 'seek') onScrubStart()
     let range = { start, end }
@@ -71,19 +70,15 @@
       onTrim(range.start, range.end)
     }
     apply(e.clientX)
-    const move = (ev: PointerEvent) => apply(ev.clientX)
-    const up = () => {
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerup', up)
-      el.removeEventListener('pointercancel', up)
-      active = null
-      if (kind === 'seek') return onScrubEnd(seekTo)
-      scrub = null
-      onTrimEnd(range.start, range.end)
-    }
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
-    el.addEventListener('pointercancel', up)
+    trackPointer(e, {
+      move: (ev) => apply(ev.clientX),
+      end: () => {
+        active = null
+        if (kind === 'seek') return onScrubEnd(seekTo)
+        scrub = null
+        onTrimEnd(range.start, range.end)
+      }
+    })
   }
   // The hover bubble shows where a click would seek to (clamped to the kept range).
   const bubble = $derived(active === 'in' || active === 'out' ? null : hover)

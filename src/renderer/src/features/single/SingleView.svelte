@@ -4,7 +4,7 @@
   inside take props.
 -->
 <script lang="ts">
-  import { useKeymap } from '../../lib/keymap.svelte'
+  import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { setMode } from '../../state/actions'
   import { library, withMeta } from '../../state/library.svelte'
   import { prioritize } from '../../state/loading'
@@ -106,9 +106,9 @@
     {/if}
     <div class="film-row">
       <span class="film-count">{index + 1}<span class="muted">{` / ${count}`}</span></span>
-      <Button variant="icon" icon="prev" title="Previous (←)" disabled={index <= 0} onclick={() => selection.step(-1)} />
+      <Button variant="icon" icon="prev" title={`Previous (${hint(SINGLE.actions.prev)})`} disabled={index <= 0} onclick={() => selection.step(-1)} />
       <Filmstrip assets={strip} {board} focus={selection.focus} onSelect={(name) => selection.select(name)} onSeen={(a) => prioritize(a.path)} />
-      <Button variant="icon" icon="next" title="Next (→)" disabled={index >= count - 1} onclick={() => selection.step(1)} />
+      <Button variant="icon" icon="next" title={`Next (${hint(SINGLE.actions.next)})`} disabled={index >= count - 1} onclick={() => selection.step(1)} />
     </div>
   </div>
 </div>

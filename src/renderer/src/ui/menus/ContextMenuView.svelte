@@ -132,7 +132,7 @@
 
   /* Destructive items highlight in their own colour rather than neutral white. */
   .ctx-item.danger.active {
-    background: rgba(255, 107, 107, 0.12);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
   }
 
   .ctx-icon {

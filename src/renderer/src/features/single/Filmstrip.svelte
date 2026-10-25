@@ -8,6 +8,7 @@
   import { expoOut } from 'svelte/easing'
   import { Tween } from 'svelte/motion'
   import type { Artboard } from '@shared/types'
+  import { trackPointer } from '../../lib/drag'
   import { reducedMotion } from '../../lib/motion'
   import type { Asset } from '../../state/library.svelte'
   import { FILM_GAP, FILM_HEIGHT, FILM_PAD } from './film'
@@ -78,35 +79,33 @@
   let dragging = $state(false)
   function onpointerdown(e: PointerEvent) {
     if (e.button !== 0) return
-    const x0 = e.clientX
     const left0 = strip.scrollLeft
     let samples: { t: number; x: number }[] = [{ t: performance.now(), x: e.clientX }]
-    const move = (ev: PointerEvent) => {
-      if (!dragging && Math.abs(ev.clientX - x0) < 4) return
-      if (!dragging) {
-        dragging = true
-        hold()
-        strip.setPointerCapture(e.pointerId)
-      }
-      strip.scrollLeft = left0 - (ev.clientX - x0)
-      const now = performance.now()
-      samples = [...samples.filter((p) => now - p.t < 80), { t: now, x: ev.clientX }]
-    }
-    const up = () => {
-      strip.removeEventListener('pointermove', move)
-      strip.removeEventListener('pointerup', up)
-      strip.removeEventListener('pointercancel', up)
-      if (!dragging) return
-      dragging = false
-      swallowClick = true
-      const first = samples[0]
-      const last = samples[samples.length - 1]
-      const velocity = last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0 // px/ms
-      settleAt(strip.scrollLeft - velocity * MOMENTUM_MS)
-    }
-    strip.addEventListener('pointermove', move)
-    strip.addEventListener('pointerup', up)
-    strip.addEventListener('pointercancel', up)
+    trackPointer(
+      e,
+      {
+        slop: 4,
+        start: () => {
+          dragging = true
+          hold()
+        },
+        move: (ev) => {
+          strip.scrollLeft = left0 - (ev.clientX - e.clientX)
+          const now = performance.now()
+          samples = [...samples.filter((p) => now - p.t < 80), { t: now, x: ev.clientX }]
+        },
+        end: (dragged) => {
+          if (!dragged) return
+          dragging = false
+          swallowClick = true
+          const first = samples[0]
+          const last = samples[samples.length - 1]
+          const velocity = last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0 // px/ms
+          settleAt(strip.scrollLeft - velocity * MOMENTUM_MS)
+        }
+      },
+      strip
+    )
   }
   function onclickcapture(e: MouseEvent) {
     if (!swallowClick) return

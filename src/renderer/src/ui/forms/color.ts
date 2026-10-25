@@ -2,12 +2,12 @@
 
 export type Hsv = { h: number; s: number; v: number }
 
-export function hexToRgb(hex: string): [number, number, number] {
+function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16)
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-export const rgbToHex = (r: number, g: number, b: number): string => '#' + [r, g, b].map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')
+const rgbToHex = (r: number, g: number, b: number): string => '#' + [r, g, b].map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')
 
 export function toHsv(hex: string): Hsv {
   const [r, g, b] = hexToRgb(hex).map((c) => c / 255)

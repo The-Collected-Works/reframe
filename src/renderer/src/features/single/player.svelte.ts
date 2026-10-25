@@ -2,6 +2,7 @@ import { untrack } from 'svelte'
 import { drawFrame } from '@shared/layout'
 import type { Artboard, CropSettings } from '@shared/types'
 import { api, mediaUrl } from '../../lib/bridge'
+import { releaseVideo, silentVideo } from '../../lib/media'
 import type { Asset } from '../../state/library.svelte'
 import { showToast } from '../../ui'
 
@@ -18,21 +19,6 @@ export interface PlayerOptions {
   /** How trim previews frame the video. */
   board: () => Artboard
   settings: () => CropSettings
-}
-
-const release = (v: HTMLVideoElement) => {
-  v.pause()
-  v.removeAttribute('src')
-  v.load()
-}
-
-const hiddenVideo = (src: string) => {
-  const v = document.createElement('video')
-  v.muted = true
-  v.preload = 'auto'
-  v.crossOrigin = 'anonymous'
-  v.src = src
-  return v
 }
 
 /**
@@ -85,7 +71,7 @@ export class Player {
     v.src = mediaUrl(path)
     this.el = v
     const fail = () => {
-      release(v)
+      releaseVideo(v)
       this.unplayable = true
     }
     v.addEventListener('error', fail, { once: true })
@@ -104,8 +90,8 @@ export class Player {
 
   destroy(): void {
     this.stop()
-    release(this.el)
-    if (this.previews) release(this.previews.v)
+    releaseVideo(this.el)
+    if (this.previews) releaseVideo(this.previews.v)
   }
 
   private effects() {
@@ -121,7 +107,7 @@ export class Player {
           .scrubProxy(path, w, h, color)
           .then((proxyPath) => {
             if (!alive) return
-            const v = (pv = hiddenVideo(mediaUrl(proxyPath)))
+            const v = (pv = silentVideo(mediaUrl(proxyPath)))
             v.addEventListener('loadeddata', () => alive && (this.proxy = v), { once: true })
             v.addEventListener('seeked', () => {
               if (this.scrubSrc === v) this.frame++
@@ -136,7 +122,7 @@ export class Player {
       return () => {
         alive = false
         clearTimeout(timer)
-        if (pv) release(pv)
+        if (pv) releaseVideo(pv)
       }
     })
 
@@ -293,7 +279,7 @@ export class Player {
   preview(canvas: HTMLCanvasElement, t: number): void {
     let s = this.previews
     if (!s) {
-      const v = hiddenVideo(this.proxy?.src ?? mediaUrl(this.opts.asset().path))
+      const v = silentVideo(this.proxy?.src ?? mediaUrl(this.opts.asset().path))
       const state = { v, pending: null as number | null, canvas: null as HTMLCanvasElement | null }
       const paint = () => {
         const c = state.canvas

@@ -9,7 +9,7 @@ import type { UpdateStatus } from '@shared/types'
  * place, and macOS only lets signed apps replace themselves; both keep the download link instead.
  * The installer leaves its uninstaller beside the exe, which the zip doesn't have.
  */
-export function canAutoUpdate(): boolean {
+function canAutoUpdate(): boolean {
   if (!app.isPackaged || process.platform !== 'win32') return false
   return existsSync(join(dirname(process.execPath), 'Uninstall Reframe.exe'))
 }

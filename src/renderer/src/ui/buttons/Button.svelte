@@ -86,7 +86,7 @@
   /* The main action: an accent tint (like the destructive red, in blue), not a solid fill. */
   .primary {
     padding: 0 14px;
-    background: rgba(110, 155, 255, 0.18);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
     color: #a8c2ff;
     font-weight: 600;
   }
@@ -96,7 +96,7 @@
   }
 
   .primary:hover:not(:disabled) {
-    background: rgba(110, 155, 255, 0.28);
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
     color: #c3d5ff;
   }
 
@@ -169,7 +169,7 @@
   }
 
   .danger:hover:not(:disabled) {
-    background: rgba(255, 107, 107, 0.12);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
   }
 
   /* A destructive toggle that's on (leaving assets out): tinted red; part-way on, dimmer. */
@@ -183,12 +183,12 @@
   }
 
   .icon.danger.pressed {
-    background: rgba(255, 107, 107, 0.14);
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
   }
 
   .icon.danger.mixed {
     color: color-mix(in srgb, var(--danger) 55%, var(--muted));
-    background: rgba(255, 107, 107, 0.06);
+    background: color-mix(in srgb, var(--danger) 6%, transparent);
   }
 
   /* Armed (the eyedropper while it's picking). */

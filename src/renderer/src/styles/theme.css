@@ -19,8 +19,10 @@
   --muted: #8b8b93;
   --faint: #55555c;
   --accent: #6e9bff;
-  --accent-soft: rgba(110, 155, 255, 0.16);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --danger: #ff6b6b;
+  /* Snapping guides, drawn over the media. */
+  --guide: #ff4f8b;
 
   /* Tints instead of strokes: fields and tracks, hover, selected. */
   --tint-1: rgba(255, 255, 255, 0.045);

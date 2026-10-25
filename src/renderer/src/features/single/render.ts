@@ -1,10 +1,9 @@
 import { computeLayout, corners, drawFrame } from '@shared/layout'
 import type { Artboard, CropSettings } from '@shared/types'
+import { themeColor } from '../../lib/theme'
 import type { Guides } from '../snapping'
 import type { View } from './camera.svelte'
 
-const ACCENT = '#6e9bff'
-const GUIDE = '#ff4f8b'
 const HANDLE = 4.5
 
 export interface Frame {
@@ -69,7 +68,7 @@ export function drawStage(ctx: CanvasRenderingContext2D, f: Frame): void {
     if (!f.hover) return
     ctx.save()
     ctx.lineWidth = dpr
-    ctx.strokeStyle = ACCENT
+    ctx.strokeStyle = themeColor('--accent')
     outline()
     ctx.restore()
     return
@@ -83,7 +82,7 @@ export function drawStage(ctx: CanvasRenderingContext2D, f: Frame): void {
   // Transform box and handles.
   ctx.save()
   ctx.lineWidth = dpr
-  ctx.strokeStyle = ACCENT
+  ctx.strokeStyle = themeColor('--accent')
   outline()
   const hs = HANDLE * dpr
   for (const pt of box) {
@@ -97,7 +96,7 @@ export function drawStage(ctx: CanvasRenderingContext2D, f: Frame): void {
   }
 
   // Smart guides.
-  ctx.strokeStyle = GUIDE
+  ctx.strokeStyle = themeColor('--guide')
   const ext = 14 * dpr
   ctx.beginPath()
   for (const x of f.guides.x) {

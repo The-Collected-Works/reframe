@@ -1,3 +1,4 @@
+import { trackPointer } from '../../lib/drag'
 import { selection } from '../../state/selection.svelte'
 import { view } from '../../state/view.svelte'
 import { clearSelection } from '../../state/actions'
@@ -19,11 +20,9 @@ export function boxSelect(e: PointerEvent, el: HTMLElement, marquee: HTMLElement
   const start = toContent(e.clientX, e.clientY)
   const order = view.visible.map((a) => a.name)
   let last = { x: e.clientX, y: e.clientY }
-  let dragging = false
   let raf = 0
   let cells: { name: string; x: number; y: number; w: number; h: number }[] = []
   let shown = selection.names
-  el.setPointerCapture(e.pointerId)
 
   const update = () => {
     const p = toContent(last.x, last.y)
@@ -44,30 +43,29 @@ export function boxSelect(e: PointerEvent, el: HTMLElement, marquee: HTMLElement
     }
     raf = requestAnimationFrame(autoscroll)
   }
-  const move = (ev: PointerEvent) => {
-    last = { x: ev.clientX, y: ev.clientY }
-    if (!dragging && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 4) return
-    if (!dragging) {
-      dragging = true
-      cells = [...el.querySelectorAll<HTMLElement>('.cell')].map((c) => {
-        const r = c.getBoundingClientRect()
-        return { name: c.dataset.name!, x: r.left - box.left + el.scrollLeft, y: r.top - box.top + el.scrollTop, w: r.width, h: r.height }
-      })
-      raf = requestAnimationFrame(autoscroll)
-    }
-    update()
-  }
-  const up = () => {
-    cancelAnimationFrame(raf)
-    el.removeEventListener('pointermove', move)
-    el.removeEventListener('pointerup', up)
-    el.removeEventListener('pointercancel', up)
-    marquee.style.display = 'none'
-    if (dragging) return
-    if (cellEl) selection.select(cellEl.dataset.name!, e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : 'replace')
-    else if (!additive) clearSelection()
-  }
-  el.addEventListener('pointermove', move)
-  el.addEventListener('pointerup', up)
-  el.addEventListener('pointercancel', up)
+  trackPointer(
+    e,
+    {
+      slop: 4,
+      start: () => {
+        cells = [...el.querySelectorAll<HTMLElement>('.cell')].map((c) => {
+          const r = c.getBoundingClientRect()
+          return { name: c.dataset.name!, x: r.left - box.left + el.scrollLeft, y: r.top - box.top + el.scrollTop, w: r.width, h: r.height }
+        })
+        raf = requestAnimationFrame(autoscroll)
+      },
+      move: (ev) => {
+        last = { x: ev.clientX, y: ev.clientY }
+        update()
+      },
+      end: (dragged) => {
+        cancelAnimationFrame(raf)
+        marquee.style.display = 'none'
+        if (dragged) return
+        if (cellEl) selection.select(cellEl.dataset.name!, e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : 'replace')
+        else if (!additive) clearSelection()
+      }
+    },
+    el
+  )
 }

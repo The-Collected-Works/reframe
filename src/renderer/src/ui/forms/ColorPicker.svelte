@@ -6,6 +6,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import { untrack } from 'svelte'
+  import { trackPointer } from '../../lib/drag'
   import ColorField from './ColorField.svelte'
   import { toHex, toHsv, type Hsv } from './color'
 
@@ -40,21 +41,13 @@
   function drag(e: PointerEvent, to: (x: number, y: number) => void, inset = 0) {
     if (e.button !== 0) return
     const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
     el.focus()
     const at = (ev: PointerEvent) => {
       const r = el.getBoundingClientRect()
       to(clamp((ev.clientX - r.left - inset) / (r.width - inset * 2)), clamp((ev.clientY - r.top) / r.height))
     }
     at(e)
-    const up = () => {
-      el.removeEventListener('pointermove', at)
-      el.removeEventListener('pointerup', up)
-      el.removeEventListener('pointercancel', up)
-    }
-    el.addEventListener('pointermove', at)
-    el.addEventListener('pointerup', up)
-    el.addEventListener('pointercancel', up)
+    trackPointer(e, { move: at })
   }
 
   const STEPS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }

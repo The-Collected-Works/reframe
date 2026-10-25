@@ -8,9 +8,11 @@
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'
   import type { Artboard } from '@shared/types'
-  import { combo, MOD } from '../../lib/keys'
+  import { trackPointer } from '../../lib/drag'
+  import { hint } from '../../lib/keymap.svelte'
   import { reducedMotion } from '../../lib/motion'
   import { Icon } from '../../ui'
+  import { GLOBAL } from '../keymaps'
   import ArtboardEditor from './ArtboardEditor.svelte'
 
   type Patch = Partial<Pick<Artboard, 'name' | 'width' | 'height'>>
@@ -114,27 +116,16 @@
   let swallowClick = false
   const onpointerdown = (e: PointerEvent) => {
     if (e.button !== 0 || el.scrollWidth <= el.clientWidth) return
-    const x0 = e.clientX
     const left0 = el.scrollLeft
-    const move = (ev: PointerEvent) => {
-      if (!dragging && Math.abs(ev.clientX - x0) < 4) return
-      if (!dragging) {
-        dragging = true
-        el.setPointerCapture(e.pointerId)
+    trackPointer(e, {
+      slop: 4,
+      start: () => (dragging = true),
+      move: (ev) => (el.scrollLeft = left0 - (ev.clientX - e.clientX)),
+      end: (dragged) => {
+        dragging = false
+        swallowClick = dragged
       }
-      el.scrollLeft = left0 - (ev.clientX - x0)
-    }
-    const up = () => {
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerup', up)
-      el.removeEventListener('pointercancel', up)
-      if (!dragging) return
-      dragging = false
-      swallowClick = true
-    }
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
-    el.addEventListener('pointercancel', up)
+    })
   }
   const onclickcapture = (e: MouseEvent) => {
     if (swallowClick) {
@@ -167,7 +158,7 @@
       {:else}
         <button
           class={['tab', { on: b.id === current, editing: editing === b.id }]}
-          title={b.id === current ? 'Edit artboard' : i < 9 ? combo(MOD, String(i + 1)) : undefined}
+          title={b.id === current ? 'Edit artboard' : i < 9 ? hint(GLOBAL.actions.board, i) : undefined}
           onclick={(e) => {
             if (b.id !== current) return onSelect(b.id)
             if ((e.target as Element).closest('.name')) {
@@ -292,7 +283,7 @@
   }
 
   .rename::selection {
-    background: rgba(110, 155, 255, 0.4);
+    background: color-mix(in srgb, var(--accent) 40%, transparent);
   }
 
   /* On the current tab the name is the rename target. */

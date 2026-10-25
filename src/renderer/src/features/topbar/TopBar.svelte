@@ -5,13 +5,14 @@
 -->
 <script lang="ts">
   import { api } from '../../lib/bridge'
-  import { combo, MOD } from '../../lib/keys'
+  import { hint } from '../../lib/keymap.svelte'
   import { addBoard, collapseAll, deleteBoard, duplicateBoard, openFolder, resetView, setMode, setViewPrefs } from '../../state/actions'
   import { library } from '../../state/library.svelte'
   import { project } from '../../state/project.svelte'
   import { shell } from '../../state/shell.svelte'
   import { view } from '../../state/view.svelte'
   import { Button, Segmented, Slider } from '../../ui'
+  import { GLOBAL } from '../keymaps'
   import { boardMenu } from '../menus'
   import AddArtboard from './AddArtboard.svelte'
   import AppInfo from './AppInfo.svelte'
@@ -82,12 +83,14 @@
         compact
         value={view.mode}
         options={[
-          { value: 'grid', icon: 'grid', title: 'Grid (E)' },
-          { value: 'single', icon: 'single', title: 'Single (E)' }
+          { value: 'grid', icon: 'grid', title: `Grid (${hint(GLOBAL.actions.switchView)})` },
+          { value: 'single', icon: 'single', title: `Single (${hint(GLOBAL.actions.switchView)})` }
         ]}
         onChange={setMode}
       />
-      <Button variant="primary" icon="export" iconSize={14} onclick={() => (shell.exportOpen = true)} title={`Export (${combo(MOD, 'E')})`}>Export</Button>
+      <Button variant="primary" icon="export" iconSize={14} onclick={() => (shell.exportOpen = true)} title={`Export (${hint(GLOBAL.actions.exportAll)})`}
+        >Export</Button
+      >
     </div>
   {/if}
   <AppInfo />

@@ -1,5 +1,6 @@
 <!-- Numeric input that commits on enter/blur, steps with arrow keys, and scrubs by dragging its label. -->
 <script lang="ts">
+  import { trackPointer } from '../../lib/drag'
   import { middleReset } from './middle-reset'
 
   let {
@@ -48,19 +49,8 @@
   }
   const scrub = (e: PointerEvent) => {
     if (e.button !== 0) return
-    const startX = e.clientX
     const start = value
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
-    const move = (ev: PointerEvent) => onChange(clampv(start + (ev.clientX - startX) * step * (ev.shiftKey ? 10 : 1)))
-    const up = () => {
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerup', up)
-      el.removeEventListener('pointercancel', up)
-    }
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
-    el.addEventListener('pointercancel', up)
+    trackPointer(e, { move: (ev) => onChange(clampv(start + (ev.clientX - e.clientX) * step * (ev.shiftKey ? 10 : 1))) })
   }
   const onkeydown = (e: KeyboardEvent) => {
     const input = e.target as HTMLInputElement

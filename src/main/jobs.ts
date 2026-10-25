@@ -24,7 +24,7 @@ function ffmpegPath(): string {
 }
 
 /** Where posters and scrub proxies are cached (the worker writes them; media serves proxies). */
-export const cacheDir = (): string => join(app.getPath('userData'), 'posters')
+const cacheDir = (): string => join(app.getPath('userData'), 'posters')
 
 let worker: UtilityProcess | null = null
 let nextId = 1

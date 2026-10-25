@@ -45,7 +45,7 @@ export function resolveSettings(board: Artboard, name: string): CropSettings {
   return o ? { ...board.defaults, ...o } : board.defaults
 }
 
-export const rad = (deg: number): number => (deg * Math.PI) / 180
+const rad = (deg: number): number => (deg * Math.PI) / 180
 
 /** Wraps degrees into (-180, 180]. */
 export function normDeg(deg: number): number {

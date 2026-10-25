@@ -257,9 +257,9 @@
     display: none;
     position: absolute;
     z-index: 5;
-    border: 1px solid rgba(110, 155, 255, 0.8);
+    border: 1px solid color-mix(in srgb, var(--accent) 80%, transparent);
     border-radius: 2px;
-    background: rgba(110, 155, 255, 0.1);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
     pointer-events: none;
     animation: fade 120ms var(--ease) both;
   }

@@ -3,9 +3,10 @@
   the open one leads). Each recent folder can be dropped from the list.
 -->
 <script lang="ts">
-  import { combo, MOD } from '../../lib/keys'
+  import { hint } from '../../lib/keymap.svelte'
   import { basename, samePath } from '../../lib/paths'
   import { Icon, MenuItem, MenuLabel, MenuSeparator, Popover } from '../../ui'
+  import { GLOBAL } from '../keymaps'
 
   let {
     dir,
@@ -52,7 +53,7 @@
   </button>
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
-      <MenuItem detail={combo(MOD, 'O')} onclick={() => pick()}>Open Folder…</MenuItem>
+      <MenuItem detail={hint(GLOBAL.actions.openFolder)} onclick={() => pick()}>Open Folder…</MenuItem>
       {#if shown.length > 0}
         <MenuSeparator />
         <MenuLabel>Recent</MenuLabel>

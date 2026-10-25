@@ -7,7 +7,7 @@
   import { DEFAULT_SETTINGS, normDeg, resolveSettings } from '@shared/layout'
   import type { CropSettings, FitMode, SettingKey } from '@shared/types'
   import { fmtSize, fmtTime, plural } from '../../lib/format'
-  import { combo, MOD, SHIFT } from '../../lib/keys'
+  import { hint } from '../../lib/keymap.svelte'
   import { clearSelection, copy, edit, editEach, makeDefault, paste, resetKeys, resetSelection } from '../../state/actions'
   import { library, type Asset } from '../../state/library.svelte'
   import { hasOverrides } from '../../state/model/project'
@@ -16,6 +16,7 @@
   import { selection } from '../../state/selection.svelte'
   import { shell } from '../../state/shell.svelte'
   import { Button, ColorPicker, Icon, NumberField, Segmented, Slider, Tag, Toggle } from '../../ui'
+  import { GLOBAL } from '../keymaps'
   import { ZOOM_MAX, ZOOM_MIN } from '../snapping'
   import AnchorGrid from './AnchorGrid.svelte'
   import { pickBackground } from './eyedropper'
@@ -95,7 +96,9 @@
     <!-- Breadcrumb: the artboard's defaults are the parent of whatever is selected. -->
     <nav class="crumbs">
       {#if editing}
-        <button class="crumb" title="Edit the defaults every asset follows (Esc)" onclick={() => clearSelection()}>{board.name}</button>
+        <button class="crumb" title={`Edit the defaults every asset follows (${hint(GLOBAL.actions.back)})`} onclick={() => clearSelection()}
+          >{board.name}</button
+        >
         <span class="crumb-sep"><Icon name="next" size={12} /></span>
         <span class="crumb current" title={names.length === 1 ? primary! : title}>{title}</span>
       {:else}
@@ -189,7 +192,13 @@
       />
       {#if s.bg === 'color'}
         <ColorPicker value={s.bgColor} onChange={(bgColor) => edit({ bgColor })} onReset={back('bgColor')}>
-          <Button variant="icon" icon="pipette" tone={shell.picking ? 'accent' : undefined} title="Pick from media (I)" onclick={pickBackground} />
+          <Button
+            variant="icon"
+            icon="pipette"
+            tone={shell.picking ? 'accent' : undefined}
+            title={`Pick from media (${hint(GLOBAL.actions.pick)})`}
+            onclick={pickBackground}
+          />
         </ColorPicker>
       {:else}
         <div class="slider-row">
@@ -208,7 +217,9 @@
 
   {#if editing}
     <footer class="insp-foot">
-      <Button icon="reset" iconSize={14} disabled={!anyOverride} title={`Reset to defaults (${combo(MOD, SHIFT, 'R')})`} onclick={resetSelection}>Reset</Button>
+      <Button icon="reset" iconSize={14} disabled={!anyOverride} title={`Reset to defaults (${hint(GLOBAL.actions.reset)})`} onclick={resetSelection}
+        >Reset</Button
+      >
       <div class="spacer"></div>
       <!-- Whether the selection is left out of this artboard's export. Not a framing setting, so it
            sits apart from them; Reset leaves it alone. -->
@@ -221,8 +232,15 @@
         title={`Leave out of the ${board.name} export`}
         onclick={() => edit({ skip: exported > 0 })}
       />
-      <Button variant="icon" icon="copy" iconSize={14} title={`Copy settings (${combo(MOD, 'C')})`} onclick={copy} disabled={!selection.focus} />
-      <Button variant="icon" icon="paste" iconSize={14} title={`Paste settings (${combo(MOD, 'V')})`} onclick={paste} disabled={!project.clipboard} />
+      <Button variant="icon" icon="copy" iconSize={14} title={`Copy settings (${hint(GLOBAL.actions.copy)})`} onclick={copy} disabled={!selection.focus} />
+      <Button
+        variant="icon"
+        icon="paste"
+        iconSize={14}
+        title={`Paste settings (${hint(GLOBAL.actions.paste)})`}
+        onclick={paste}
+        disabled={!project.clipboard}
+      />
     </footer>
   {/if}
 </aside>
