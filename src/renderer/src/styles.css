@@ -593,12 +593,15 @@ input {
 /* Headers reach out through the scroller's padding (and as wide as that makes it): to the window's
    left edge and up to the scrollbar; the text lines up with the thumbnails. They stick while their
    folder scrolls by, a subfolder's sliding over its parent's, so the top bar always shows the full
-   path to where you are. Translucent and blurred, so thumbnails passing beneath still show faintly. */
+   path to where you are. In place, a header is see-through and its folder's box (tint and all) is
+   the only surface; only while stuck does it get a bar of its own, translucent and blurred, so
+   thumbnails passing beneath still show faintly. */
 .grid-section {
   position: sticky;
   /* Flush with the top: sticky offsets start inside the scroller's 26px top padding. */
   top: -26px;
   z-index: 2;
+  container-type: scroll-state;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -606,41 +609,51 @@ input {
   height: 42px;
   margin: 0 -16px 0 -26px;
   padding: 0 26px 0 36px;
-  background: rgba(11, 11, 12, 0.86);
-  backdrop-filter: blur(16px) saturate(140%);
   color: var(--muted);
   font-weight: 500;
   text-align: left;
 }
 
-/* The header's dark bar masks its folder's tint, so it carries the card across its own row with a
-   matching inset layer: the card's shade (--well with 2.5% white) as a colour of its own (a faint
-   white layer over the bar blends unevenly and shows bands). Rounded at the card's top, and all
-   round when the folder is collapsed (the card is then just the bar). */
-.grid-section::before {
+/* The stuck bar (::before), the same colour as the window behind it, and over it the folder's tint
+   (::after), which the bar would otherwise hide: the card's shade (--well with 2.5% white) as a
+   colour of its own (a faint white layer over the bar blends unevenly and shows bands), inset to
+   the card's width and rounded where the card's top would be. */
+.grid-section::before,
+.grid-section::after {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.grid-section::after {
   left: 16px;
   right: 6px;
-  z-index: -1;
   background: rgba(17, 17, 18, 0.86);
   opacity: 0;
-  pointer-events: none;
   transition: opacity 220ms var(--ease);
 }
 
-.grid-folder:has(> .grid-section:not(.excluded):hover) .grid-section:not(.excluded)::before {
+@container scroll-state(stuck: top) {
+  .grid-section::before,
+  .grid-section::after {
+    visibility: visible;
+  }
+
+  .grid-section::before {
+    background: rgba(11, 11, 12, 0.86);
+    backdrop-filter: blur(16px) saturate(140%);
+  }
+}
+
+.grid-folder:has(> .grid-section:not(.excluded):hover) .grid-section:not(.excluded)::after {
   opacity: 1;
 }
 
-.grid-folder:has(> .grid-section:not(.excluded):hover) > .grid-section::before {
+.grid-folder:has(> .grid-section:not(.excluded):hover) > .grid-section::after {
   border-radius: 12px 12px 0 0;
-}
-
-.grid-folder.collapsed:has(> .grid-section:not(.excluded):hover) > .grid-section::before {
-  border-radius: 12px;
 }
 
 /* Folding a folder open and closed: the body animates between no height and its content's. Only
