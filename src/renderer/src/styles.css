@@ -612,7 +612,8 @@ input {
   align-items: center;
   gap: 10px;
   width: calc(100% + 42px);
-  height: 42px;
+  /* About 20px above and below the icons, as at the sides. */
+  height: 54px;
   margin: 0 -16px 0 -26px;
   padding: 0 26px 0 36px;
   color: var(--muted);
