@@ -3,6 +3,7 @@
   scroll position. While hidden its board is frozen, so edits don't redraw every cell.
 -->
 <script lang="ts">
+  import { useKeymap } from '../../lib/keymap.svelte'
   import { basename } from '../../lib/paths'
   import { includeFolder, setMode, toggleCollapsed } from '../../state/actions'
   import { library, withMeta } from '../../state/library.svelte'
@@ -43,6 +44,38 @@
   })
   // Exact (fractional) widths, so no rounding leftover piles up on the right.
   const cellW = $derived(width > 0 ? (width - GAP * (cols - 1)) / cols : 0)
+
+  // Arrows move the focus (up and down by position on screen); Space opens it, like Quick Look.
+  useKeymap(
+    [
+      { keys: 'space', when: () => !!selection.focus, run: () => setMode('single') },
+      { keys: 'arrowright', run: () => selection.step(1) },
+      { keys: 'arrowleft', run: () => selection.step(-1) },
+      { keys: 'arrowdown', run: () => stepRow(1) },
+      { keys: 'arrowup', run: () => stepRow(-1) }
+    ],
+    () => active
+  )
+
+  /**
+   * To the nearest thumbnail in the next row that way, by position on screen, so folder headers
+   * and short last rows don't throw it off.
+   */
+  function stepRow(dir: 1 | -1): void {
+    const cur = el.querySelector<HTMLElement>('.cell.focused')
+    if (!cur) return selection.step(dir)
+    const r = cur.getBoundingClientRect()
+    const cx = r.left + r.width / 2
+    let best: { name: string; dy: number; dx: number } | null = null
+    for (const c of el.querySelectorAll<HTMLElement>('.cell')) {
+      const q = c.getBoundingClientRect()
+      const dy = (q.top - r.top) * dir
+      if (dy < 2) continue
+      const dx = Math.abs(q.left + q.width / 2 - cx)
+      if (!best || dy < best.dy - 2 || (Math.abs(dy - best.dy) <= 2 && dx < best.dx)) best = { name: c.dataset.name!, dy, dx }
+    }
+    if (best) selection.select(best.name)
+  }
 
   provideGrid({
     get cols() {

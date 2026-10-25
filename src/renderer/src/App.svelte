@@ -7,19 +7,21 @@
   import { onMount } from 'svelte'
   import ExportDialog from './features/export/ExportDialog.svelte'
   import Grid from './features/grid/Grid.svelte'
+  import { finishPick } from './features/inspector/eyedropper'
   import Inspector from './features/inspector/Inspector.svelte'
-  import { onShortcut } from './features/shortcuts'
+  import { blocked, quiet, SHORTCUTS } from './features/shortcuts'
   import SingleView from './features/single/SingleView.svelte'
   import TopBar from './features/topbar/TopBar.svelte'
   import { api } from './lib/bridge'
   import { FileDrop, refuseDrop } from './lib/file-drop.svelte'
+  import { keyHandler } from './lib/keymap.svelte'
   import { basename } from './lib/paths'
   import { openFolder, rescanFolder } from './state/actions'
   import { autosave } from './state/autosave.svelte'
   import { library } from './state/library.svelte'
   import { shell } from './state/shell.svelte'
   import { view } from './state/view.svelte'
-  import { ContextMenu, Icon, Toast } from './ui'
+  import { ContextMenu, Eyedropper, Icon, Toast } from './ui'
 
   let booted = $state(false)
   // Reopen the last folder on launch.
@@ -56,11 +58,13 @@
 
   // The viewport (or the empty state) takes dropped folders, and only it tints: the top bar sits
   // under the OS-drawn window controls, which couldn't follow the tint in step.
+  const keys = keyHandler(SHORTCUTS, { blocked, quiet })
+
   const drop = new FileDrop((file) => openFolder(api.pathForFile(file)))
 </script>
 
 <svelte:window
-  onkeydown={onShortcut}
+  onkeydown={keys}
   onkeydowncapture={(e) => e.key === 'Tab' && (keyboardNav = true)}
   onpointerdowncapture={() => (keyboardNav = false)}
   ondragover={refuseDrop}
@@ -89,6 +93,7 @@
   {/if}
   {#if library.dir && library.assets.length === 0}<div class="empty-hint center">No images or videos in this folder</div>{/if}
   {#if shell.exportOpen}<ExportDialog />{/if}
+  {#if shell.picking}<Eyedropper onPick={finishPick} onCancel={() => finishPick(null)} />{/if}
   <Toast />
   <ContextMenu />
 </div>

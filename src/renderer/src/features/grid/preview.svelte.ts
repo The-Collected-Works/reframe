@@ -29,6 +29,7 @@ export class HoverPreview {
   video: HTMLVideoElement | null = null
   readonly fade = new Tween(0, { duration: 180, easing: cubicOut })
   private ready = $state(false)
+  private held = false
 
   /** `enabled`: the grid is showing and the eyedropper isn't (it needs the exact thumbnail). */
   constructor(asset: () => Asset, clip: () => Clip | undefined, enabled: () => boolean, redraw: () => void) {
@@ -75,6 +76,7 @@ export class HoverPreview {
         if (!alive) return
         // A previous hover may still be fading out; this one takes over from its current opacity.
         if (this.video && this.video !== v) release(this.video)
+        if (this.held) v.pause()
         this.video = v
         this.fade.target = 1
         onFrame()
@@ -92,5 +94,18 @@ export class HoverPreview {
         })
       }
     })
+  }
+
+  /**
+   * While the thumbnail is dragged, the video holds still on its frame: playing, it would redraw
+   * the cell every frame on top of the drag's own redraws. It plays on when let go.
+   */
+  hold(on: boolean): void {
+    this.held = on
+    const v = this.video
+    if (!v || !this.ready) return
+    if (on) v.pause()
+    // Its frame callback is still waiting, and picks up again with the next frame.
+    else v.play().catch(() => {})
   }
 }

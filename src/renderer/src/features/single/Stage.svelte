@@ -7,6 +7,7 @@
   import { untrack } from 'svelte'
   import { bounds, computeLayout, type Point } from '@shared/layout'
   import type { Artboard, CropSettings, SettingKey } from '@shared/types'
+  import { useKeymap } from '../../lib/keymap.svelte'
   import { combo, MOD } from '../../lib/keys'
   import { loadStill } from '../../lib/media'
   import { crossfade, fly, settledRect, snapshot } from '../../lib/motion'
@@ -325,22 +326,14 @@
     }
   }
 
-  // ⌘/Ctrl+0 fits; ⌘/Ctrl +/− zoom about the centre.
-  function onkeydown(e: KeyboardEvent) {
-    if (!(e.metaKey || e.ctrlKey) || (e.target as HTMLElement).closest?.('input, textarea')) return
-    if (e.key === '0') fitView()
-    else if (e.key === '=' || e.key === '+') zoomView(1.25, width / 2, height / 2)
-    else if (e.key === '-') zoomView(0.8, width / 2, height / 2)
-    else return
-    e.preventDefault()
-  }
-  // Esc deselects first (in the capture phase, before the app-wide Esc goes back to the grid).
-  function onkeydowncapture(e: KeyboardEvent) {
-    if (!selected || e.key !== 'Escape' || picking || (e.target as HTMLElement).closest?.('input, textarea')) return
-    e.preventDefault()
-    e.stopImmediatePropagation()
-    selected = false
-  }
+  // ⌘/Ctrl+0 fits; ⌘/Ctrl +/− zoom about the centre. Esc deselects first (before the app's Esc
+  // goes back to the grid).
+  useKeymap([
+    { keys: 'mod+0', run: () => fitView() },
+    { keys: ['mod+=', 'mod++'], run: () => zoomView(1.25, width / 2, height / 2) },
+    { keys: 'mod+-', run: () => zoomView(0.8, width / 2, height / 2) },
+    { keys: 'escape', when: () => selected, run: () => (selected = false) }
+  ])
 
   /** Drags the view; a click that never moves calls `onClick` instead. */
   function startPan(e: PointerEvent, onClick?: () => void) {
@@ -446,8 +439,6 @@
   }
 </script>
 
-<svelte:window {onkeydown} {onkeydowncapture} />
-
 <div
   class="stage"
   role="presentation"
@@ -468,7 +459,7 @@
     if (asset) onMenu({ x: e.clientX, y: e.clientY })
   }}
 >
-  <canvas bind:this={canvas} style:width={`${width}px`} style:height={`${height}px`} style:opacity={entering ? 0 : 1}></canvas>
+  <canvas bind:this={canvas} data-eyedropper style:width={`${width}px`} style:height={`${height}px`} style:opacity={entering ? 0 : 1}></canvas>
   {#if asset}
     <button
       class="zoom-chip"

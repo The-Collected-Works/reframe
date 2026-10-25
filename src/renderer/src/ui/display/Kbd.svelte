@@ -16,7 +16,7 @@
     place-items: center;
     border-radius: 5px;
     background: var(--tint-2);
-    color: var(--text);
+    color: var(--muted);
     /* (A 500 11px/1 here never applied: it was invalid CSS. This is what has always shown.) */
     font-family: inherit;
   }

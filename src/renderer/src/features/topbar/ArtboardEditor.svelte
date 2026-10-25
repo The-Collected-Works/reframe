@@ -1,14 +1,13 @@
 <!--
-  An artboard's settings, in a popover under its tab: name, size (or a preset size), duplicate and
-  delete. It opens ready to rename: the name focused and selected. Enter or clicking away keeps a
-  new name; Esc closes without it.
+  An artboard's settings, in a popover under its tab: its size (or a preset size), duplicate and
+  delete. It opens with the width focused, ready to type. (The name is renamed on the tab itself.)
 -->
 <script lang="ts">
   import type { Artboard } from '@shared/types'
   import { PRESETS } from '../../state/model/project'
-  import { Button, MenuSeparator, NumberField, Popover, TextField } from '../../ui'
+  import { Button, MenuSeparator, NumberField, Popover } from '../../ui'
 
-  type Patch = Partial<Pick<Artboard, 'name' | 'width' | 'height'>>
+  type Patch = Partial<Pick<Artboard, 'width' | 'height'>>
   let {
     board,
     open,
@@ -28,38 +27,12 @@
   } = $props()
 
   const size = (n: number) => Math.max(16, Math.min(8192, Math.round(n)))
-
-  // Focused once the popover is placed (it's hidden, so can't take focus, until then).
-  let nameInput: HTMLInputElement | undefined
-  const nameField = (input: HTMLInputElement) => {
-    nameInput = input
-    const raf = requestAnimationFrame(() => input.focus())
-    return () => cancelAnimationFrame(raf)
-  }
-  // Ahead of the popover's own Esc (which closes it): put the name back, so the blur as it closes
-  // changes nothing.
-  function onkeydowncapture(e: KeyboardEvent) {
-    if (open && e.key === 'Escape' && nameInput) nameInput.value = board.name
-  }
-  function rename(e: FocusEvent) {
-    const name = (e.currentTarget as HTMLInputElement).value.trim()
-    if (name) onChange({ name })
-  }
 </script>
-
-<svelte:window {onkeydowncapture} />
 
 <Popover {open} {onClose} padding={10}>
   <div class="editor">
-    <TextField
-      value={board.name}
-      {@attach nameField}
-      onfocus={(e) => e.currentTarget.select()}
-      onblur={rename}
-      onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-    />
     <div class="wh">
-      <NumberField label="W" value={board.width} min={16} max={8192} onChange={(v) => onChange({ width: size(v) })} />
+      <NumberField label="W" autofocus value={board.width} min={16} max={8192} onChange={(v) => onChange({ width: size(v) })} />
       <Button variant="icon" title="Swap" onclick={() => onChange({ width: board.height, height: board.width })}>⇄</Button>
       <NumberField label="H" value={board.height} min={16} max={8192} onChange={(v) => onChange({ height: size(v) })} />
     </div>

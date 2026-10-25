@@ -4,6 +4,7 @@
   inside take props.
 -->
 <script lang="ts">
+  import { useKeymap } from '../../lib/keymap.svelte'
   import { setMode } from '../../state/actions'
   import { library, withMeta } from '../../state/library.svelte'
   import { prioritize } from '../../state/loading'
@@ -65,15 +66,13 @@
     if (v && (v.currentTime < start || v.currentTime > end)) player?.seek(start)
   }
 
-  // Space plays and pauses.
-  function onkeydown(e: KeyboardEvent) {
-    if (e.code !== 'Space' || (e.target as HTMLElement).closest('input, textarea, button')) return
-    e.preventDefault()
-    player?.toggle()
-  }
+  // Space plays and pauses; any arrow steps through the strip.
+  useKeymap([
+    { keys: 'space', run: () => player?.toggle() },
+    { keys: ['arrowright', 'arrowdown'], run: () => selection.step(1) },
+    { keys: ['arrowleft', 'arrowup'], run: () => selection.step(-1) }
+  ])
 </script>
-
-<svelte:window {onkeydown} />
 
 <div class="single">
   <Stage

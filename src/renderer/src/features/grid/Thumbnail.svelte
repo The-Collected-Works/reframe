@@ -122,6 +122,7 @@
       const dx = (ev.clientX - x0) / kk
       const dy = (ev.clientY - y0) / kk
       if (!dragging && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return
+      if (!dragging) preview.hold(true)
       dragging = true
       const r = dragOffset(start, board.width, board.height, w, h, dx, dy, 5 / kk, { shift: ev.shiftKey, alt: ev.altKey })
       guides = r.guides
@@ -133,7 +134,8 @@
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)
       el.removeEventListener('pointercancel', up)
-      if (!dragging) g.click(name)
+      if (dragging) preview.hold(false)
+      else g.click(name)
     }
     el.addEventListener('pointermove', move)
     el.addEventListener('pointerup', up)
@@ -160,7 +162,7 @@
     onpointerenter={asset.kind === 'video' ? () => (preview.hovering = true) : undefined}
     onpointerleave={asset.kind === 'video' ? () => (preview.hovering = false) : undefined}
   >
-    <canvas bind:this={canvas} data-ready={ready || undefined} style:width={`${width}px`} style:height={`${height}px`}></canvas>
+    <canvas bind:this={canvas} data-eyedropper data-ready={ready || undefined} style:width={`${width}px`} style:height={`${height}px`}></canvas>
     {#if !asset.thumb && !asset.error}<div class="cell-loading"></div>{/if}
     {#if asset.error}<div class="cell-error">Can’t read file</div>{/if}
     <!-- Without the caption row, the adjusted dot sits on the picture's corner instead. -->

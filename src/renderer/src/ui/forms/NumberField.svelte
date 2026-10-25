@@ -11,7 +11,8 @@
     min = -Infinity,
     max = Infinity,
     suffix,
-    width
+    width,
+    autofocus = false
   }: {
     value: number
     onChange: (v: number) => void
@@ -23,7 +24,15 @@
     max?: number
     suffix?: string
     width?: number
+    /** Focused (and selected) when it appears; it waits a frame, for a popover to be placed. */
+    autofocus?: boolean
   } = $props()
+
+  const focusOnShow = (input: HTMLInputElement) => {
+    if (!autofocus) return
+    const raf = requestAnimationFrame(() => input.focus())
+    return () => cancelAnimationFrame(raf)
+  }
 
   const round = (v: number, step: number) => {
     const d = Math.max(0, -Math.floor(Math.log10(step)))
@@ -76,6 +85,7 @@
     onblur={commit}
     onfocus={(e) => e.currentTarget.select()}
     {onkeydown}
+    {@attach focusOnShow}
   />
   {#if suffix}<span class="num-suffix">{suffix}</span>{/if}
 </label>

@@ -1,6 +1,7 @@
 <!--
-  The artboard tabs. Clicking another tab switches to it; clicking the current one opens its editor;
-  double-clicking one renames it in place (Enter saves, Esc cancels, clicking away saves).
+  The artboard tabs. Clicking another tab switches to it. On the current one, clicking its name
+  renames it in place (Enter or clicking away saves, Esc cancels), and clicking the rest of it
+  opens its editor (the size).
   When they overflow: fades on whichever side has more, the wheel scrolls them sideways, and
   click-dragging pans (a click that doesn't move still picks a tab). The current tab is kept in view.
 -->
@@ -110,11 +111,6 @@
         input.removeEventListener('blur', onblur)
       }
     }
-  const ondblclick = (b: Artboard) => {
-    onEdit(null)
-    onRename(b.id)
-  }
-
   let swallowClick = false
   const onpointerdown = (e: PointerEvent) => {
     if (e.button !== 0 || el.scrollWidth <= el.clientWidth) return
@@ -171,20 +167,20 @@
       {:else}
         <button
           class={['tab', { on: b.id === current, editing: editing === b.id }]}
-          title={b.id === current ? 'Edit artboard (double-click to rename)' : i < 9 ? combo(MOD, String(i + 1)) : undefined}
+          title={b.id === current ? 'Edit artboard' : i < 9 ? combo(MOD, String(i + 1)) : undefined}
           onclick={(e) => {
-            // The second click of a double-click leaves the editor alone; the double-click renames.
-            if (e.detail > 1) return
-            if (b.id === current) onEdit(editing === b.id ? null : b.id)
-            else onSelect(b.id)
+            if (b.id !== current) return onSelect(b.id)
+            if ((e.target as Element).closest('.name')) {
+              onEdit(null)
+              onRename(b.id)
+            } else onEdit(editing === b.id ? null : b.id)
           }}
-          ondblclick={() => ondblclick(b)}
           oncontextmenu={(e) => {
             e.preventDefault()
             onMenu(b.id, { x: e.clientX, y: e.clientY })
           }}
         >
-          <span>{b.name}</span>
+          <span class="name" title={b.id === current ? 'Rename' : undefined}>{b.name}</span>
           <span class="dims">{b.width}×{b.height}</span>
           <!-- The current tab opens its editor; the chevron says so. Every tab reserves its space, so
                switching tabs doesn't change any widths. -->
@@ -295,6 +291,11 @@
 
   .rename::selection {
     background: rgba(110, 155, 255, 0.4);
+  }
+
+  /* On the current tab the name is the rename target. */
+  .on .name {
+    cursor: text;
   }
 
   .dims {
