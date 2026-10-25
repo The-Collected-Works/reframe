@@ -66,6 +66,12 @@ export function Loupe() {
   const [video, setVideo] = useState<HTMLVideoElement | null>(null)
   const [playing, setPlaying] = useState(false)
   const [queued, setQueued] = useState(false)
+  // The browser can't decode this video (ProRes, or HEVC without the platform's decoder): the poster
+  // and the scrub proxy (made by ffmpeg) stand in, and export still works.
+  const [unplayable, setUnplayable] = useState(false)
+  // Ends a gizmo drag still in progress if the view closes mid-drag.
+  const endDrag = useRef<(() => void) | null>(null)
+  useEffect(() => () => endDrag.current?.(), [])
   // Paused video frame decoded by ffmpeg, as export will see it. Chromium's own decode can be off
   // by several levels (badly so for full-range video), which would make colour matching misleading.
   const [exact, setExact] = useState<{ t: number; jpeg: Blob } | null>(null)
@@ -260,18 +266,30 @@ export function Loupe() {
     setQueued(false)
     setTrimDraft(null)
     setExact(null)
+    setUnplayable(false)
     if (!asset || asset.kind !== 'video') return
     const v = document.createElement('video')
     v.crossOrigin = 'anonymous'
     v.playsInline = true
     v.preload = 'auto'
+    // Loops natively when untrimmed; the playback loop below handles trimmed ranges.
+    v.loop = true
     v.src = mediaUrl(asset.path)
+    const fail = () => {
+      v.removeAttribute('src')
+      v.load()
+      setUnplayable(true)
+    }
     const ready = () => {
+      // Audio but no picture: the video track's codec isn't supported.
+      if (!v.videoWidth) return fail()
       v.currentTime = useStore.getState().project.clips[asset.name]?.start ?? 0
       setVideo(v)
     }
     v.addEventListener('loadeddata', ready, { once: true })
+    v.addEventListener('error', fail, { once: true })
     return () => {
+      v.removeEventListener('error', fail)
       v.pause()
       v.removeAttribute('src')
       v.load()
@@ -578,16 +596,22 @@ export function Loupe() {
   }
 
   const toggle = useCallback(() => {
+    if (unplayable) return useStore.getState().showHud('Can’t play this format here yet · scrubbing, trimming and export still work')
     if (!video) return setQueued((q) => !q)
     if (video.paused) video.play().catch(() => {})
     else video.pause()
-  }, [video])
+  }, [video, unplayable])
 
   useEffect(() => {
-    if (!video || !queued) return
-    setQueued(false)
-    video.play().catch(() => {})
-  }, [video, queued])
+    if (!queued) return
+    if (unplayable) {
+      setQueued(false)
+      toggle()
+    } else if (video) {
+      setQueued(false)
+      video.play().catch(() => {})
+    }
+  }, [video, queued, unplayable, toggle])
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -784,6 +808,7 @@ export function Loupe() {
     const stageRect = stage.current!.getBoundingClientRect()
     dragging.current = true
     interacting.current = true
+    endDrag.current = () => up()
 
     // Every move is computed from the drag's start, so modifiers can come and go freely.
     type DragInput = Pick<PointerEvent, 'clientX' | 'clientY' | 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'>
@@ -854,6 +879,7 @@ export function Loupe() {
       useStore.getState().editAsset(a.name, patch)
     }
     const up = () => {
+      endDrag.current = null
       dragging.current = false
       endInteraction()
       guides.current = NO_GUIDES
@@ -931,9 +957,9 @@ export function Loupe() {
           <div className="player">
             {/* Both glyphs stay mounted and crossfade, so the button never pops. */}
             <button
-              className={'play' + (playing || queued ? ' playing' : '') + (queued ? ' loading' : '')}
+              className={'play' + (playing || queued ? ' playing' : '') + (queued ? ' loading' : '') + (unplayable ? ' unavailable' : '')}
               onClick={toggle}
-              title="Play / Pause (Space)"
+              title={unplayable ? 'This format can’t play here yet' : 'Play / Pause (Space)'}
             >
               <span className="glyph play-glyph">
                 <Icon name="play" size={14} />
@@ -1028,7 +1054,6 @@ function useProxy(src: Blob | null, sw: number, sh: number, need: number, floor:
       resizeQuality: 'high'
     })
       .then((bitmap) => {
-        // The replaced proxy is left to GC: a draw already in flight may still be using it.
         if (alive) setProxy({ src, edge, bitmap })
         else bitmap.close()
       })
@@ -1037,6 +1062,9 @@ function useProxy(src: Blob | null, sw: number, sh: number, need: number, floor:
       alive = false
     }
   }, [src, sw, sh, edge, enough, have?.edge])
+  // Draws are synchronous, so once a replacement has rendered (or the view closes) the old pixels
+  // can go now rather than whenever GC gets to them.
+  useEffect(() => () => proxy?.bitmap.close(), [proxy])
   return enough ? null : have?.bitmap ?? null
 }
 
