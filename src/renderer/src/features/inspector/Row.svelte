@@ -48,7 +48,9 @@
     font-weight: 500;
     color: var(--faint);
     opacity: 0;
-    transition: opacity var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+    transition:
+      opacity var(--t-fast) var(--ease),
+      color var(--t-fast) var(--ease);
   }
 
   .row:hover .row-action {

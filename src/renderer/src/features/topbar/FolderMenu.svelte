@@ -14,7 +14,11 @@
   let recent = $state<string[]>([])
   const toggle = () => {
     open = !open
-    if (open) api.recentFolders().then((r) => (recent = r), () => {})
+    if (open)
+      api.recentFolders().then(
+        (r) => (recent = r),
+        () => {}
+      )
   }
   const shown = $derived(recent.slice(0, 5))
   const pick = (d?: string) => {
@@ -40,30 +44,34 @@
   </button>
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
-    <button class="menu-item" onclick={() => pick()}>
-      <span>Open Folder…</span>
-      <span class="muted">{combo(MOD, 'O')}</span>
-    </button>
-    {#if shown.length > 0}
-      <div class="menu-sep"></div>
-      <div class="menu-label">Recent</div>
-      {#each shown as d (d)}
-        <div class="recent">
-          <button class="menu-item" title={d} onclick={() => pick(d)}>
-            <span class="recent-name">{basename(d) || d}</span>
-            <span class="recent-path muted">{shortParent(d)}</span>
-          </button>
-          <button
-            class="recent-forget"
-            title="Remove from recent folders"
-            aria-label="Remove from recent folders"
-            onclick={() => api.forgetFolder(d).then((r) => (recent = r), () => {})}
-          >
-            <Icon name="close" size={12} />
-          </button>
-        </div>
-      {/each}
-    {/if}
+      <button class="menu-item" onclick={() => pick()}>
+        <span>Open Folder…</span>
+        <span class="muted">{combo(MOD, 'O')}</span>
+      </button>
+      {#if shown.length > 0}
+        <div class="menu-sep"></div>
+        <div class="menu-label">Recent</div>
+        {#each shown as d (d)}
+          <div class="recent">
+            <button class="menu-item" title={d} onclick={() => pick(d)}>
+              <span class="recent-name">{basename(d) || d}</span>
+              <span class="recent-path muted">{shortParent(d)}</span>
+            </button>
+            <button
+              class="recent-forget"
+              title="Remove from recent folders"
+              aria-label="Remove from recent folders"
+              onclick={() =>
+                api.forgetFolder(d).then(
+                  (r) => (recent = r),
+                  () => {}
+                )}
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+        {/each}
+      {/if}
     </div>
   </Popover>
 </div>
@@ -84,7 +92,10 @@
     font-weight: 500;
     max-width: 220px;
     flex-shrink: 0;
-    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+    transition:
+      background-color var(--t-fast) var(--ease),
+      color var(--t-fast) var(--ease),
+      transform var(--t-fast) var(--ease);
   }
 
   .folder span {
@@ -151,7 +162,9 @@
     border-radius: 5px;
     color: var(--muted);
     opacity: 0;
-    transition: opacity var(--t-fast) var(--ease), background-color var(--t-fast) var(--ease);
+    transition:
+      opacity var(--t-fast) var(--ease),
+      background-color var(--t-fast) var(--ease);
   }
 
   .recent:hover .recent-forget {

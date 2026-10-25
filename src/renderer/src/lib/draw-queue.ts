@@ -23,10 +23,7 @@ let observer: IntersectionObserver | null = null
 const onVisibility = new WeakMap<Element, (visible: boolean) => void>()
 
 export function observeVisibility(el: Element, cb: (visible: boolean) => void): () => void {
-  observer ??= new IntersectionObserver(
-    (entries) => entries.forEach((e) => onVisibility.get(e.target)?.(e.isIntersecting)),
-    { rootMargin: '400px 0px' }
-  )
+  observer ??= new IntersectionObserver((entries) => entries.forEach((e) => onVisibility.get(e.target)?.(e.isIntersecting)), { rootMargin: '400px 0px' })
   onVisibility.set(el, cb)
   observer.observe(el)
   return () => {

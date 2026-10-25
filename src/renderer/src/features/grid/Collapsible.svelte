@@ -29,7 +29,9 @@
 </script>
 
 <div class={['collapsible', { open: expanded }]}>
-  <div class="collapsible-inner">{#if mounted}{@render children()}{/if}</div>
+  <div class="collapsible-inner">
+    {#if mounted}{@render children()}{/if}
+  </div>
 </div>
 
 <style>

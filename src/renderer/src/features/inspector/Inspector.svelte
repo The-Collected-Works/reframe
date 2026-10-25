@@ -152,8 +152,26 @@
       <!-- Only once stretched from an edge in the single view. -->
       {#if s.scaleX !== 1 || s.scaleY !== 1}
         <div class="pair">
-          <NumberField label="W" value={s.scaleX * 100} step={1} min={2} max={1000} suffix="%" onChange={(v) => app.edit({ scaleX: v / 100 })} onReset={back('scaleX')} />
-          <NumberField label="H" value={s.scaleY * 100} step={1} min={2} max={1000} suffix="%" onChange={(v) => app.edit({ scaleY: v / 100 })} onReset={back('scaleY')} />
+          <NumberField
+            label="W"
+            value={s.scaleX * 100}
+            step={1}
+            min={2}
+            max={1000}
+            suffix="%"
+            onChange={(v) => app.edit({ scaleX: v / 100 })}
+            onReset={back('scaleX')}
+          />
+          <NumberField
+            label="H"
+            value={s.scaleY * 100}
+            step={1}
+            min={2}
+            max={1000}
+            suffix="%"
+            onChange={(v) => app.edit({ scaleY: v / 100 })}
+            onReset={back('scaleY')}
+          />
         </div>
       {/if}
       <div class="tool-grid">
@@ -201,7 +219,6 @@
         <Toggle value={s.mute} onChange={(mute) => app.edit({ mute })} />
       </Row>
     {/if}
-
   </div>
 
   {#if editing}
@@ -263,7 +280,9 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--muted);
-    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+    transition:
+      background-color var(--t-fast) var(--ease),
+      color var(--t-fast) var(--ease);
   }
 
   /* The asset crumb takes the remaining width and truncates; the artboard crumb keeps its size. */
@@ -341,7 +360,10 @@
     border-radius: var(--radius);
     background: var(--tint-1);
     color: var(--muted);
-    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+    transition:
+      background-color var(--t-fast) var(--ease),
+      color var(--t-fast) var(--ease),
+      transform var(--t-fast) var(--ease);
   }
 
   .tool:hover {

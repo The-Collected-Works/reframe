@@ -8,7 +8,7 @@
   let { value, options, onChange, compact = false }: { value: T; options: Option[]; onChange: (v: T) => void; compact?: boolean } = $props()
 </script>
 
-<div class={["seg", { compact }]}>
+<div class={['seg', { compact }]}>
   <Indicator selector=":scope > button.on" key={`${value}/${options.length}`} />
   {#each options as o (o.value)}
     <button title={o.title} disabled={o.disabled} class={{ on: o.value === value }} onclick={() => onChange(o.value)}>
@@ -39,7 +39,9 @@
     padding: 0 8px;
     color: var(--muted);
     white-space: nowrap;
-    transition: color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+    transition:
+      color var(--t-fast) var(--ease),
+      transform var(--t-fast) var(--ease);
   }
 
   .compact button {

@@ -41,7 +41,11 @@ function update(fn: (s: State) => State): Promise<void> {
 const same = (a: string, b: string) =>
   process.platform === 'win32' || process.platform === 'darwin' ? normalize(a).toLowerCase() === normalize(b).toLowerCase() : normalize(a) === normalize(b)
 
-const isDir = (p: string) => fs.stat(p).then((s) => s.isDirectory(), () => false)
+const isDir = (p: string) =>
+  fs.stat(p).then(
+    (s) => s.isDirectory(),
+    () => false
+  )
 
 /** Recent folders that still exist (moved, deleted or disconnected ones are left out), newest first. */
 export async function recentFolders(): Promise<string[]> {

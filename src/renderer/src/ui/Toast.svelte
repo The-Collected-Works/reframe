@@ -17,7 +17,9 @@
     padding: 7px 14px;
     border-radius: 999px;
     background: rgba(30, 30, 34, 0.92);
-    box-shadow: 0 0 0 1px var(--line-strong), 0 10px 30px rgba(0, 0, 0, 0.45);
+    box-shadow:
+      0 0 0 1px var(--line-strong),
+      0 10px 30px rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(12px);
     font-size: 12px;
     font-weight: 500;

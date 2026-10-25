@@ -116,7 +116,7 @@ class AppState {
   /** Selection and focus reduced to `keep`; leaving single view if nothing's in focus. */
   #prune(keep: Set<string>) {
     this.selection = this.selection.filter((n) => keep.has(n))
-    this.focus = this.focus && keep.has(this.focus) ? this.focus : this.selection[0] ?? null
+    this.focus = this.focus && keep.has(this.focus) ? this.focus : (this.selection[0] ?? null)
     if (!this.focus) this.view = 'grid'
   }
 
@@ -160,7 +160,10 @@ class AppState {
     this.skipped = scan.skipped
     this.truncated = scan.truncated
     this.#prune(new Set(next.keys()))
-    hydrate(scan.assets.filter((e) => !this.meta.has(e.name)), false)
+    hydrate(
+      scan.assets.filter((e) => !this.meta.has(e.name)),
+      false
+    )
   }
 
   /** Records what loading found, if `entry` is still the asset of that name (not a replaced file). */
@@ -214,7 +217,7 @@ class AppState {
       const has = this.selected.has(name)
       const next = has ? this.selection.filter((n) => n !== name) : [...this.selection, name]
       this.selection = next
-      this.focus = has ? next[next.length - 1] ?? null : name
+      this.focus = has ? (next[next.length - 1] ?? null) : name
     } else if (mode === 'range' && focus && this.visible.some((a) => a.name === focus)) {
       // A shift-click range covers what's on screen, in on-screen order (from a focus that's still
       // on screen; otherwise it's a plain click).
@@ -229,7 +232,7 @@ class AppState {
 
   setSelection(names: string[]) {
     this.selection = names
-    this.focus = this.focus && names.includes(this.focus) ? this.focus : names[0] ?? null
+    this.focus = this.focus && names.includes(this.focus) ? this.focus : (names[0] ?? null)
   }
 
   selectAll() {

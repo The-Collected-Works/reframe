@@ -60,6 +60,9 @@
   }
 
   .indicator.ready {
-    transition: transform 280ms var(--ease), width 280ms var(--ease), height 280ms var(--ease);
+    transition:
+      transform 280ms var(--ease),
+      width 280ms var(--ease),
+      height 280ms var(--ease);
   }
 </style>

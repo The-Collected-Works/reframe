@@ -106,7 +106,13 @@ async function markerReason(path: string): Promise<SkippedFolder['reason']> {
  */
 export async function markFolder(dir: string, reason: SkippedFolder['reason']): Promise<void> {
   const file = join(dir, OUTPUT_MARKER)
-  if (await fs.stat(file).then(() => true, () => false)) return
+  if (
+    await fs.stat(file).then(
+      () => true,
+      () => false
+    )
+  )
+    return
   await fs.mkdir(dir, { recursive: true })
   await fs.writeFile(file, JSON.stringify({ app: 'Reframe', reason }) + '\n')
   if (process.platform === 'win32') execFile('attrib', ['+h', file], { windowsHide: true }, () => {})
@@ -139,7 +145,13 @@ async function markLegacyExport(dir: string, project: ProjectFile | null): Promi
   const out = resolve(dir, project.export?.dir ?? 'export')
   const rel = relative(dir, out)
   if (!rel || rel.startsWith('..') || isAbsolute(rel)) return
-  if (await fs.stat(out).then((s) => s.isDirectory(), () => false)) await markFolder(out, 'export')
+  if (
+    await fs.stat(out).then(
+      (s) => s.isDirectory(),
+      () => false
+    )
+  )
+    await markFolder(out, 'export')
 }
 
 async function readProject(dir: string): Promise<ProjectFile | null> {

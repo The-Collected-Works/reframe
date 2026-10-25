@@ -66,8 +66,7 @@ function call<T>(msg: Request, progress?: (p: number) => void): Promise<T> {
 export const poster = (path: string) => call<PosterResult>({ type: 'poster', path })
 export const frame = (path: string, time: number, color?: ColorMeta) => call<Uint8Array>({ type: 'frame', path, time, color })
 export const scrubProxy = (path: string, w: number, h: number, color?: ColorMeta) => call<string>({ type: 'proxy', path, w, h, color })
-export const exportVideo = (job: VideoExportJob, onProgress: (p: number) => void) =>
-  call<void>({ type: 'export', job }, onProgress)
+export const exportVideo = (job: VideoExportJob, onProgress: (p: number) => void) => call<void>({ type: 'export', job }, onProgress)
 export const cancelExport = (): void => worker?.postMessage({ type: 'cancel' } satisfies WorkerRequest)
 
 /**

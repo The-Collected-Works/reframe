@@ -86,7 +86,9 @@
     border-radius: 50%;
     background: var(--tint-2);
     color: var(--text);
-    transition: background-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+    transition:
+      background-color var(--t-fast) var(--ease),
+      transform var(--t-fast) var(--ease);
   }
 
   .play:hover {
@@ -106,7 +108,9 @@
     inset: 0;
     display: grid;
     place-items: center;
-    transition: opacity 160ms var(--ease), transform 220ms var(--spring);
+    transition:
+      opacity 160ms var(--ease),
+      transform 220ms var(--spring);
   }
 
   /* The play triangle's optical centre sits right of its box. */

@@ -3,8 +3,7 @@ import { mac, win } from './bridge'
 /** File paths as the OS writes them. Asset and folder names in the project are "/"-separated. */
 export const sep = win ? '\\' : '/'
 
-export const join = (...parts: string[]): string =>
-  parts.map((p, i) => (i ? p.replace(/^[\\/]+/, '') : p.replace(/[\\/]+$/, ''))).join(sep)
+export const join = (...parts: string[]): string => parts.map((p, i) => (i ? p.replace(/^[\\/]+/, '') : p.replace(/[\\/]+$/, ''))).join(sep)
 
 /** A project folder ("Shoot A/Day 2", or "" for the top) as a path inside `dir`. */
 export const inside = (dir: string, folder: string): string => (folder ? join(dir, ...folder.split('/')) : dir)

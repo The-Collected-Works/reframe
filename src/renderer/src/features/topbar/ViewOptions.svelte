@@ -52,23 +52,23 @@
   </button>
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
-    <div class="menu-label">Show</div>
-    {#each FILTERS as f (f.value)}{@render option(prefs.filter === f.value, f.label, () => app.setViewPrefs({ filter: f.value }))}{/each}
-    <div class="menu-sep"></div>
-    <div class="menu-label">Sort by</div>
-    {#each SORTS as o (o.value)}{@render option(prefs.sort === o.value, o.label, () => app.setViewPrefs({ sort: o.value }))}{/each}
-    <div class="menu-sep"></div>
-    {@render option(prefs.group, 'Group by folder', () => app.setViewPrefs({ group: !prefs.group }))}
-    {@render option(prefs.names, 'Show file names', () => app.setViewPrefs({ names: !prefs.names }))}
-    {#if hasFolders && prefs.group}
+      <div class="menu-label">Show</div>
+      {#each FILTERS as f (f.value)}{@render option(prefs.filter === f.value, f.label, () => app.setViewPrefs({ filter: f.value }))}{/each}
       <div class="menu-sep"></div>
-      {@render option(false, 'Collapse all folders', () => app.setAllCollapsed(true))}
-      {@render option(false, 'Expand all folders', () => app.setAllCollapsed(false))}
-    {/if}
-    <div class="menu-sep"></div>
-    <button class="menu-item" disabled={!changed} onclick={() => app.resetView()}>
-      <span>Reset View</span>
-    </button>
+      <div class="menu-label">Sort by</div>
+      {#each SORTS as o (o.value)}{@render option(prefs.sort === o.value, o.label, () => app.setViewPrefs({ sort: o.value }))}{/each}
+      <div class="menu-sep"></div>
+      {@render option(prefs.group, 'Group by folder', () => app.setViewPrefs({ group: !prefs.group }))}
+      {@render option(prefs.names, 'Show file names', () => app.setViewPrefs({ names: !prefs.names }))}
+      {#if hasFolders && prefs.group}
+        <div class="menu-sep"></div>
+        {@render option(false, 'Collapse all folders', () => app.setAllCollapsed(true))}
+        {@render option(false, 'Expand all folders', () => app.setAllCollapsed(false))}
+      {/if}
+      <div class="menu-sep"></div>
+      <button class="menu-item" disabled={!changed} onclick={() => app.resetView()}>
+        <span>Reset View</span>
+      </button>
     </div>
   </Popover>
 </div>

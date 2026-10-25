@@ -118,10 +118,7 @@ export function loadStill(a: AssetEntry): Promise<Blob> {
   const key = a.path + a.mtime
   let p = stills.get(key)
   if (!p) {
-    p =
-      a.kind === 'image'
-        ? fetch(mediaUrl(a.path)).then((r) => r.blob())
-        : api.poster(a.path).then((r) => posterBlob(r.data))
+    p = a.kind === 'image' ? fetch(mediaUrl(a.path)).then((r) => r.blob()) : api.poster(a.path).then((r) => posterBlob(r.data))
     p.catch(() => stills.delete(key))
     stills.set(key, p)
     if (stills.size > 6) stills.delete(stills.keys().next().value!)

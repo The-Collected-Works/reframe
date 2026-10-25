@@ -59,8 +59,7 @@ export function normalizeProject(p: ProjectFile | null): ProjectFile {
 }
 
 /** Whether applying `patch` to `o` would change it. */
-export const changes = <T extends object>(o: T | undefined, patch: Partial<T>): boolean =>
-  Object.entries(patch).some(([k, v]) => !o || o[k as keyof T] !== v)
+export const changes = <T extends object>(o: T | undefined, patch: Partial<T>): boolean => Object.entries(patch).some(([k, v]) => !o || o[k as keyof T] !== v)
 
 /**
  * Sets overrides on `names`. An override is set by editing an asset and removed only by an

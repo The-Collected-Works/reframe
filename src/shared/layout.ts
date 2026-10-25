@@ -251,18 +251,9 @@ function drawPlaced(ctx: Ctx, src: CanvasImageSource, p: Placement, k: number, f
 
 /**
  * Draws one composited frame. `k` maps artboard pixels to canvas pixels, so the same code
- * renders thumbnails, the loupe, and full-resolution exports.
+ * renders thumbnails, the single view, and full-resolution exports.
  */
-export function drawFrame(
-  ctx: Ctx,
-  src: CanvasImageSource | null,
-  sw: number,
-  sh: number,
-  W: number,
-  H: number,
-  s: CropSettings,
-  k: number
-): void {
+export function drawFrame(ctx: Ctx, src: CanvasImageSource | null, sw: number, sh: number, W: number, H: number, s: CropSettings, k: number): void {
   ctx.save()
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'

@@ -23,9 +23,9 @@
   <span class="section-icon" aria-hidden="true"><Icon name="folder" size={13} /></span>
   <span class="section-path">
     <!-- Nested folders keep the top level's leading slash, so every path reads from "/". -->
-    {#if folder}<span class="section-sep" aria-hidden="true">/</span>{/if}{#each crumbs as c, i (i)}{#if i > 0}<span class="section-sep" aria-hidden="true">/</span>{/if}<span
-        class={['section-crumb', { current: i === crumbs.length - 1 }]}>{c}</span
-      >{/each}
+    {#if folder}<span class="section-sep" aria-hidden="true">/</span>{/if}{#each crumbs as c, i (i)}{#if i > 0}<span class="section-sep" aria-hidden="true"
+          >/</span
+        >{/if}<span class={['section-crumb', { current: i === crumbs.length - 1 }]}>{c}</span>{/each}
   </span>
 {/snippet}
 
@@ -241,7 +241,9 @@
   .section-chevron {
     display: grid;
     place-items: center;
-    transition: transform 200ms var(--ease), color var(--t-fast) var(--ease);
+    transition:
+      transform 200ms var(--ease),
+      color var(--t-fast) var(--ease);
   }
 
   .grid-section.collapsed .section-chevron {

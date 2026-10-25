@@ -44,10 +44,7 @@ function filterGraph(job: VideoExportJob): string {
       `crop=${plan.crop.w}:${plan.crop.h}:${plan.crop.x}:${plan.crop.y},` +
       `scale=${plan.scale.w}:${plan.scale.h}:flags=lanczos,format=gbrap,` +
       `rotate=a=${placed.rot}:ow=${plan.out.w}:oh=${plan.out.h}:c=none`
-    return (
-      `[0:v]${base},split=2[a][b];[a]${bg}[bg];[b]${fg}[fg];` +
-      `[bg][fg]overlay=${plan.place.x}:${plan.place.y}:format=gbrp${out}`
-    )
+    return `[0:v]${base},split=2[a][b];[a]${bg}[bg];[b]${fg}[fg];` + `[bg][fg]overlay=${plan.place.x}:${plan.place.y}:format=gbrp${out}`
   }
 
   // Quarter turns: transpose the source losslessly, then lay out as unrotated.
@@ -71,13 +68,10 @@ function filterGraph(job: VideoExportJob): string {
     const blur = s.blur > 0 ? `,gblur=sigma=${s.blur}` : ''
     const bg = `scale=${bw}:${bh}:flags=bicubic,crop=${W}:${H}:${Math.round((bw - W) / 2)}:${Math.round((bh - H) / 2)}${blur}`
     return fg
-      ? `[0:v]${norm},split=2[a][b];[a]${bg}[bg];[b]${fg}[fg];` +
-          `[bg][fg]overlay=${plan!.place.x}:${plan!.place.y}:format=gbrp${out}`
+      ? `[0:v]${norm},split=2[a][b];[a]${bg}[bg];[b]${fg}[fg];` + `[bg][fg]overlay=${plan!.place.x}:${plan!.place.y}:format=gbrp${out}`
       : `[0:v]${norm},${bg}${out}`
   }
-  return fg
-    ? `[0:v]${norm},${fg},pad=${W}:${H}:${plan!.place.x}:${plan!.place.y}:color=${color}${out}`
-    : `[0:v]${norm},${solid}${out}`
+  return fg ? `[0:v]${norm},${fg},pad=${W}:${H}:${plan!.place.x}:${plan!.place.y}:color=${color}${out}` : `[0:v]${norm},${solid}${out}`
 }
 
 /** ffmpeg arguments for one video export. */
@@ -90,14 +84,6 @@ export function videoArgs(job: VideoExportJob): string[] {
   args.push('-filter_complex', filterGraph(job), '-map', '[v]')
   if (s.mute) args.push('-an')
   else args.push('-map', '0:a:0?', '-c:a', 'aac', '-b:a', '192k')
-  args.push(
-    '-c:v', 'libx264',
-    '-preset', 'medium',
-    '-crf', String(job.crf),
-    '-pix_fmt', 'yuv420p',
-    ...OUT_TAGS,
-    '-movflags', '+faststart',
-    job.output
-  )
+  args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', String(job.crf), '-pix_fmt', 'yuv420p', ...OUT_TAGS, '-movflags', '+faststart', job.output)
   return args
 }

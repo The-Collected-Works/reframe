@@ -27,45 +27,45 @@
 <svelte:window {onkeydowncapture} />
 
 <Popover {open} onClose={() => app.setBoardEditor(null)} padding={10}>
-<div class="editor">
-  <input
-    class="text"
-    bind:this={nameInput}
-    value={board.name}
-    {@attach focusName}
-    onfocus={(e) => e.currentTarget.select()}
-    onblur={(e) => e.currentTarget.value.trim() && app.updateBoard(board.id, { name: e.currentTarget.value.trim() })}
-    onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-  />
-  <div class="wh">
-    <NumberField label="W" value={board.width} min={16} max={8192} onChange={(v) => app.updateBoard(board.id, { width: size(v) })} />
-    <button class="icon-btn" title="Swap" onclick={() => app.updateBoard(board.id, { width: board.height, height: board.width })}>⇄</button>
-    <NumberField label="H" value={board.height} min={16} max={8192} onChange={(v) => app.updateBoard(board.id, { height: size(v) })} />
-  </div>
-  <div class="presets">
-    {#each PRESETS as p (p.name)}
-      <button
-        class={['chip', { on: p.width === board.width && p.height === board.height }]}
-        onclick={() => app.updateBoard(board.id, { width: p.width, height: p.height })}
-      >
-        {p.width}×{p.height}
+  <div class="editor">
+    <input
+      class="text"
+      bind:this={nameInput}
+      value={board.name}
+      {@attach focusName}
+      onfocus={(e) => e.currentTarget.select()}
+      onblur={(e) => e.currentTarget.value.trim() && app.updateBoard(board.id, { name: e.currentTarget.value.trim() })}
+      onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+    />
+    <div class="wh">
+      <NumberField label="W" value={board.width} min={16} max={8192} onChange={(v) => app.updateBoard(board.id, { width: size(v) })} />
+      <button class="icon-btn" title="Swap" onclick={() => app.updateBoard(board.id, { width: board.height, height: board.width })}>⇄</button>
+      <NumberField label="H" value={board.height} min={16} max={8192} onChange={(v) => app.updateBoard(board.id, { height: size(v) })} />
+    </div>
+    <div class="presets">
+      {#each PRESETS as p (p.name)}
+        <button
+          class={['chip', { on: p.width === board.width && p.height === board.height }]}
+          onclick={() => app.updateBoard(board.id, { width: p.width, height: p.height })}
+        >
+          {p.width}×{p.height}
+        </button>
+      {/each}
+    </div>
+    <div class="menu-sep"></div>
+    <div class="editor-actions">
+      <button class="ghost" onclick={() => app.duplicateBoard(board.id)}>
+        <Icon name="duplicate" size={14} />
+        Duplicate
       </button>
-    {/each}
+      {#if canDelete}
+        <button class="ghost danger" onclick={() => deleteBoard(board.id)}>
+          <Icon name="trash" size={14} />
+          Delete
+        </button>
+      {/if}
+    </div>
   </div>
-  <div class="menu-sep"></div>
-  <div class="editor-actions">
-    <button class="ghost" onclick={() => app.duplicateBoard(board.id)}>
-      <Icon name="duplicate" size={14} />
-      Duplicate
-    </button>
-    {#if canDelete}
-      <button class="ghost danger" onclick={() => deleteBoard(board.id)}>
-        <Icon name="trash" size={14} />
-        Delete
-      </button>
-    {/if}
-  </div>
-</div>
 </Popover>
 
 <style>
@@ -115,7 +115,10 @@
     color: var(--muted);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
-    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+    transition:
+      background-color var(--t-fast) var(--ease),
+      color var(--t-fast) var(--ease),
+      transform var(--t-fast) var(--ease);
   }
 
   .chip:hover {

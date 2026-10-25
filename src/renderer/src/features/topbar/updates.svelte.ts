@@ -11,7 +11,11 @@ export type Update = { version: string; notes: ReleaseNote[]; status: UpdateStat
 export function updateCheck(): { readonly current: Update | null } {
   let current = $state<Update | null>(null)
   $effect(() => {
-    const check = () => api.checkUpdate().then((u) => (current = u ?? null), () => {})
+    const check = () =>
+      api.checkUpdate().then(
+        (u) => (current = u ?? null),
+        () => {}
+      )
     const first = setTimeout(check, 3000)
     const every = setInterval(check, 6 * 60 * 60 * 1000)
     const off = api.onUpdateStatus((status) => {

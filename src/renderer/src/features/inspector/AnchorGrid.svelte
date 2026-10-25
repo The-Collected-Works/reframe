@@ -5,10 +5,8 @@
 
 <div class="anchor">
   {#each cells as [ax, ay] (`${ax}${ay}`)}
-    <button
-      class={{ on: Math.abs(ax - x) < 0.01 && Math.abs(ay - y) < 0.01 }}
-      aria-label={`Anchor ${ax}, ${ay}`}
-      onclick={() => onChange(ax, ay)}><span></span></button
+    <button class={{ on: Math.abs(ax - x) < 0.01 && Math.abs(ay - y) < 0.01 }} aria-label={`Anchor ${ax}, ${ay}`} onclick={() => onChange(ax, ay)}
+      ><span></span></button
     >
   {/each}
 </div>
@@ -30,7 +28,10 @@
     display: grid;
     place-items: center;
     border-radius: 4px;
-    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+    transition:
+      background-color var(--t-fast) var(--ease),
+      color var(--t-fast) var(--ease),
+      transform var(--t-fast) var(--ease);
   }
 
   button:active {

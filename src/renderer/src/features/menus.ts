@@ -70,9 +70,7 @@ export async function boardMenu(boardId: string, at: { x: number; y: number }): 
 export async function folderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
   // What's visible in the folder and the folders inside it (selecting hidden assets would let edits
   // land out of sight).
-  const names = app.visible
-    .filter((a) => folderOf(a.name) === folder || (folder !== '' && a.name.startsWith(folder + '/')))
-    .map((a) => a.name)
+  const names = app.visible.filter((a) => folderOf(a.name) === folder || (folder !== '' && a.name.startsWith(folder + '/'))).map((a) => a.name)
   const id = await showMenu(at.x, at.y, [
     { id: 'select', label: 'Select All in Folder', icon: 'check', enabled: names.length > 0 },
     { id: 'reveal', label: revealLabel, icon: 'reveal' },

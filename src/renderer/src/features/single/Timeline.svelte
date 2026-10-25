@@ -102,8 +102,20 @@
       <div class="tl-played" style:left={pct(start)} style:width={pct(Math.max(0, time - start))}></div>
     </div>
     <div class="tl-head" style:left={pct(time)}></div>
-    <div class={['tl-handle in', { on: active === 'in' }]} style:left={pct(start)} role="presentation" onpointerdown={(e) => drag(e, 'in')} title="Trim start"></div>
-    <div class={['tl-handle out', { on: active === 'out' }]} style:left={pct(end)} role="presentation" onpointerdown={(e) => drag(e, 'out')} title="Trim end"></div>
+    <div
+      class={['tl-handle in', { on: active === 'in' }]}
+      style:left={pct(start)}
+      role="presentation"
+      onpointerdown={(e) => drag(e, 'in')}
+      title="Trim start"
+    ></div>
+    <div
+      class={['tl-handle out', { on: active === 'out' }]}
+      style:left={pct(end)}
+      role="presentation"
+      onpointerdown={(e) => drag(e, 'out')}
+      title="Trim end"
+    ></div>
     {#if bubble != null}
       <div class="tl-bubble" style:left={pct(bubble)}>{fmtTime(Math.max(0, bubble - start))}</div>
     {/if}
@@ -168,7 +180,9 @@
     margin: -7px 0 0 -1.5px;
     border-radius: 1.5px;
     background: #fff;
-    box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.25), 0 1px 4px rgba(0, 0, 0, 0.5);
+    box-shadow:
+      0 0 0 0.5px rgba(0, 0, 0, 0.25),
+      0 1px 4px rgba(0, 0, 0, 0.5);
     pointer-events: none;
   }
 
@@ -182,7 +196,10 @@
     border-radius: 1.5px;
     background: rgba(255, 255, 255, 0.32);
     cursor: ew-resize;
-    transition: background-color var(--t-fast) var(--ease), height 160ms var(--ease), margin-top 160ms var(--ease);
+    transition:
+      background-color var(--t-fast) var(--ease),
+      height 160ms var(--ease),
+      margin-top 160ms var(--ease);
   }
 
   .tl-handle.in {
@@ -220,7 +237,9 @@
     padding: 3px 7px;
     border-radius: 6px;
     background: var(--raised);
-    box-shadow: 0 0 0 1px var(--line-strong), 0 4px 14px rgba(0, 0, 0, 0.4);
+    box-shadow:
+      0 0 0 1px var(--line-strong),
+      0 4px 14px rgba(0, 0, 0, 0.4);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
     color: var(--text);
@@ -241,7 +260,9 @@
     padding: 4px 4px 5px;
     border-radius: 8px;
     background: var(--raised);
-    box-shadow: 0 0 0 1px var(--line-strong), 0 8px 28px rgba(0, 0, 0, 0.5);
+    box-shadow:
+      0 0 0 1px var(--line-strong),
+      0 8px 28px rgba(0, 0, 0, 0.5);
     pointer-events: none;
     z-index: 3;
     transform-origin: bottom center;

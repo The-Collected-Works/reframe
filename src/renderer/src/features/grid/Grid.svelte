@@ -108,7 +108,10 @@
     scrollbar-gutter: stable;
     padding: 26px 16px 26px 26px;
     /* Grid ⇄ single view: the grid recedes while the zoom flies over it. */
-    transition: opacity var(--t-med) var(--ease), transform var(--t-slow) var(--ease), visibility 0s;
+    transition:
+      opacity var(--t-med) var(--ease),
+      transform var(--t-slow) var(--ease),
+      visibility 0s;
   }
 
   /* With folders, the cards sit 16px from the top and bottom too, as from the sides. Moving through
@@ -123,7 +126,10 @@
     pointer-events: none;
     opacity: 0;
     transform: scale(0.985);
-    transition: opacity var(--t-med) var(--ease), transform var(--t-slow) var(--ease), visibility 0s linear var(--t-slow);
+    transition:
+      opacity var(--t-med) var(--ease),
+      transform var(--t-slow) var(--ease),
+      visibility 0s linear var(--t-slow);
   }
 
   /* Below the grid: folders the scan left out (click one to include it again), and the file limit. */

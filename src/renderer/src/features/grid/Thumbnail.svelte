@@ -54,9 +54,7 @@
   let visible = $state(false)
   // What's on the canvas, so unchanged cells skip redrawing.
   let drawn = ''
-  const key = $derived(
-    `${JSON.stringify(settings)}|${width}x${height}@${window.devicePixelRatio}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}`
-  )
+  const key = $derived(`${JSON.stringify(settings)}|${width}x${height}@${window.devicePixelRatio}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}`)
 
   function draw() {
     if (!canvas) return
@@ -197,7 +195,9 @@
     min-width: 0;
     padding: 10px 10px 2px;
     border-radius: 9px;
-    transition: background-color var(--t-med) var(--ease), box-shadow var(--t-med) var(--ease);
+    transition:
+      background-color var(--t-med) var(--ease),
+      box-shadow var(--t-med) var(--ease);
   }
 
   /* Without the caption row (file names hidden), the mat is even on all four sides. */

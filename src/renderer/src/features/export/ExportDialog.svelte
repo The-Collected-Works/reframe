@@ -91,11 +91,7 @@
           <div class="checks">
             {#each project.artboards as b (b.id)}
               <label class={['check', { on: boards.has(b.id) }]}>
-                <input
-                  type="checkbox"
-                  checked={boards.has(b.id)}
-                  onchange={(e) => (e.currentTarget.checked ? boards.add(b.id) : boards.delete(b.id))}
-                />
+                <input type="checkbox" checked={boards.has(b.id)} onchange={(e) => (e.currentTarget.checked ? boards.add(b.id) : boards.delete(b.id))} />
                 <span class="box"><Icon name="check" size={12} /></span>
                 <span>{b.name}</span>
                 <span class="muted">{b.width}×{b.height}</span>
@@ -112,7 +108,9 @@
               value={scope}
               options={[
                 { value: 'all' as const, label: `All ${app.assets.length}` },
-                ...(visible.length < app.assets.length ? [{ value: 'visible' as const, label: `Visible ${visible.length}`, title: 'What the grid shows' }] : []),
+                ...(visible.length < app.assets.length
+                  ? [{ value: 'visible' as const, label: `Visible ${visible.length}`, title: 'What the grid shows' }]
+                  : []),
                 ...(app.selection.length > 0 ? [{ value: 'selected' as const, label: `Selected ${app.selection.length}` }] : [])
               ]}
               onChange={(v) => (scope = v)}
@@ -224,7 +222,9 @@
     flex-direction: column;
     background: var(--panel);
     border-radius: 12px;
-    box-shadow: 0 0 0 1px var(--line-strong), 0 24px 80px rgba(0, 0, 0, 0.6);
+    box-shadow:
+      0 0 0 1px var(--line-strong),
+      0 24px 80px rgba(0, 0, 0, 0.6);
     animation: sheet-in 280ms var(--spring) both;
   }
 
@@ -315,7 +315,10 @@
     padding: 0 8px;
     margin: 0 -8px;
     border-radius: 6px;
-    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+    transition:
+      background-color var(--t-fast) var(--ease),
+      color var(--t-fast) var(--ease),
+      transform var(--t-fast) var(--ease);
   }
 
   .check:hover {

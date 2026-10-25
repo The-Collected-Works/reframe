@@ -172,7 +172,10 @@
     color: var(--muted);
     white-space: nowrap;
     /* Highlights cross-fade: the old one dissolves while the new one comes up. */
-    transition: background-color 260ms cubic-bezier(0.4, 0, 0.2, 1), color 260ms cubic-bezier(0.4, 0, 0.2, 1), transform var(--t-fast) var(--ease);
+    transition:
+      background-color 260ms cubic-bezier(0.4, 0, 0.2, 1),
+      color 260ms cubic-bezier(0.4, 0, 0.2, 1),
+      transform var(--t-fast) var(--ease);
   }
 
   /* Hover gets a lighter tint than the current pill, so it reads even when the tab is half-faded. */

@@ -95,7 +95,10 @@
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
     animation: pop-in 260ms var(--spring) both;
-    transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+    transition:
+      background-color var(--t-fast) var(--ease),
+      color var(--t-fast) var(--ease),
+      transform var(--t-fast) var(--ease);
   }
 
   .update:not(.downloading):hover {

@@ -120,8 +120,18 @@
   })
   const need = $derived(placement ? Math.max(placement.w, placement.h) * k * dpr : 0)
   const sourceSize = () => ({ w: asset?.w ?? 0, h: asset?.h ?? 0 })
-  const stillBitmap = bitmapProxy(() => still, sourceSize, () => need, () => (asset?.thumb ? Math.max(asset.thumb.width, asset.thumb.height) : 0))
-  const exactBitmap = bitmapProxy(() => player?.exact?.jpeg ?? null, sourceSize, () => need, () => 0)
+  const stillBitmap = bitmapProxy(
+    () => still,
+    sourceSize,
+    () => need,
+    () => (asset?.thumb ? Math.max(asset.thumb.width, asset.thumb.height) : 0)
+  )
+  const exactBitmap = bitmapProxy(
+    () => player?.exact?.jpeg ?? null,
+    sourceSize,
+    () => need,
+    () => 0
+  )
 
   // Everything a frame is drawn from; the canvas redraws whenever it changes.
   const scene = $derived({

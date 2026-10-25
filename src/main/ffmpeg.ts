@@ -149,10 +149,24 @@ function parseDuration(stderr: string): number {
 /** One frame as JPEG (full resolution, pixel aspect applied), decoded the way export decodes. */
 const grabFrame = (kind: Kind, path: string, time: number, color: ColorMeta | undefined, quality: number) =>
   run(kind, [
-    '-hide_banner', '-loglevel', 'error',
-    '-ss', Math.max(0, time).toFixed(3), '-i', path,
-    '-frames:v', '1', '-vf', `scale=iw*sar:ih:${inColor(color)},format=rgb24,setsar=1`,
-    '-f', 'image2pipe', '-c:v', 'mjpeg', '-q:v', String(quality), 'pipe:1'
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-ss',
+    Math.max(0, time).toFixed(3),
+    '-i',
+    path,
+    '-frames:v',
+    '1',
+    '-vf',
+    `scale=iw*sar:ih:${inColor(color)},format=rgb24,setsar=1`,
+    '-f',
+    'image2pipe',
+    '-c:v',
+    'mjpeg',
+    '-q:v',
+    String(quality),
+    'pipe:1'
   ]).done
 
 /**
@@ -219,13 +233,21 @@ const PROXY_EDGE = 800
 export async function scrubProxy(path: string, w: number, h: number, color?: ColorMeta): Promise<string> {
   const out = join(SCRUB, cacheKey('scrub1', path, await fs.stat(path)) + '.mp4')
   wantedProxy = out
-  if (await fs.access(out).then(() => true, () => false)) {
+  if (
+    await fs.access(out).then(
+      () => true,
+      () => false
+    )
+  ) {
     touch(out)
     return out
   }
   let job = building.get(out)
   if (!job) {
-    job = proxyChain.catch(() => {}).then(() => buildProxy(path, out, w, h, color)).then(() => out)
+    job = proxyChain
+      .catch(() => {})
+      .then(() => buildProxy(path, out, w, h, color))
+      .then(() => out)
     proxyChain = job
     building.set(out, job)
     job.finally(() => building.delete(out)).catch(() => {})
@@ -240,12 +262,34 @@ async function buildProxy(path: string, out: string, w: number, h: number, color
   const even = (n: number) => Math.max(2, Math.round((n * s) / 2) * 2)
   const part = out.replace(/\.mp4$/, '.part.mp4')
   const args = (hw: boolean) => [
-    '-hide_banner', '-loglevel', 'error', '-y',
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
     ...(hw ? ['-hwaccel', 'auto'] : []),
-    '-i', path, '-an', '-sn', '-dn', '-fpsmax', '30',
-    '-vf', `scale=${even(w)}:${even(h)}:${inColor(color)}:out_color_matrix=bt709:out_range=tv,setsar=1,format=yuv420p`,
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'fastdecode', '-crf', '30', '-g', '1',
-    ...OUT_TAGS, '-movflags', '+faststart', part
+    '-i',
+    path,
+    '-an',
+    '-sn',
+    '-dn',
+    '-fpsmax',
+    '30',
+    '-vf',
+    `scale=${even(w)}:${even(h)}:${inColor(color)}:out_color_matrix=bt709:out_range=tv,setsar=1,format=yuv420p`,
+    '-c:v',
+    'libx264',
+    '-preset',
+    'ultrafast',
+    '-tune',
+    'fastdecode',
+    '-crf',
+    '30',
+    '-g',
+    '1',
+    ...OUT_TAGS,
+    '-movflags',
+    '+faststart',
+    part
   ]
   const attempt = async (hw: boolean) => {
     const { proc, done } = run('proxy', args(hw))

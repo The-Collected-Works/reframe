@@ -87,8 +87,12 @@
 .ghost,
 .primary,
 .menu-item {
-  transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease),
-    transform var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease);
+  transition:
+    background-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease),
+    opacity var(--t-fast) var(--ease);
 }
 
 .icon-btn:active:not(:disabled),

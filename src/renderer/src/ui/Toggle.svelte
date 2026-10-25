@@ -35,7 +35,10 @@
 
   .toggle,
   .toggle::after {
-    transition: background-color 220ms var(--ease), transform 260ms var(--spring), width 260ms var(--spring);
+    transition:
+      background-color 220ms var(--ease),
+      transform 260ms var(--spring),
+      width 260ms var(--spring);
   }
 
   .on {

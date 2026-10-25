@@ -25,8 +25,7 @@ export function parseColor(stderr: string): ColorMeta {
 }
 
 /** swscale options for converting this source's YUV to RGB. */
-export const inColor = (c: ColorMeta | undefined): string =>
-  `in_color_matrix=${c?.matrix ?? 'bt709'}:in_range=${c?.range ?? 'tv'}`
+export const inColor = (c: ColorMeta | undefined): string => `in_color_matrix=${c?.matrix ?? 'bt709'}:in_range=${c?.range ?? 'tv'}`
 
 /** Everything exports as BT.709 limited range, converted explicitly and tagged so players agree. */
 export const OUT_COLOR = 'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p'

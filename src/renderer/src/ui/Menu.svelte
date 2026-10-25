@@ -24,7 +24,12 @@
     const h = node.offsetHeight
     const left = x + w > window.innerWidth - 8 ? Math.max(8, x - w) : x
     const top = y + h > window.innerHeight - 8 ? Math.max(8, y - h) : y
-    Object.assign(node.style, { left: `${left}px`, top: `${top}px`, transformOrigin: `${left < x ? 'right' : 'left'} ${top < y ? 'bottom' : 'top'}`, visibility: '' })
+    Object.assign(node.style, {
+      left: `${left}px`,
+      top: `${top}px`,
+      transformOrigin: `${left < x ? 'right' : 'left'} ${top < y ? 'bottom' : 'top'}`,
+      visibility: ''
+    })
   }
 
   // Keyboard: ↑ ↓ move, Enter chooses, Esc closes. Any click elsewhere, scroll or blur closes.
@@ -69,10 +74,14 @@
         onpointerenter={() => (active = it.enabled === false ? -1 : i)}
         onclick={() => choose(it.id ?? null)}
       >
-        <span class="ctx-icon">{#if it.icon}<Icon name={it.icon} size={15} />{/if}</span>
+        <span class="ctx-icon"
+          >{#if it.icon}<Icon name={it.icon} size={15} />{/if}</span
+        >
         <span class="ctx-label">{it.label}</span>
         {#if it.shortcut}<span class="ctx-key">{it.shortcut}</span>{/if}
-        {#if it.checked !== undefined}<span class="ctx-check">{#if it.checked}<Icon name="check" size={14} />{/if}</span>{/if}
+        {#if it.checked !== undefined}<span class="ctx-check"
+            >{#if it.checked}<Icon name="check" size={14} />{/if}</span
+          >{/if}
       </button>
     {/if}
   {/each}
@@ -87,7 +96,9 @@
     border-radius: 10px;
     background: rgba(32, 32, 36, 0.92);
     backdrop-filter: blur(20px) saturate(150%);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 14px 40px rgba(0, 0, 0, 0.5);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 14px 40px rgba(0, 0, 0, 0.5);
     -webkit-app-region: no-drag;
     animation: pop-in 130ms var(--ease) both;
   }

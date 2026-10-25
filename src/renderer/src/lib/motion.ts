@@ -20,13 +20,7 @@ export function snapshot(src: HTMLCanvasElement, sx = 0, sy = 0, sw = src.width,
  * has landed; the caller reveals the real content, then calls the returned `dismiss` to fade
  * the flyer out on top of it, so the hand-off is invisible.
  */
-export async function fly(
-  host: HTMLElement,
-  image: HTMLCanvasElement,
-  from: DOMRect,
-  to: DOMRect,
-  duration = 320
-): Promise<() => void> {
+export async function fly(host: HTMLElement, image: HTMLCanvasElement, from: DOMRect, to: DOMRect, duration = 320): Promise<() => void> {
   const h = host.getBoundingClientRect()
   image.className = 'flyer'
   Object.assign(image.style, {

@@ -266,7 +266,10 @@
     color: var(--text);
     font-size: 13px;
     animation: rise-in 420ms var(--ease) both;
-    transition: border-color var(--t-med) var(--ease), background-color var(--t-med) var(--ease), transform var(--t-med) var(--ease);
+    transition:
+      border-color var(--t-med) var(--ease),
+      background-color var(--t-med) var(--ease),
+      transform var(--t-med) var(--ease);
   }
 
   .empty-drop :global(svg) {

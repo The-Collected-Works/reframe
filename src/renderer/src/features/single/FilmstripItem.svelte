@@ -43,7 +43,8 @@
 </script>
 
 <button tabindex={-1} class={['film-item', { on, skipped: settings.skip }]} title={entry.name} onclick={() => app.select(entry.name)}>
-  <canvas bind:this={canvas} data-ready={ready || undefined} {@attach visibility(onVisible)} style:width={`${width}px`} style:height={`${FILM_HEIGHT}px`}></canvas>
+  <canvas bind:this={canvas} data-ready={ready || undefined} {@attach visibility(onVisible)} style:width={`${width}px`} style:height={`${FILM_HEIGHT}px`}
+  ></canvas>
 </button>
 
 <style>

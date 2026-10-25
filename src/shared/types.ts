@@ -133,10 +133,7 @@ export interface ReleaseNote {
  * waiting for a restart, or failed (fall back to the download link).
  */
 export type UpdateStatus =
-  | { state: 'idle' }
-  | { state: 'downloading'; version: string; percent: number }
-  | { state: 'ready'; version: string }
-  | { state: 'failed' }
+  { state: 'idle' } | { state: 'downloading'; version: string; percent: number } | { state: 'ready'; version: string } | { state: 'failed' }
 
 /** What's over the page: nothing, or a modal's dimmed backdrop. */
 export type OverlayTint = 'none' | 'dim'

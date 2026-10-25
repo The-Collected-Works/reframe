@@ -71,7 +71,9 @@
     min-width: 200px;
     background: var(--raised);
     border-radius: 10px;
-    box-shadow: 0 0 0 1px var(--line-strong), 0 12px 40px rgba(0, 0, 0, 0.5);
+    box-shadow:
+      0 0 0 1px var(--line-strong),
+      0 12px 40px rgba(0, 0, 0, 0.5);
     /* Over the title bar's drag region, which would otherwise take the pointer. */
     -webkit-app-region: no-drag;
     /* Grows out of its anchor. */

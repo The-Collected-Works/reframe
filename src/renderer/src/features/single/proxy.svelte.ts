@@ -44,7 +44,7 @@ export function bitmapProxy(
   })
   return {
     get bitmap() {
-      return enough ? null : have?.bitmap ?? null
+      return enough ? null : (have?.bitmap ?? null)
     }
   }
 }

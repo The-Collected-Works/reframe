@@ -227,12 +227,15 @@ ipcMain.handle('last-folder', async () => {
   if (launchFolder) return launchFolder
   const { lastFolder } = await readState()
   if (!lastFolder) return null
-  return fs.stat(lastFolder).then((s) => (s.isDirectory() ? lastFolder : null), () => null)
+  return fs.stat(lastFolder).then(
+    (s) => (s.isDirectory() ? lastFolder : null),
+    () => null
+  )
 })
 ipcMain.handle('save-project', (_e, dir: string, project: ProjectFile) => saveProject(dir, project))
 ipcMain.handle('choose-export-dir', async (_e, defaultPath?: string) => {
   const res = await dialog.showOpenDialog(win!, { defaultPath, properties: ['openDirectory', 'createDirectory'] })
-  return res.canceled ? null : res.filePaths[0] ?? null
+  return res.canceled ? null : (res.filePaths[0] ?? null)
 })
 ipcMain.handle('write-file', async (_e, path: string, data: ArrayBuffer) => {
   if (!inOutput(path)) throw new Error('Not in the export folder')

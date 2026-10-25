@@ -5,7 +5,7 @@ import pkg from '../../package.json'
 /** "owner/name" from package.json's `repository`. Without one, update checks are off. */
 function releasesRepo(): string | null {
   const r = (pkg as { repository?: string | { url?: string } }).repository
-  const url = typeof r === 'string' ? r : r?.url ?? ''
+  const url = typeof r === 'string' ? r : (r?.url ?? '')
   return /github(?:\.com[/:]|:)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/.exec(url)?.[1] ?? null
 }
 

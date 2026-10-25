@@ -12,4 +12,3 @@ export const visibility =
   (cb: (visible: boolean) => void): Attachment<Element> =>
   (node) =>
     observeVisibility(node, cb)
-
