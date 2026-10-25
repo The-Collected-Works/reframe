@@ -601,12 +601,10 @@ input {
   padding-bottom: 0;
 }
 
-/* Headers reach out through the scroller's padding (and as wide as that makes it): to the window's
-   left edge and up to the scrollbar; the text lines up with the thumbnails. They stick while their
-   folder scrolls by, a subfolder's sliding over its parent's, so the top bar always shows the full
-   path to where you are. In place, a header is see-through and its folder's box (tint and all) is
-   the only surface; only while stuck does it get a bar of its own, translucent and blurred, so
-   thumbnails passing beneath still show faintly. */
+/* Headers span their folder's card, edge to edge; the text lines up with the thumbnails. They stick
+   while their folder scrolls by, a subfolder's sliding over its parent's, so the top bar always
+   shows the full path to where you are. In place, a header is see-through and its folder's card
+   (tint and all) is the only surface; only while stuck does it get a surface of its own. */
 .grid-section {
   position: sticky;
   /* Flush with the top: sticky offsets start inside the scroller's top padding. */
@@ -616,34 +614,38 @@ input {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: calc(100% + 42px);
+  width: calc(100% + 20px);
   /* About 20px above and below the icons, as at the sides. */
   height: 54px;
-  margin: 0 -16px 0 -26px;
-  padding: 0 26px 0 36px;
+  margin: 0 -10px;
+  padding: 0 20px;
+  border-radius: 12px;
   color: var(--muted);
   font-weight: 500;
   text-align: left;
 }
 
-/* The stuck bar (::before), the same colour as the window behind it, and over it the folder's tint
-   (::after), which the bar would otherwise hide: a white wash just strong enough that the bar over
-   the card comes out the card's own shade, so it stays as see-through as the bar unhovered. Inset
-   to the card's width; square, as the card's top has scrolled away and it runs on off the edge. */
+/* The stuck surface: solid, the window's colour (::before), with the card's own tint over it while
+   the folder is hovered (::after), so it looks the same as the header in place and simply covers
+   the thumbnails scrolling under it. Square on top, as the card's top has scrolled away and it runs
+   on off the edge; rounded below like the card, for when the folder's end pushes it off. */
 .grid-section::before,
 .grid-section::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
+  border-radius: 0 0 12px 12px;
   pointer-events: none;
   visibility: hidden;
 }
 
+.grid-section::before {
+  background: var(--well);
+}
+
 .grid-section::after {
-  left: 16px;
-  right: 6px;
-  background: rgba(255, 255, 255, 0.022);
+  background: rgba(255, 255, 255, 0.025);
   opacity: 0;
   transition: opacity 220ms var(--ease);
 }
@@ -652,11 +654,6 @@ input {
   .grid-section::before,
   .grid-section::after {
     visibility: visible;
-  }
-
-  .grid-section::before {
-    background: rgba(11, 11, 12, 0.86);
-    backdrop-filter: blur(16px) saturate(140%);
   }
 }
 
@@ -780,8 +777,6 @@ input {
   position: relative;
   top: auto;
   z-index: auto;
-  background: none;
-  backdrop-filter: none;
 }
 
 .grid-section.excluded .section-icon,
