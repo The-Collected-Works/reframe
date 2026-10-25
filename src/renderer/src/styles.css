@@ -627,9 +627,9 @@ input {
 }
 
 /* The stuck bar (::before), the same colour as the window behind it, and over it the folder's tint
-   (::after), which the bar would otherwise hide: the card's shade (--well with 2.5% white) as a
-   colour of its own (a faint white layer over the bar blends unevenly and shows bands), inset to
-   the card's width. Square: the card's top has scrolled away, so it runs on off the top edge. */
+   (::after), which the bar would otherwise hide: a white wash just strong enough that the bar over
+   the card comes out the card's own shade, so it stays as see-through as the bar unhovered. Inset
+   to the card's width; square, as the card's top has scrolled away and it runs on off the edge. */
 .grid-section::before,
 .grid-section::after {
   content: '';
@@ -643,7 +643,7 @@ input {
 .grid-section::after {
   left: 16px;
   right: 6px;
-  background: rgba(17, 17, 18, 0.86);
+  background: rgba(255, 255, 255, 0.022);
   opacity: 0;
   transition: opacity 220ms var(--ease);
 }
