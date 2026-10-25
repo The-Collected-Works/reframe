@@ -1,8 +1,8 @@
 import { DEFAULT_SETTINGS, resolveSettings } from '@shared/layout'
 import type { SettingKey } from '@shared/types'
 import { combo, MOD, SHIFT } from './keys'
-import { api } from './media'
-import { baseName, folderOf, hasOverrides, useStore, type AppMenuItem } from './store'
+import { api, rescanFolder } from './media'
+import { baseName, currentBoard, folderOf, hasOverrides, layoutOf, useStore, type AppMenuItem } from './store'
 
 const mac = api.platform === 'darwin'
 const revealLabel = mac ? 'Reveal in Finder' : api.platform === 'win32' ? 'Show in Explorer' : 'Show in Folder'
@@ -11,8 +11,8 @@ const key = (k: string) => combo(MOD, k)
 /** Back to the artboard's defaults for every selected asset; undoable, and says so. */
 export function resetSelection(): void {
   const st = useStore.getState()
-  const board = st.project.artboards.find((b) => b.id === st.boardId)
-  const names = st.selection.filter((n) => board && hasOverrides(board, n))
+  const board = currentBoard(st)
+  const names = st.selection.filter((n) => hasOverrides(board, n))
   if (!names.length) return
   st.resetKeys(Object.keys(DEFAULT_SETTINGS) as SettingKey[], names)
   st.showHud(`Reset ${names.length === 1 ? baseName(names[0]) : `${names.length} assets`} · ${key('Z')} to undo`)
@@ -41,7 +41,7 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
   let st = useStore.getState()
   if (!st.selection.includes(name)) st.select(name)
   st = useStore.getState()
-  const board = st.project.artboards.find((b) => b.id === st.boardId)!
+  const board = currentBoard(st)
   const sel = st.selection
   const skip = resolveSettings(board, name).skip
   const id = await showMenu(at.x, at.y, [
@@ -100,15 +100,14 @@ export async function boardMenu(boardId: string, at: { x: number; y: number }): 
 const sep = api.platform === 'win32' ? '\\' : '/'
 const lastPart = (folder: string) => folder.slice(folder.lastIndexOf('/') + 1)
 
-async function rescan(): Promise<void> {
-  const scan = await api.rescanFolder()
-  if (scan) useStore.getState().rescan(scan)
-}
-
 /** Right-click on a folder's section header in the grid. */
 export async function folderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
   const st = useStore.getState()
-  const names = st.assets.filter((a) => folderOf(a.name) === folder).map((a) => a.name)
+  // What's visible in the folder and the folders inside it (selecting hidden assets would let edits
+  // land out of sight).
+  const names = layoutOf(st)
+    .visible.filter((a) => folderOf(a.name) === folder || (folder !== '' && a.name.startsWith(folder + '/')))
+    .map((a) => a.name)
   const id = await showMenu(at.x, at.y, [
     { id: 'select', label: 'Select All in Folder', icon: 'check', enabled: names.length > 0 },
     { id: 'reveal', label: revealLabel, icon: 'reveal' },
@@ -122,7 +121,7 @@ export async function folderMenu(folder: string, at: { x: number; y: number }): 
 /** Leaves a folder (and everything in it) out of the project; its bar stays, dimmed, to bring it back. */
 export async function excludeFolder(folder: string): Promise<void> {
   await api.excludeFolder(folder)
-  await rescan()
+  await rescanFolder()
   useStore.getState().showHud(`Excluded “${lastPart(folder)}” · right-click its bar to bring it back`)
 }
 
@@ -141,6 +140,6 @@ export async function excludedFolderMenu(folder: string, at: { x: number; y: num
 /** Brings an excluded (or export) folder back into the project. */
 export async function includeFolder(folder: string): Promise<void> {
   await api.includeFolder(folder)
-  await rescan()
+  await rescanFolder()
   useStore.getState().showHud(`Included “${lastPart(folder)}”`)
 }

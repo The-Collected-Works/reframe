@@ -7,8 +7,9 @@ import { Loupe } from './components/Loupe'
 import { TopBar } from './components/TopBar'
 import { Icon } from './components/ui'
 import { resetSelection } from './menus'
-import { api, cancelPick, hydrate, pickBackground } from './media'
+import { api, cancelPick, pickBackground, rescanFolder } from './media'
 import { usePresence } from './motion'
+import type { ProjectFile } from '@shared/types'
 import { useStore } from './store'
 
 function Hud() {
@@ -23,7 +24,7 @@ function Hud() {
 export function App() {
   const dir = useStore((s) => s.dir)
   const view = useStore((s) => s.view)
-  const assets = useStore((s) => s.assets)
+  const empty = useStore((s) => s.assets.length === 0)
   const exportOpen = useStore((s) => s.exportOpen)
   const exportPresence = usePresence(exportOpen, 180)
   const [dropping, setDropping] = useState(false)
@@ -34,9 +35,14 @@ export function App() {
   }, [exportOpen])
   const [booted, setBooted] = useState(false)
 
+  // Not while exporting (the export reads the open folder). Opens can overlap (the launch reopening
+  // the last folder while another is picked); only the newest one's result is applied.
+  const opening = useRef(0)
   const openDir = useCallback(async (path?: string) => {
-    const scan = path ? await api.scanFolder(path).catch(() => null) : await api.openFolder()
-    if (scan) useStore.getState().load(scan)
+    if (useStore.getState().exportOpen) return
+    const n = ++opening.current
+    const scan = await (path ? api.scanFolder(path) : api.openFolder()).catch(() => null)
+    if (scan && n === opening.current) useStore.getState().load(scan)
   }, [])
 
   // A folder picked from the taskbar's or Dock's recent folders while the app is running.
@@ -50,30 +56,31 @@ export function App() {
     })
   }, [openDir])
 
-  useEffect(() => hydrate(assets), [assets])
-
   // Pick up files added to or removed from the folder.
-  useEffect(
-    () =>
-      api.onFolderChanged(async () => {
-        const scan = await api.rescanFolder()
-        if (scan && scan.dir === useStore.getState().dir) useStore.getState().rescan(scan)
-      }),
-    []
-  )
+  useEffect(() => api.onFolderChanged(rescanFolder), [])
 
-  // Autosave the project next to the assets.
+  // Autosave the project next to the assets, shortly after edits settle. A save still waiting is
+  // written straight away when another folder is opened or the window closes.
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | undefined
+    let waiting: { dir: string; project: ProjectFile } | null = null
+    const flush = () => {
+      clearTimeout(t)
+      if (waiting) api.saveProject(waiting.dir, waiting.project).catch(() => {})
+      waiting = null
+    }
     const unsub = useStore.subscribe((s, prev) => {
-      if (s.project === prev.project || !s.dir || s.dir !== prev.dir) return
+      if (s.dir !== prev.dir) return flush()
+      if (s.project === prev.project || !s.dir) return
+      waiting = { dir: s.dir, project: s.project }
       clearTimeout(t)
-      const { dir, project } = s
-      t = setTimeout(() => api.saveProject(dir, project).catch(() => {}), 400)
+      t = setTimeout(flush, 400)
     })
+    window.addEventListener('pagehide', flush)
     return () => {
+      flush()
       unsub()
-      clearTimeout(t)
+      window.removeEventListener('pagehide', flush)
     }
   }, [])
 
@@ -218,7 +225,7 @@ export function App() {
           </main>
         )
       )}
-      {dir && assets.length === 0 && <div className="empty-hint center">No images or videos in this folder</div>}
+      {dir && empty && <div className="empty-hint center">No images or videos in this folder</div>}
       {exportPresence.mounted && <ExportDialog closing={exportPresence.closing} />}
       <Hud />
       <ContextMenu />

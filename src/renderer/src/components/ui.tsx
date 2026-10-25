@@ -373,14 +373,21 @@ export function Popover({
       if (e.timeStamp < opened || ref.current?.contains(t) || anchor?.contains(t)) return
       onCloseRef.current()
     }
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onCloseRef.current()
+    // Esc closes the popover and stops there (the app's own Esc would also deselect, or leave
+    // single view).
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      onCloseRef.current()
+    }
     window.addEventListener('pointerdown', down, true)
-    window.addEventListener('keydown', key)
+    window.addEventListener('keydown', key, true)
     // Clicks on the title bar's drag region never reach the page, but dragging the window closes it.
     const offMove = api.onWindowMoving(() => onCloseRef.current())
     return () => {
       window.removeEventListener('pointerdown', down, true)
-      window.removeEventListener('keydown', key)
+      window.removeEventListener('keydown', key, true)
       offMove()
     }
   }, [open])

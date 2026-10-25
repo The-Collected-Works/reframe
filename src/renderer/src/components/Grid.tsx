@@ -1,12 +1,12 @@
 import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { drawFrame, resolveSettings } from '@shared/layout'
-import type { Artboard, Clip, SkippedFolder } from '@shared/types'
+import type { Artboard, Clip, SkippedFolder, AssetEntry } from '@shared/types'
 import { dragOffset, NO_GUIDES, type Guides } from '../interact'
 import { posterTime } from '@shared/media'
 import { observeVisibility, scheduleDraw } from '../lazydraw'
 import { mediaUrl, prioritize } from '../media'
 import { assetMenu, excludedFolderMenu, folderMenu, includeFolder } from '../menus'
-import { baseName, folderOf, hasOverrides, layout, useBoard, useStore, type Asset, type FolderNode } from '../store'
+import { baseName, folderOf, hasOverrides, layoutOf, useBoard, useStore, withMeta, type FolderNode } from '../store'
 import { fmtTime, Icon } from './ui'
 
 const GAP = 8
@@ -25,18 +25,12 @@ const EDGE_RIGHT = 16
  * its scroll position. While hidden its board is frozen, so edits don't re-render every cell.
  */
 export function Grid({ active }: { active: boolean }) {
-  const assets = useStore((s) => s.assets)
+  const hasAssets = useStore((s) => s.assets.length > 0)
   const dir = useStore((s) => s.dir)
   const skipped = useStore((s) => s.skipped)
   const truncated = useStore((s) => s.truncated)
-  const project = useStore((s) => s.project)
-  const boardId = useStore((s) => s.boardId)
   const viewPrefs = useStore((s) => s.viewPrefs)
-  const collapsed = useStore((s) => s.collapsed)
-  const { tree, visible } = useMemo(
-    () => layout({ assets, project, boardId, viewPrefs, collapsed, skipped }),
-    [assets, project, boardId, viewPrefs, collapsed, skipped]
-  )
+  const { tree, visible } = useStore(layoutOf)
   // A flat folder needs no headers; as soon as there are subfolders (or excluded ones), every
   // folder gets one.
   const sectioned = viewPrefs.group && (tree.length > 1 || (tree.length === 1 && tree[0].folder !== ''))
@@ -143,7 +137,7 @@ export function Grid({ active }: { active: boolean }) {
           ))}
         </FolderContext.Provider>
       )}
-      {assets.length > 0 && !tree.length && <div className="empty-hint center">Nothing matches this filter</div>}
+      {hasAssets && !tree.length && <div className="empty-hint center">Nothing matches this filter</div>}
       {((skipped.length > 0 && !sectioned) || truncated) && (
         <div className="grid-foot">
           {skipped.length > 0 && !sectioned && (
@@ -191,7 +185,7 @@ function Folder({ node }: { node: FolderNode }) {
   const grid = node.assets.length > 0 && (
     <div className="grid" style={{ gridTemplateColumns: `repeat(${g.cols}, ${g.cellW}px)`, gap: GAP }}>
       {node.assets.map((a) => (
-        <Cell key={a.name} asset={a} board={g.board} width={g.cellW - PAD * 2} active={g.active} names={g.names} withFolder={g.withFolder} />
+        <Cell key={a.name} entry={a} board={g.board} width={g.cellW - PAD * 2} active={g.active} names={g.names} withFolder={g.withFolder} />
       ))}
     </div>
   )
@@ -342,14 +336,14 @@ function release(v: HTMLVideoElement) {
 }
 
 const Cell = memo(function Cell({
-  asset,
+  entry,
   board,
   width,
   active,
   names,
   withFolder
 }: {
-  asset: Asset
+  entry: AssetEntry
   board: Artboard
   width: number
   active: boolean
@@ -358,6 +352,9 @@ const Cell = memo(function Cell({
   /** Prefix the name with its folder (when the grid isn't grouped by folder). */
   withFolder: boolean
 }) {
+  // Only this cell's own loaded details: another thumbnail arriving doesn't re-render it.
+  const meta = useStore((s) => s.meta[entry.name])
+  const asset = useMemo(() => withMeta(entry, meta), [entry, meta])
   const selected = useStore((s) => s.selection.includes(asset.name))
   const focused = useStore((s) => s.focus === asset.name)
   const clip = useStore((s) => s.project.clips[asset.name]) as Clip | undefined

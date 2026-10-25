@@ -1,11 +1,11 @@
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { DEFAULT_SETTINGS, normDeg, resolveSettings } from '@shared/layout'
 import type { CropSettings, FitMode, SettingKey } from '@shared/types'
 import { ZOOM_MAX, ZOOM_MIN } from '../interact'
 import { combo, MOD, SHIFT } from '../keys'
 import { pickBackground } from '../media'
 import { resetSelection } from '../menus'
-import { baseName, hasOverrides, useBoard, useStore, type Asset } from '../store'
+import { baseName, hasOverrides, useAsset, useBoard, useStore, type Asset } from '../store'
 import { ColorField, fmtTime, Icon, NumberField, Segmented, Slider, Toggle } from './ui'
 
 const FITS: { value: FitMode; label: string; title: string }[] = [
@@ -26,8 +26,13 @@ export function Inspector() {
   const { edit, editEach, resetKeys, makeDefault, clearSelection, copy, paste } = useStore.getState()
 
   const editing = selection.length > 0
-  const primaryAsset = assets.find((a) => a.name === (focus && selection.includes(focus) ? focus : selection[0]))
   const primary = editing ? (focus && selection.includes(focus) ? focus : selection[0]) : null
+  const primaryAsset = useAsset(selection.length === 1 ? primary : null)
+  // The selected assets, found in one pass (selections can be the whole folder).
+  const chosen = useMemo(() => {
+    const picked = new Set(selection)
+    return assets.filter((a) => picked.has(a.name))
+  }, [assets, selection])
   const s: CropSettings = primary ? resolveSettings(board, primary) : board.defaults
   const W = board.width
   const H = board.height
@@ -35,7 +40,7 @@ export function Inspector() {
   const overridden = (keys: SettingKey[]) =>
     editing && selection.some((n) => keys.some((k) => board.overrides[n]?.[k] !== undefined))
 
-  const hasVideo = editing ? selection.some((n) => assets.find((a) => a.name === n)?.kind === 'video') : assets.some((a) => a.kind === 'video')
+  const hasVideo = (editing ? chosen : assets).some((a) => a.kind === 'video')
   const anyOverride = editing && selection.some((n) => hasOverrides(board, n))
 
   const rp = (keys: SettingKey[]) => ({
@@ -49,7 +54,6 @@ export function Inspector() {
   const back = (...keys: SettingKey[]) => () =>
     editing ? resetKeys(keys) : edit(Object.fromEntries(keys.map((k) => [k, DEFAULT_SETTINGS[k]])) as Partial<CropSettings>)
 
-  const chosen = assets.filter((a) => selection.includes(a.name))
   const title = selection.length === 1 ? baseName(primary!) : `${selection.length} assets`
   const tags = !editing
     ? [`${board.width}×${board.height}`, plural(assets.length, 'asset'), plural(assets.filter((a) => hasOverrides(board, a.name)).length, 'adjusted', 'adjusted')]

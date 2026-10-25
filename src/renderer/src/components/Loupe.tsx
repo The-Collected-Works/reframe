@@ -6,7 +6,7 @@ import { combo, MOD } from '../keys'
 import { api, loadStill, mediaUrl } from '../media'
 import { assetMenu } from '../menus'
 import { crossfade, fly, settledRect, snapshot } from '../motion'
-import { clipFor, useBoard, useStore, useVisible } from '../store'
+import { clipFor, useAsset, useBoard, useStore, useVisible } from '../store'
 import { Filmstrip } from './Filmstrip'
 import { fmtTime, Icon, Slider } from './ui'
 
@@ -51,7 +51,7 @@ const RESIZE = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize']
 
 export function Loupe() {
   const focus = useStore((s) => s.focus)
-  const asset = useStore((s) => s.assets.find((a) => a.name === s.focus))
+  const asset = useAsset(useStore((s) => s.focus))
   // Position among what the grid shows (filtered, sorted, collapsed folders left out).
   const visible = useVisible()
   const index = visible.findIndex((a) => a.name === focus)

@@ -1,10 +1,10 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { drawFrame, resolveSettings } from '@shared/layout'
-import type { Artboard } from '@shared/types'
+import type { Artboard, AssetEntry } from '@shared/types'
 import { observeVisibility, scheduleDraw } from '../lazydraw'
 import { prioritize } from '../media'
 import { reducedMotion } from '../motion'
-import { useBoard, useStore, useVisible, type Asset } from '../store'
+import { useBoard, useStore, useVisible, withMeta } from '../store'
 
 const HEIGHT = 52
 /** Matches .film-item padding and .film-scroll gap. */
@@ -154,13 +154,15 @@ export function Filmstrip() {
       style={{ width: step * VISIBLE, paddingLeft: pad, paddingRight: pad, ['--item' as string]: `${step}px` }}
     >
       {assets.map((a) => (
-        <Thumb key={a.name} asset={a} board={board} on={a.name === focus} />
+        <Thumb key={a.name} entry={a} board={board} on={a.name === focus} />
       ))}
     </div>
   )
 }
 
-const Thumb = memo(function Thumb({ asset, board, on }: { asset: Asset; board: Artboard; on: boolean }) {
+const Thumb = memo(function Thumb({ entry, board, on }: { entry: AssetEntry; board: Artboard; on: boolean }) {
+  const meta = useStore((s) => s.meta[entry.name])
+  const asset = useMemo(() => withMeta(entry, meta), [entry, meta])
   const canvas = useRef<HTMLCanvasElement>(null)
   const visible = useRef(false)
   const drawn = useRef('')

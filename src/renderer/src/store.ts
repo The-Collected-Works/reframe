@@ -3,8 +3,14 @@ import { create } from 'zustand'
 import { DEFAULT_SETTINGS, resolveSettings } from '@shared/layout'
 import type { IconName } from './components/ui'
 import type { Artboard, AssetEntry, Clip, ColorMeta, CropSettings, ExportPrefs, FolderScan, ProjectFile, SettingKey, SkippedFolder } from '@shared/types'
+import { hydrate } from './media'
 
-export interface Asset extends AssetEntry {
+/**
+ * What loading an asset finds out (size, timing, colour, thumbnail). Kept apart from the scanned
+ * list (`assets`), so thumbnails arriving never change the list everything is sorted and laid out
+ * from; each thumbnail subscribes to its own entry.
+ */
+export interface AssetMeta {
   w: number
   h: number
   duration: number
@@ -16,7 +22,14 @@ export interface Asset extends AssetEntry {
   error: boolean
 }
 
-export type View = 'grid' | 'loupe'
+/** A scanned asset together with what's been loaded about it. */
+export type Asset = AssetEntry & AssetMeta
+
+const NO_META: AssetMeta = { w: 0, h: 0, duration: 0, thumb: null, error: false }
+
+export const withMeta = (entry: AssetEntry, meta: AssetMeta | undefined): Asset => ({ ...entry, ...(meta ?? NO_META) })
+
+type View = 'grid' | 'loupe'
 
 export interface AppMenuItem {
   id?: string
@@ -42,7 +55,7 @@ export const PRESETS: { name: string; width: number; height: number }[] = [
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 
-export function newBoard(name: string, width: number, height: number, defaults: CropSettings = DEFAULT_SETTINGS): Artboard {
+function newBoard(name: string, width: number, height: number, defaults: CropSettings = DEFAULT_SETTINGS): Artboard {
   return { id: uid(), name, width, height, defaults: { ...defaults }, overrides: {} }
 }
 
@@ -81,7 +94,10 @@ function normalizeProject(p: ProjectFile | null): ProjectFile {
 
 interface State {
   dir: string | null
-  assets: Asset[]
+  /** What the folder scan found, in folder order. */
+  assets: AssetEntry[]
+  /** What's been loaded for each asset, by name (see AssetMeta). */
+  meta: Record<string, AssetMeta>
   /** Subfolders the scan left out (exports, or excluded by the user). */
   skipped: SkippedFolder[]
   /** The scan stopped at its file limit. */
@@ -115,7 +131,8 @@ interface State {
 interface Actions {
   load(scan: FolderScan): void
   rescan(scan: FolderScan): void
-  patchAsset(name: string, patch: Partial<Asset>): void
+  /** Records what loading found, if `entry` is still the asset of that name (not a replaced file). */
+  setMeta(entry: AssetEntry, meta: Partial<AssetMeta>): void
   setView(view: View): void
   setCellSize(n: number): void
   setViewPrefs(patch: Partial<ViewPrefs>): void
@@ -156,9 +173,10 @@ interface Actions {
   redo(): void
 }
 
-export type Store = State & Actions
+type Store = State & Actions
 
-let lastCommit = 0
+/** The last commit (time and what it edited), so a drag or slider is one undo step. */
+let lastCommit = { at: 0, key: '' }
 
 export type SortKey = 'name' | 'date' | 'type'
 export type FilterKey = 'all' | 'images' | 'videos' | 'adjusted' | 'excluded'
@@ -189,70 +207,110 @@ function store(key: string, value: unknown): void {
   }
 }
 
-const storedView = (): ViewPrefs => ({ ...VIEW_DEFAULTS, ...read<Partial<ViewPrefs>>('reframe.view', {}) })
+const FILTERS: FilterKey[] = ['all', 'images', 'videos', 'adjusted', 'excluded']
+const SORTS: SortKey[] = ['name', 'date', 'type']
+
+/** Stored view options, each checked (a value from another version falls back to the default). */
+function storedView(): ViewPrefs {
+  const v = read<Partial<ViewPrefs>>('reframe.view', {})
+  return {
+    filter: FILTERS.includes(v.filter as FilterKey) ? (v.filter as FilterKey) : VIEW_DEFAULTS.filter,
+    sort: SORTS.includes(v.sort as SortKey) ? (v.sort as SortKey) : VIEW_DEFAULTS.sort,
+    group: typeof v.group === 'boolean' ? v.group : VIEW_DEFAULTS.group,
+    names: typeof v.names === 'boolean' ? v.names : VIEW_DEFAULTS.names
+  }
+}
 const storedCollapsed = (dir: string): string[] => {
   const v = read<unknown>('reframe.collapsed:' + dir, [])
   return Array.isArray(v) ? v.filter((f): f is string => typeof f === 'string') : []
 }
 
 function storedVolume(): number {
-  try {
-    const v = parseFloat(localStorage.getItem('reframe.volume') ?? '')
-    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.8
-  } catch {
-    return 0.8
-  }
+  const v = Number(read<unknown>('reframe.volume', 0.8))
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.8
 }
 
 export const useStore = create<Store>()((set, get) => {
-  /** Applies a project change, coalescing rapid edits (slider drags) into one undo step. */
-  const commit = (next: ProjectFile) => {
+  /**
+   * Applies a project change. A change that changes nothing (the artboard editor closing with the
+   * same name, say) isn't recorded, so it can't clear redo. Successive changes of the same kind in
+   * quick succession (`key`: one slider, one drag) make one undo step; anything else is its own.
+   */
+  const commit = (next: ProjectFile, key = '') => {
     const { project, past } = get()
+    if (next === project) return
     const now = performance.now()
-    const push = now - lastCommit > 600
-    lastCommit = now
-    set({ project: next, past: push ? [...past.slice(-99), project] : past, future: [] })
+    const merge = !!key && key === lastCommit.key && now - lastCommit.at < 600
+    lastCommit = { at: now, key }
+    set({ project: next, past: merge ? past : [...past.slice(-99), project], future: [] })
   }
 
-  const mapBoard = (fn: (b: Artboard) => Artboard, id = get().boardId) => {
+  /** Changes one artboard (the current one by default). Returning it unchanged changes nothing. */
+  const mapBoard = (fn: (b: Artboard) => Artboard, id = get().boardId, key = '') => {
     const { project } = get()
-    commit({ ...project, artboards: project.artboards.map((b) => (b.id === id ? fn(b) : b)) })
+    const i = project.artboards.findIndex((b) => b.id === id)
+    if (i < 0) return
+    const board = fn(project.artboards[i])
+    if (board === project.artboards[i]) return
+    const artboards = [...project.artboards]
+    artboards[i] = board
+    commit({ ...project, artboards }, key)
   }
+
+  /** Whether applying `patch` to `o` would change it. */
+  const changes = <T extends object>(o: T | undefined, patch: Partial<T>) =>
+    Object.entries(patch).some(([k, v]) => !o || o[k as keyof T] !== v)
 
   // An override is set by editing an asset and removed only by an explicit reset, even if its
-  // value happens to equal the default, so it never silently starts following defaults.
-  const withOverrides = (b: Artboard, names: string[], patch: Partial<CropSettings>): Artboard => {
-    const overrides = { ...b.overrides }
+  // value happens to equal the default, so it never silently starts following defaults. The
+  // overrides map is copied once, however many assets change.
+  const withOverrides = (b: Artboard, names: string[], patch: Partial<CropSettings> | ((name: string) => Partial<CropSettings>)): Artboard => {
+    let overrides: Artboard['overrides'] | null = null
     for (const name of names) {
-      const o = { ...overrides[name], ...patch }
-      if (Object.keys(o).length) overrides[name] = o
-      else delete overrides[name]
+      const p = typeof patch === 'function' ? patch(name) : patch
+      if (!changes(b.overrides[name], p) && b.overrides[name]) continue
+      overrides ??= { ...b.overrides }
+      overrides[name] = { ...b.overrides[name], ...p }
+      if (!Object.keys(overrides[name]).length) delete overrides[name]
     }
-    return { ...b, overrides }
+    return overrides ? { ...b, overrides } : b
   }
 
   const withoutOverrides = (b: Artboard, names: string[], keys: SettingKey[]): Artboard => {
-    const overrides = { ...b.overrides }
+    let overrides: Artboard['overrides'] | null = null
     for (const name of names) {
-      if (!overrides[name]) continue
-      const o = { ...overrides[name] }
+      const current = b.overrides[name]
+      if (!current || !keys.some((k) => k in current)) continue
+      overrides ??= { ...b.overrides }
+      const o = { ...current }
       for (const k of keys) delete o[k]
       if (Object.keys(o).length) overrides[name] = o
       else delete overrides[name]
     }
-    return { ...b, overrides }
+    return overrides ? { ...b, overrides } : b
   }
 
-  const toAsset = (e: AssetEntry, prev?: Asset): Asset =>
-    prev && prev.mtime === e.mtime && prev.size === e.size
-      ? { ...prev, ...e }
-      : { ...e, w: 0, h: 0, duration: 0, thumb: null, error: false }
+  /** Selection and focus reduced to `keep`; leaving single view if nothing's in focus. */
+  const prune = (keep: Set<string>) => {
+    const { selection, focus, view } = get()
+    const sel = selection.filter((n) => keep.has(n))
+    const f = focus && keep.has(focus) ? focus : sel[0] ?? null
+    return { selection: sel, focus: f, view: f ? view : ('grid' as View) }
+  }
+
+  const setCollapsed = (next: string[]) => {
+    const { dir } = get()
+    set({ collapsed: next })
+    if (dir) store('reframe.collapsed:' + dir, next)
+    keepVisibleSelection()
+  }
 
   return {
     dir: null,
     skipped: [],
     truncated: false,
     assets: [],
+    meta: {},
     project: emptyProject(),
     boardId: '',
     selection: [],
@@ -276,7 +334,8 @@ export const useStore = create<Store>()((set, get) => {
       const project = normalizeProject(scan.project)
       set({
         dir: scan.dir,
-        assets: scan.assets.map((e) => toAsset(e)),
+        assets: scan.assets,
+        meta: {},
         skipped: scan.skipped,
         truncated: scan.truncated,
         collapsed: storedCollapsed(scan.dir),
@@ -288,25 +347,33 @@ export const useStore = create<Store>()((set, get) => {
         past: [],
         future: []
       })
+      hydrate(scan.assets, true)
     },
 
+    // Unchanged files keep what's been loaded for them; changed ones load again.
     rescan(scan) {
-      const prev = new Map(get().assets.map((a) => [a.name, a]))
-      const assets = scan.assets.map((e) => toAsset(e, prev.get(e.name)))
-      const names = new Set(assets.map((a) => a.name))
-      const selection = get().selection.filter((n) => names.has(n))
-      const focus = get().focus && names.has(get().focus!) ? get().focus : selection[0] ?? null
-      set({ assets, selection, focus, view: focus ? get().view : 'grid', skipped: scan.skipped, truncated: scan.truncated })
+      const before = new Map(get().assets.map((a) => [a.name, a]))
+      const old = get().meta
+      const meta: Record<string, AssetMeta> = {}
+      for (const e of scan.assets) {
+        const prev = before.get(e.name)
+        if (prev && old[e.name] && prev.mtime === e.mtime && prev.size === e.size) meta[e.name] = old[e.name]
+      }
+      set({ assets: scan.assets, meta, skipped: scan.skipped, truncated: scan.truncated, ...prune(new Set(scan.assets.map((a) => a.name))) })
+      hydrate(scan.assets.filter((e) => !meta[e.name]), false)
     },
 
-    patchAsset(name, patch) {
-      set({ assets: get().assets.map((a) => (a.name === name ? { ...a, ...patch } : a)) })
+    setMeta(entry, patch) {
+      const { assets, meta } = get()
+      const current = assets.find((a) => a.name === entry.name)
+      if (!current || current.path !== entry.path || current.mtime !== entry.mtime) return
+      set({ meta: { ...meta, [entry.name]: { ...NO_META, ...meta[entry.name], ...patch } } })
     },
 
     setView(view) {
       const { focus, selection } = get()
       if (view === 'loupe' && !focus) {
-        const first = selection[0] ?? layout(get()).visible[0]?.name
+        const first = selection[0] ?? layoutOf(get()).visible[0]?.name
         if (!first) return
         set({ focus: first, selection: selection.length ? selection : [first] })
       }
@@ -323,30 +390,21 @@ export const useStore = create<Store>()((set, get) => {
     },
 
     resetView() {
-      const { dir } = get()
-      set({ viewPrefs: { ...VIEW_DEFAULTS }, collapsed: [] })
+      set({ viewPrefs: { ...VIEW_DEFAULTS } })
       store('reframe.view', VIEW_DEFAULTS)
-      if (dir) store('reframe.collapsed:' + dir, [])
-      keepVisibleSelection()
+      setCollapsed([])
     },
 
     toggleCollapsed(folder) {
-      const { collapsed, dir } = get()
-      const next = collapsed.includes(folder) ? collapsed.filter((f) => f !== folder) : [...collapsed, folder]
-      set({ collapsed: next })
-      if (dir) store('reframe.collapsed:' + dir, next)
-      keepVisibleSelection()
+      const { collapsed } = get()
+      setCollapsed(collapsed.includes(folder) ? collapsed.filter((f) => f !== folder) : [...collapsed, folder])
     },
 
     setAllCollapsed(collapse) {
-      const { assets, dir } = get()
       // Every folder, including ones that only hold other folders.
       const folders = new Set<string>()
-      for (const a of assets) for (let f = folderOf(a.name); f; f = folderOf(f)) folders.add(f)
-      const next = collapse ? [...folders] : []
-      set({ collapsed: next })
-      if (dir) store('reframe.collapsed:' + dir, next)
-      keepVisibleSelection()
+      for (const a of get().assets) for (let f = folderOf(a.name); f; f = folderOf(f)) folders.add(f)
+      setCollapsed(collapse ? [...folders] : [])
     },
 
     select(name, mode = 'replace') {
@@ -355,9 +413,10 @@ export const useStore = create<Store>()((set, get) => {
         const has = selection.includes(name)
         const next = has ? selection.filter((n) => n !== name) : [...selection, name]
         set({ selection: next, focus: has ? next[next.length - 1] ?? null : name })
-      } else if (mode === 'range' && focus) {
-        // A shift-click range covers what's on screen, in on-screen order.
-        const names = layout(get()).visible.map((a) => a.name)
+      } else if (mode === 'range' && focus && layoutOf(get()).visible.some((a) => a.name === focus)) {
+        // A shift-click range covers what's on screen, in on-screen order (from a focus that's
+        // still on screen; otherwise it's a plain click).
+        const names = layoutOf(get()).visible.map((a) => a.name)
         const [a, b] = [names.indexOf(focus), names.indexOf(name)].sort((x, y) => x - y)
         set({ selection: names.slice(a, b + 1) })
       } else {
@@ -370,14 +429,14 @@ export const useStore = create<Store>()((set, get) => {
       set({ selection: names, focus: focus && names.includes(focus) ? focus : names[0] ?? null })
     },
 
-    selectAll: () => set({ selection: layout(get()).visible.map((a) => a.name) }),
+    selectAll: () => set({ selection: layoutOf(get()).visible.map((a) => a.name) }),
     // In single view the focused asset stays on screen; only the inspector switches to defaults.
     clearSelection: () => set({ selection: [], focus: get().view === 'loupe' ? get().focus : null }),
 
     // Through what's visible, in on-screen order (filtered, sorted, collapsed folders skipped).
     step(delta) {
       const { focus } = get()
-      const assets = layout(get()).visible
+      const assets = layoutOf(get()).visible
       if (!assets.length) return
       const i = focus ? assets.findIndex((a) => a.name === focus) : -1
       const next = assets[Math.max(0, Math.min(assets.length - 1, i + delta))].name
@@ -386,28 +445,28 @@ export const useStore = create<Store>()((set, get) => {
 
     edit(patch) {
       const { selection } = get()
+      const key = `edit:${Object.keys(patch).sort()}:${selection}`
       if (!selection.length) {
-        mapBoard((b) => ({ ...b, defaults: { ...b.defaults, ...patch } }))
+        mapBoard((b) => (changes(b.defaults, patch) ? { ...b, defaults: { ...b.defaults, ...patch } } : b), undefined, key)
       } else {
-        mapBoard((b) => withOverrides(b, selection, patch))
+        mapBoard((b) => withOverrides(b, selection, patch), undefined, key)
       }
     },
 
     editAsset(name, patch) {
-      mapBoard((b) => withOverrides(b, [name], patch))
+      mapBoard((b) => withOverrides(b, [name], patch), undefined, `edit:${Object.keys(patch).sort()}:${name}`)
     },
 
     editEach(fn) {
-      const { selection, project, boardId } = get()
-      const board = project.artboards.find((b) => b.id === boardId)
-      if (!board) return
+      const { selection } = get()
+      const board = currentBoard(get())
       if (!selection.length) return get().edit(fn(board.defaults))
-      mapBoard((b) => selection.reduce((acc, n) => withOverrides(acc, [n], fn(resolveSettings(acc, n))), b))
+      mapBoard((b) => withOverrides(b, selection, (n) => fn(resolveSettings(b, n))))
     },
 
     makeDefault(keys) {
-      const { selection, focus, project, boardId } = get()
-      const board = project.artboards.find((b) => b.id === boardId)
+      const { selection, focus } = get()
+      const board = currentBoard(get())
       if (!board || !selection.length) return
       const source = resolveSettings(board, focus && selection.includes(focus) ? focus : selection[0])
       const values = Object.fromEntries(keys.map((k) => [k, source[k]])) as Partial<CropSettings>
@@ -422,9 +481,9 @@ export const useStore = create<Store>()((set, get) => {
     // Copies the asset's overrides (not its resolved values), so pasted assets keep following
     // the defaults for everything the source does.
     copy() {
-      const { focus, project, boardId } = get()
-      const board = project.artboards.find((b) => b.id === boardId)
-      if (!board || !focus) return
+      const { focus } = get()
+      const board = currentBoard(get())
+      if (!focus) return
       const { skip: _skip, ...overrides } = board.overrides[focus] ?? {}
       set({ clipboard: overrides })
       const n = Object.keys(overrides).length
@@ -450,15 +509,14 @@ export const useStore = create<Store>()((set, get) => {
     setBoard: (boardId) => set({ boardId }),
 
     addBoard(name, width, height) {
-      const { project, boardId } = get()
-      const current = project.artboards.find((b) => b.id === boardId)
-      const board = newBoard(name, width, height, current?.defaults)
+      const { project } = get()
+      const board = newBoard(name, width, height, currentBoard(get()).defaults)
       commit({ ...project, artboards: [...project.artboards, board] })
       set({ boardId: board.id })
     },
 
     updateBoard(id, patch) {
-      mapBoard((b) => ({ ...b, ...patch }), id)
+      mapBoard((b) => (changes(b, patch) ? { ...b, ...patch } : b), id)
     },
 
     duplicateBoard(id) {
@@ -493,21 +551,23 @@ export const useStore = create<Store>()((set, get) => {
     setVolume(volume) {
       const v = Math.min(1, Math.max(0, volume))
       set({ volume: v, lastVolume: v > 0 ? v : get().lastVolume })
-      try {
-        localStorage.setItem('reframe.volume', String(v))
-      } catch {
-        // Not persisted; fine.
-      }
+      store('reframe.volume', v)
     },
     showHud: (text) => set({ hud: { text, n: (get().hud?.n ?? 0) + 1 } }),
 
+    // Export preferences aren't edits: undo and redo leave them as they are.
     undo() {
       const { past, project, future, boardId } = get()
       const prev = past[past.length - 1]
       if (!prev) return
-      lastCommit = 0
+      lastCommit = { at: 0, key: '' }
       const keep = prev.artboards.some((b) => b.id === boardId)
-      set({ project: prev, past: past.slice(0, -1), future: [project, ...future], boardId: keep ? boardId : prev.artboards[0].id })
+      set({
+        project: { ...prev, export: project.export },
+        past: past.slice(0, -1),
+        future: [project, ...future],
+        boardId: keep ? boardId : prev.artboards[0].id
+      })
       get().showHud('Undo')
     },
 
@@ -515,19 +575,35 @@ export const useStore = create<Store>()((set, get) => {
       const { past, project, future, boardId } = get()
       const next = future[0]
       if (!next) return
-      lastCommit = 0
+      lastCommit = { at: 0, key: '' }
       const keep = next.artboards.some((b) => b.id === boardId)
-      set({ project: next, past: [...past, project], future: future.slice(1), boardId: keep ? boardId : next.artboards[0].id })
+      set({
+        project: { ...next, export: project.export },
+        past: [...past, project],
+        future: future.slice(1),
+        boardId: keep ? boardId : next.artboards[0].id
+      })
       get().showHud('Redo')
     }
   }
 })
 
-export const useBoard = (): Artboard => {
-  const project = useStore((s) => s.project)
-  const boardId = useStore((s) => s.boardId)
-  return project.artboards.find((b) => b.id === boardId) ?? project.artboards[0]
+/** The artboard being edited. */
+export const currentBoard = (s: Pick<State, 'project' | 'boardId'>): Artboard =>
+  s.project.artboards.find((b) => b.id === s.boardId) ?? s.project.artboards[0]
+
+/** The artboard being edited, re-rendering only when that artboard changes. */
+export const useBoard = (): Artboard => useStore(currentBoard)
+
+/** An asset with what's been loaded about it (re-rendering when either changes). */
+export function useAsset(name: string | null): Asset | undefined {
+  const entry = useStore((s) => (name ? s.assets.find((a) => a.name === name) : undefined))
+  const meta = useStore((s) => (name ? s.meta[name] : undefined))
+  return useMemo(() => entry && withMeta(entry, meta), [entry, meta])
 }
+
+/** A scanned asset as it stands now, with what's been loaded about it. */
+export const assetOf = (s: Pick<State, 'assets' | 'meta'>, entry: AssetEntry): Asset => withMeta(entry, s.meta[entry.name])
 
 export const hasOverrides = (board: Artboard, name: string): boolean =>
   Object.keys(board.overrides[name] ?? {}).length > 0
@@ -543,7 +619,8 @@ export const baseName = (name: string): string => name.slice(name.lastIndexOf('/
 /** The folder an asset is in, relative to the open one ("" for the top level). */
 export const folderOf = (name: string): string => name.slice(0, Math.max(0, name.lastIndexOf('/')))
 
-const natural = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+// One collator for every comparison (localeCompare with options builds one each call: ~15× slower).
+const natural = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare
 
 /**
  * A folder in the grid: its own assets (filtered and sorted) and its subfolders, as the tree it is
@@ -553,7 +630,7 @@ export interface FolderNode {
   /** Relative path, "/"-separated; "" is the top level's own files. */
   folder: string
   name: string
-  assets: Asset[]
+  assets: AssetEntry[]
   children: FolderNode[]
   count: number
   collapsed: boolean
@@ -561,6 +638,7 @@ export interface FolderNode {
 }
 
 type LayoutInput = Pick<State, 'assets' | 'project' | 'boardId' | 'viewPrefs' | 'collapsed' | 'skipped'>
+type Layout = { tree: FolderNode[]; visible: AssetEntry[] }
 
 /**
  * What the grid shows, from the assets and the view options. Grouped, a tree of folders: the top
@@ -570,10 +648,10 @@ type LayoutInput = Pick<State, 'assets' | 'project' | 'boardId' | 'viewPrefs' | 
  * filmstrip, arrow keys, Select All, shift-click ranges and the export dialog's "Visible" scope
  * all follow.
  */
-export function layout(s: LayoutInput): { tree: FolderNode[]; visible: Asset[] } {
+function layout(s: LayoutInput): Layout {
   const { filter, sort, group } = s.viewPrefs
   const board = s.project.artboards.find((b) => b.id === s.boardId) ?? s.project.artboards[0]
-  const pass = (a: Asset) =>
+  const pass = (a: AssetEntry) =>
     filter === 'images'
       ? a.kind === 'image'
       : filter === 'videos'
@@ -583,12 +661,12 @@ export function layout(s: LayoutInput): { tree: FolderNode[]; visible: Asset[] }
           : filter === 'excluded'
             ? !!board && resolveSettings(board, a.name).skip
             : true
-  const byName = (a: Asset, b: Asset) => natural(baseName(a.name), baseName(b.name)) || natural(folderOf(a.name), folderOf(b.name))
+  const byName = (a: AssetEntry, b: AssetEntry) => natural(baseName(a.name), baseName(b.name)) || natural(folderOf(a.name), folderOf(b.name))
   const cmp =
     sort === 'date'
-      ? (a: Asset, b: Asset) => b.mtime - a.mtime || byName(a, b)
+      ? (a: AssetEntry, b: AssetEntry) => b.mtime - a.mtime || byName(a, b)
       : sort === 'type'
-        ? (a: Asset, b: Asset) => natural(a.kind, b.kind) || byName(a, b)
+        ? (a: AssetEntry, b: AssetEntry) => natural(a.kind, b.kind) || byName(a, b)
         : byName
   const node = (folder: string): FolderNode => ({
     folder,
@@ -635,7 +713,7 @@ export function layout(s: LayoutInput): { tree: FolderNode[]; visible: Asset[] }
   top.count = top.assets.length
   const tree = [...(top.assets.length ? [top] : []), ...roots]
 
-  const visible: Asset[] = []
+  const visible: AssetEntry[] = []
   const walk = (n: FolderNode) => {
     if (n.collapsed || n.excluded) return
     visible.push(...n.assets)
@@ -645,24 +723,27 @@ export function layout(s: LayoutInput): { tree: FolderNode[]; visible: Asset[] }
   return { tree, visible }
 }
 
-/** The visible assets, in on-screen order, for components (see layout). */
-export function useVisible(): Asset[] {
-  const assets = useStore((s) => s.assets)
-  const project = useStore((s) => s.project)
-  const boardId = useStore((s) => s.boardId)
-  const viewPrefs = useStore((s) => s.viewPrefs)
-  const collapsed = useStore((s) => s.collapsed)
-  const skipped = useStore((s) => s.skipped)
-  return useMemo(
-    () => layout({ assets, project, boardId, viewPrefs, collapsed, skipped }).visible,
-    [assets, project, boardId, viewPrefs, collapsed, skipped]
-  )
+/**
+ * The layout, computed once and shared (the grid, filmstrip, single view, export dialog and store
+ * actions all ask). It's recomputed only when an input changes; edits count only when the filter
+ * looks at them (Adjusted, Excluded from export), so dragging a slider never re-sorts anything.
+ */
+let cached: { inputs: unknown[]; result: Layout } | null = null
+export function layoutOf(s: LayoutInput): Layout {
+  const edits = s.viewPrefs.filter === 'adjusted' || s.viewPrefs.filter === 'excluded' ? currentBoard(s) : null
+  const inputs = [s.assets, s.viewPrefs, s.collapsed, s.skipped, edits]
+  if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.result
+  cached = { inputs, result: layout(s) }
+  return cached.result
 }
+
+/** The visible assets, in on-screen order (see layout). */
+export const useVisible = (): AssetEntry[] => useStore((s) => layoutOf(s).visible)
 
 /** After the view changes, nothing hidden stays selected (edits would land on assets out of sight). */
 function keepVisibleSelection(): void {
   const st = useStore.getState()
-  const visible = new Set(layout(st).visible.map((a) => a.name))
+  const visible = new Set(layoutOf(st).visible.map((a) => a.name))
   const selection = st.selection.filter((n) => visible.has(n))
   const focus = st.focus && visible.has(st.focus) ? st.focus : selection[0] ?? null
   useStore.setState({ selection, focus })
