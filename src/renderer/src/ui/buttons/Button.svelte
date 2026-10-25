@@ -5,8 +5,9 @@
   - `icon`: a square icon button (`round` for the circular ones over media)
   - `tool`: a tinted square, for tool rows
   - `chip`: small and tinted, for quick picks
-  `pressed` marks a toggle that's on (or what it opens being open); `tone` colours it for a
-  destructive action (`danger`) or a mode that's armed (`accent`); `dot` adds an accent dot in the
+  `pressed` marks a toggle that's on (or what it opens being open), or `'mixed'` when it's on for
+  only some of a selection; `tone` colours it for a destructive action (`danger`) or a mode that's
+  armed (`accent`), and a pressed `danger` toggle is tinted red; `dot` adds an accent dot in the
   corner (something is filtered, say); `block` makes it full width, content centred. Other
   attributes (title, disabled, onclick…) go on the button.
 -->
@@ -20,7 +21,7 @@
     variant?: 'ghost' | 'primary' | 'icon' | 'tool' | 'chip'
     icon?: IconName
     iconSize?: number
-    pressed?: boolean
+    pressed?: boolean | 'mixed'
     tone?: 'danger' | 'accent'
     round?: boolean
     dot?: boolean
@@ -31,7 +32,7 @@
     variant = 'ghost',
     icon,
     iconSize = 16,
-    pressed = false,
+    pressed,
     tone,
     round = false,
     dot = false,
@@ -42,7 +43,11 @@
   }: Props = $props()
 </script>
 
-<button class={['button', variant, tone, { pressed, round, dot, block }, className]} {...rest}>
+<button
+  class={['button', variant, tone, { pressed: pressed === true, mixed: pressed === 'mixed', round, dot, block }, className]}
+  aria-pressed={pressed}
+  {...rest}
+>
   {#if icon}<Icon name={icon} size={iconSize} />{/if}{@render children?.()}
 </button>
 
@@ -165,6 +170,25 @@
 
   .danger:hover:not(:disabled) {
     background: rgba(255, 107, 107, 0.12);
+  }
+
+  /* A destructive toggle that's on (leaving assets out): tinted red; part-way on, dimmer. */
+  .icon.danger:not(.pressed, .mixed) {
+    color: var(--muted);
+  }
+
+  .icon.danger:not(.pressed, .mixed):hover:not(:disabled) {
+    color: var(--text);
+    background: var(--tint-2);
+  }
+
+  .icon.danger.pressed {
+    background: rgba(255, 107, 107, 0.14);
+  }
+
+  .icon.danger.mixed {
+    color: color-mix(in srgb, var(--danger) 55%, var(--muted));
+    background: rgba(255, 107, 107, 0.06);
   }
 
   /* Armed (the eyedropper while it's picking). */

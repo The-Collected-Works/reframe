@@ -58,12 +58,14 @@ export async function boardMenu(boardId: string, at: { x: number; y: number }): 
   const board = project.file.artboards.find((b) => b.id === boardId)
   if (!board) return
   const id = await showMenu(at.x, at.y, [
+    { id: 'rename', label: 'Rename', icon: 'rename' },
     { id: 'edit', label: 'Edit Artboard…', icon: 'edit' },
     { id: 'duplicate', label: 'Duplicate', icon: 'duplicate' },
     { separator: true },
     { id: 'delete', label: 'Delete', icon: 'trash', danger: true, enabled: project.file.artboards.length > 1 }
   ])
-  if (id === 'edit') {
+  if (id === 'rename') shell.renamingBoard = boardId
+  else if (id === 'edit') {
     project.boardId = boardId
     shell.editingBoard = boardId
   } else if (id === 'duplicate') duplicateBoard(boardId)

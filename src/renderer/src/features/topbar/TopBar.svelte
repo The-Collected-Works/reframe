@@ -1,6 +1,6 @@
 <!--
-  The title bar: the folder, the artboard tabs, then (pushed right) updates, info and the view
-  tools. Most of it is the window's drag region; controls cut themselves out of it. The one part of
+  The title bar: the folder, the artboard tabs, then (pushed right) updates, the view tools and
+  info. Most of it is the window's drag region; controls cut themselves out of it. The one part of
   the bar that reads and changes app state; everything in it takes props.
 -->
 <script lang="ts">
@@ -48,8 +48,10 @@
         boards={project.file.artboards}
         current={project.boardId}
         editing={shell.editingBoard}
+        renaming={shell.renamingBoard}
         onSelect={(id) => (project.boardId = id)}
         onEdit={(id) => (shell.editingBoard = id)}
+        onRename={(id) => (shell.renamingBoard = id)}
         onMenu={boardMenu}
         onChange={(id, patch) => project.updateBoard(id, patch)}
         onDuplicate={duplicateBoard}
@@ -62,7 +64,6 @@
   <div class="drag spacer"></div>
 
   {#if update.current}<UpdateButton update={update.current} onInstall={() => api.installUpdate()} onOpenRelease={() => api.openRelease()} />{/if}
-  <AppInfo />
 
   {#if library.dir}
     <div class="tools">
@@ -89,6 +90,7 @@
       <Button variant="primary" icon="export" iconSize={14} onclick={() => (shell.exportOpen = true)} title={`Export (${combo(MOD, 'E')})`}>Export</Button>
     </div>
   {/if}
+  <AppInfo />
 </header>
 
 <style>

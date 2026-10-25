@@ -163,6 +163,8 @@
     <canvas bind:this={canvas} data-ready={ready || undefined} style:width={`${width}px`} style:height={`${height}px`}></canvas>
     {#if !asset.thumb && !asset.error}<div class="cell-loading"></div>{/if}
     {#if asset.error}<div class="cell-error">Can’t read file</div>{/if}
+    <!-- Without the caption row, the adjusted dot sits on the picture's corner instead. -->
+    {#if !g.names && overridden}<span class="corner-dot"><Dot title="Adjusted" /></span>{/if}
   </div>
   {#if g.names}
     <div class="cell-meta">
@@ -242,6 +244,18 @@
     position: absolute;
     inset: 1px;
     background: var(--excluded-x) no-repeat center / 100% 100%;
+    pointer-events: none;
+  }
+
+  .corner-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 2;
+    display: grid;
+    padding: 3px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
     pointer-events: none;
   }
 

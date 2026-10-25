@@ -1,5 +1,6 @@
 <!--
-  The artboard tabs. Clicking another tab switches to it; clicking the current one opens its editor.
+  The artboard tabs. Clicking another tab switches to it; clicking the current one opens its editor;
+  double-clicking one renames it in place (Enter saves, Esc cancels, clicking away saves).
   When they overflow: fades on whichever side has more, the wheel scrolls them sideways, and
   click-dragging pans (a click that doesn't move still picks a tab). The current tab is kept in view.
 -->
@@ -16,8 +17,10 @@
     boards,
     current,
     editing,
+    renaming,
     onSelect,
     onEdit,
+    onRename,
     onMenu,
     onChange,
     onDuplicate,
@@ -28,8 +31,11 @@
     current: string
     /** The artboard whose editor is open, if any. */
     editing: string | null
+    /** The artboard whose tab is being renamed, if any. */
+    renaming: string | null
     onSelect: (id: string) => void
     onEdit: (id: string | null) => void
+    onRename: (id: string | null) => void
     onMenu: (id: string, at: { x: number; y: number }) => void
     onChange: (id: string, patch: Patch) => void
     onDuplicate: (id: string) => void
@@ -74,6 +80,40 @@
     void count
     intoView(el.querySelector('.tab.on'))
   })
+
+  // The rename field: focused with its text selected; Enter or leaving it saves, Esc cancels.
+  // Finishes once, since removing the field also blurs it.
+  const renameField =
+    (b: Artboard): Attachment<HTMLInputElement> =>
+    (input) => {
+      let done = false
+      const finish = (save: boolean) => {
+        if (done) return
+        done = true
+        const name = input.value.trim()
+        onRename(null)
+        if (save && name && name !== b.name) onChange(b.id, { name })
+      }
+      const onkeydown = (e: KeyboardEvent) => {
+        // Kept from the app's shortcuts (Esc would also deselect).
+        e.stopPropagation()
+        if (e.key === 'Enter') finish(true)
+        else if (e.key === 'Escape') finish(false)
+      }
+      const onblur = () => finish(true)
+      input.addEventListener('keydown', onkeydown)
+      input.addEventListener('blur', onblur)
+      input.focus()
+      input.select()
+      return () => {
+        input.removeEventListener('keydown', onkeydown)
+        input.removeEventListener('blur', onblur)
+      }
+    }
+  const ondblclick = (b: Artboard) => {
+    onEdit(null)
+    onRename(b.id)
+  }
 
   let swallowClick = false
   const onpointerdown = (e: PointerEvent) => {
@@ -122,21 +162,35 @@
 >
   {#each boards as b, i (b.id)}
     <div class="tab-anchor">
-      <button
-        class={['tab', { on: b.id === current, editing: editing === b.id }]}
-        title={b.id === current ? 'Edit artboard' : i < 9 ? combo(MOD, String(i + 1)) : undefined}
-        onclick={() => (b.id === current ? onEdit(editing === b.id ? null : b.id) : onSelect(b.id))}
-        oncontextmenu={(e) => {
-          e.preventDefault()
-          onMenu(b.id, { x: e.clientX, y: e.clientY })
-        }}
-      >
-        <span>{b.name}</span>
-        <span class="dims">{b.width}×{b.height}</span>
-        <!-- The current tab opens its editor; the chevron says so. Every tab reserves its space, so
-             switching tabs doesn't change any widths. -->
-        <span class="chevron" aria-hidden="true"><Icon name="chevronDown" size={12} /></span>
-      </button>
+      {#if renaming === b.id}
+        <div class={['tab', 'renaming', { on: b.id === current }]}>
+          <input class="rename" value={b.name} aria-label="Artboard name" spellcheck="false" {@attach renameField(b)} />
+          <span class="dims">{b.width}×{b.height}</span>
+          <span class="chevron" aria-hidden="true"><Icon name="chevronDown" size={12} /></span>
+        </div>
+      {:else}
+        <button
+          class={['tab', { on: b.id === current, editing: editing === b.id }]}
+          title={b.id === current ? 'Edit artboard (double-click to rename)' : i < 9 ? combo(MOD, String(i + 1)) : undefined}
+          onclick={(e) => {
+            // The second click of a double-click leaves the editor alone; the double-click renames.
+            if (e.detail > 1) return
+            if (b.id === current) onEdit(editing === b.id ? null : b.id)
+            else onSelect(b.id)
+          }}
+          ondblclick={() => ondblclick(b)}
+          oncontextmenu={(e) => {
+            e.preventDefault()
+            onMenu(b.id, { x: e.clientX, y: e.clientY })
+          }}
+        >
+          <span>{b.name}</span>
+          <span class="dims">{b.width}×{b.height}</span>
+          <!-- The current tab opens its editor; the chevron says so. Every tab reserves its space, so
+               switching tabs doesn't change any widths. -->
+          <span class="chevron" aria-hidden="true"><Icon name="chevronDown" size={12} /></span>
+        </button>
+      {/if}
       <ArtboardEditor
         board={b}
         open={editing === b.id}
@@ -218,6 +272,29 @@
   .tab.on {
     color: var(--text);
     background: var(--tint-2);
+  }
+
+  /* Renaming: the name becomes a field the width of its text, in the tab's own type. */
+  .renaming {
+    color: var(--text);
+    background: var(--tint-2);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  .rename {
+    field-sizing: content;
+    min-width: 2ch;
+    max-width: 240px;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+  }
+
+  .rename::selection {
+    background: rgba(110, 155, 255, 0.4);
   }
 
   .dims {

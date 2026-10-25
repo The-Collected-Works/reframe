@@ -44,7 +44,7 @@
   const overridden = (keys: SettingKey[]) => editing && names.some((n) => keys.some((k) => board.overrides[n]?.[k] !== undefined))
   const hasVideo = $derived((editing ? chosen : library.assets).some((a) => a.kind === 'video'))
   const anyOverride = $derived(editing && names.some((n) => hasOverrides(board, n)))
-  // Whether the selection goes into this artboard's export: all of it, none, or some.
+  // How much of the selection goes into this artboard's export: all of it, none, or some.
   const exported = $derived(names.filter((n) => !resolveSettings(board, n).skip).length)
   const mixedExport = $derived(exported > 0 && exported < names.length)
 
@@ -211,12 +211,17 @@
     <footer class="insp-foot">
       <Button icon="reset" iconSize={14} disabled={!anyOverride} title={`Reset to defaults (${combo(MOD, SHIFT, 'R')})`} onclick={resetSelection}>Reset</Button>
       <div class="spacer"></div>
-      <!-- Whether the selection is exported (for this artboard). Not a framing setting, so it
+      <!-- Whether the selection is left out of this artboard's export. Not a framing setting, so it
            sits apart from them; Reset leaves it alone. -->
-      <label class="foot-toggle" title={`Include in the ${board.name} export`}>
-        Export
-        <Toggle value={exported === names.length} mixed={mixedExport} onChange={(v) => edit({ skip: !v })} />
-      </label>
+      <Button
+        variant="icon"
+        icon="leaveOut"
+        iconSize={14}
+        tone="danger"
+        pressed={exported === 0 ? true : mixedExport ? 'mixed' : false}
+        title={`Leave out of the ${board.name} export`}
+        onclick={() => edit({ skip: exported > 0 })}
+      />
       <Button variant="icon" icon="copy" iconSize={14} title={`Copy settings (${combo(MOD, 'C')})`} onclick={copy} disabled={!selection.focus} />
       <Button variant="icon" icon="paste" iconSize={14} title={`Paste settings (${combo(MOD, 'V')})`} onclick={paste} disabled={!project.clipboard} />
     </footer>
@@ -333,15 +338,5 @@
     gap: 4px;
     padding: 10px 12px;
     border-top: 1px solid var(--line);
-  }
-
-  .foot-toggle {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-right: 8px;
-    color: var(--muted);
-    font-size: 12px;
-    cursor: pointer;
   }
 </style>
