@@ -1,23 +1,24 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { drawFrame, resolveSettings } from '@shared/layout'
-import type { Artboard, Clip } from '@shared/types'
+import type { Artboard, Clip, SkippedFolder } from '@shared/types'
 import { dragOffset, NO_GUIDES, type Guides } from '../interact'
 import { posterTime } from '@shared/media'
 import { observeVisibility, scheduleDraw } from '../lazydraw'
 import { mediaUrl, prioritize } from '../media'
-import { assetMenu } from '../menus'
-import { hasOverrides, useBoard, useStore, type Asset } from '../store'
-import { fmtTime } from './ui'
+import { assetMenu, excludedFolderMenu, folderMenu, includeFolder } from '../menus'
+import { baseName, folderOf, hasOverrides, layout, useBoard, useStore, type Asset, type FolderNode } from '../store'
+import { fmtTime, Icon } from './ui'
 
 const GAP = 8
 /** Mat around each frame; matches .cell padding in styles.css. */
 const PAD = 10
 /**
- * Horizontal padding of the scroller (matches .grid-scroll). With its 10px scrollbar gutter on
- * each side and the 10px mat, frame-to-edge is 36px on every side, deliberately larger than
- * frame-to-frame (PAD + GAP + PAD = 28) so the grid sits inside a margin.
+ * Horizontal padding of the scroller (matches .grid-scroll): 26 on the left, 16 on the right
+ * beside the 10px scrollbar lane. With the 10px mat, frame-to-edge is 36px on every side,
+ * deliberately larger than frame-to-frame (PAD + GAP + PAD = 28) so the grid sits inside a margin.
  */
-const EDGE = 16
+const EDGE_LEFT = 26
+const EDGE_RIGHT = 16
 
 /**
  * Stays mounted (hidden) while the single view is open, so switching back is instant and keeps
@@ -25,6 +26,21 @@ const EDGE = 16
  */
 export function Grid({ active }: { active: boolean }) {
   const assets = useStore((s) => s.assets)
+  const dir = useStore((s) => s.dir)
+  const skipped = useStore((s) => s.skipped)
+  const truncated = useStore((s) => s.truncated)
+  const project = useStore((s) => s.project)
+  const boardId = useStore((s) => s.boardId)
+  const viewPrefs = useStore((s) => s.viewPrefs)
+  const collapsed = useStore((s) => s.collapsed)
+  const { tree, visible } = useMemo(
+    () => layout({ assets, project, boardId, viewPrefs, collapsed, skipped }),
+    [assets, project, boardId, viewPrefs, collapsed, skipped]
+  )
+  // A flat folder needs no headers; as soon as there are subfolders (or excluded ones), every
+  // folder gets one.
+  const sectioned = viewPrefs.group && (tree.length > 1 || (tree.length === 1 && tree[0].folder !== ''))
+  const rootName = dir?.split(/[\\/]/).filter(Boolean).pop() ?? ''
   const cellSize = useStore((s) => s.cellSize)
   const current = useBoard()
   const frozen = useRef(current)
@@ -35,7 +51,7 @@ export function Grid({ active }: { active: boolean }) {
 
   useLayoutEffect(() => {
     const el = ref.current!
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth - EDGE * 2))
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth - EDGE_LEFT - EDGE_RIGHT))
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -62,7 +78,7 @@ export function Grid({ active }: { active: boolean }) {
     const box = el.getBoundingClientRect()
     const toContent = (cx: number, cy: number) => ({ x: cx - box.left + el.scrollLeft, y: cy - box.top + el.scrollTop })
     const start = toContent(e.clientX, e.clientY)
-    const order = assets.map((a) => a.name)
+    const order = visible.map((a) => a.name)
     let last = { x: e.clientX, y: e.clientY }
     let active = false
     let raf = 0
@@ -117,13 +133,203 @@ export function Grid({ active }: { active: boolean }) {
   }
 
   return (
-    <div className={'grid-scroll' + (active ? '' : ' inactive')} ref={ref} onPointerDown={onPointerDown}>
-      <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, ${cellW}px)`, gap: GAP }}>
-        {cellW > 0 && assets.map((a) => <Cell key={a.name} asset={a} board={board} width={cellW - PAD * 2} active={active} />)}
-      </div>
+    <div className={'grid-scroll' + (active ? '' : ' inactive')} ref={ref} onPointerDown={onPointerDown} onScroll={() => (lastScroll = performance.now())}>
+      {/* The folders as the tree they are: each holds its header, its own thumbnails and its
+          subfolders, so folding, hover tints and sticky headers all follow from the nesting. */}
+      {cellW > 0 && (
+        <FolderContext.Provider value={{ cols, cellW, board, active, names: viewPrefs.names, withFolder: !viewPrefs.group, headers: !!sectioned, rootName }}>
+          {tree.map((node) => (
+            <Folder key={node.folder || '/'} node={node} />
+          ))}
+        </FolderContext.Provider>
+      )}
+      {assets.length > 0 && !tree.length && <div className="empty-hint center">Nothing matches this filter</div>}
+      {((skipped.length > 0 && !sectioned) || truncated) && (
+        <div className="grid-foot">
+          {skipped.length > 0 && !sectioned && (
+            <div className="grid-foot-row">
+              <span className="muted">Not shown</span>
+              {skipped.map((f) => (
+                <button key={f.path} className="skipped-folder" title={`${f.reason === 'export' ? 'Reframe exports' : 'Excluded'}. Click to include it`} onClick={() => includeFolder(f.path)}>
+                  <Icon name="folder" size={12} />
+                  {f.path.split('/').join(' / ')}
+                  <span className="muted">{f.reason === 'export' ? 'exports' : 'excluded'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {truncated && <div className="muted">Stopped at 20,000 files. Open a subfolder to see the rest.</div>}
+        </div>
+      )}
       {marquee && (
         <div className="marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />
       )}
+    </div>
+  )
+}
+
+/** What every folder in the grid needs from the grid: column layout, the board, and display options. */
+const FolderContext = createContext<{
+  cols: number
+  cellW: number
+  board: Artboard
+  active: boolean
+  names: boolean
+  withFolder: boolean
+  /** Grouped by folder: headers, folding. Off, a folder is just its thumbnails. */
+  headers: boolean
+  rootName: string
+} | null>(null)
+
+/**
+ * A folder: its header, then a body holding its own thumbnails and its subfolders. Collapsing folds
+ * the body, so everything inside goes with it. Hovering the header tints the folder's own box (a
+ * rounded card), which contains its subfolders, so the tint covers exactly what a click would fold.
+ */
+function Folder({ node }: { node: FolderNode }) {
+  const g = useContext(FolderContext)!
+  const grid = node.assets.length > 0 && (
+    <div className="grid" style={{ gridTemplateColumns: `repeat(${g.cols}, ${g.cellW}px)`, gap: GAP }}>
+      {node.assets.map((a) => (
+        <Cell key={a.name} asset={a} board={g.board} width={g.cellW - PAD * 2} active={g.active} names={g.names} withFolder={g.withFolder} />
+      ))}
+    </div>
+  )
+  if (!g.headers) return <div className="grid-folder">{grid}</div>
+  if (node.excluded) {
+    return (
+      <div className="grid-folder excluded" data-folder={node.folder}>
+        <ExcludedBar folder={node.excluded} />
+      </div>
+    )
+  }
+  return (
+    <div className={'grid-folder' + (node.collapsed ? ' collapsed' : '')} data-folder={node.folder}>
+      <FolderHeader node={node} rootName={g.rootName} />
+      <Collapsible open={!node.collapsed}>
+        <div className="folder-body">
+          {grid}
+          {node.children.map((c) => (
+            <Folder key={c.folder} node={c} />
+          ))}
+        </div>
+      </Collapsible>
+    </div>
+  )
+}
+
+/**
+ * A folder's header. It sticks to the top while its folder scrolls by; a subfolder's header slides
+ * over it there while the subfolder passes, so one bar always says where you are. The whole bar is
+ * the control (click to fold the folder away): folder icon and full path, then the count of
+ * everything inside and the collapse chevron, pointing in toward the path while collapsed.
+ */
+function FolderHeader({ node, rootName }: { node: FolderNode; rootName: string }) {
+  const { folder, collapsed } = node
+  return (
+    <button
+      className={'grid-section' + (collapsed ? ' collapsed' : '')}
+      title={`${folder ? `${rootName}/${folder}` : rootName}. Click to ${collapsed ? 'expand' : 'collapse'}`}
+      aria-expanded={!collapsed}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={() => useStore.getState().toggleCollapsed(folder)}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        folderMenu(folder, { x: e.clientX, y: e.clientY })
+      }}
+    >
+      <FolderName folder={folder} />
+      <span className="section-count">{node.count}</span>
+      <span className="section-chevron" aria-hidden>
+        <Icon name="chevronDown" size={14} />
+      </span>
+    </button>
+  )
+}
+
+/** When the grid last scrolled. Hover previews wait for it to settle (see Cell). */
+let lastScroll = 0
+const SCROLL_SETTLE = 250
+const PREVIEW_DWELL = 150
+
+/** Folder icon and the full path from a leading slash, parents muted: "/" for the top level, "/ Shoot A / Day 2". */
+function FolderName({ folder }: { folder: string }) {
+  const crumbs = folder ? folder.split('/') : ['/']
+  return (
+    <>
+      <span className="section-icon" aria-hidden>
+        <Icon name="folder" size={13} />
+      </span>
+      <span className="section-path">
+        {/* Nested folders keep the top level's leading slash, so every path reads from "/". */}
+        {folder && (
+          <span className="section-sep" aria-hidden>
+            /
+          </span>
+        )}
+        {crumbs.map((c, i) => (
+          <Fragment key={i}>
+            {i > 0 && (
+              <span className="section-sep" aria-hidden>
+                /
+              </span>
+            )}
+            <span className={i === crumbs.length - 1 ? 'section-crumb current' : 'section-crumb'}>{c}</span>
+          </Fragment>
+        ))}
+      </span>
+    </>
+  )
+}
+
+/**
+ * An excluded folder (or Reframe's exports), dimmed in its place among the folders, with a tag
+ * saying why. Deliberately inert (clicking a bar is how other folders collapse, so a click here
+ * shouldn't quietly bring it back): including it again is in its right-click menu.
+ */
+function ExcludedBar({ folder }: { folder: SkippedFolder }) {
+  const exports = folder.reason === 'export'
+  return (
+    <div
+      className="grid-section excluded"
+      title={`${exports ? 'Reframe’s exports, left out of the project' : 'Excluded from the project'}. Right-click to include it`}
+      onPointerDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        excludedFolderMenu(folder.path, { x: e.clientX, y: e.clientY })
+      }}
+    >
+      <FolderName folder={folder.path} />
+      <span className="excluded-tag">{exports ? 'Exports' : 'Excluded'}</span>
+    </div>
+  )
+}
+
+/** How long a folder takes to open or close; matches --t-fold in styles.css. */
+const FOLD_MS = 380
+
+/**
+ * A section's thumbnails, folding open and closed by animating the row's height (0fr ↔ 1fr), with a
+ * fade. Closed, they're unmounted once the fold has finished, so a collapsed folder costs nothing;
+ * opening mounts them at zero height first, so the open animates from there.
+ */
+function Collapsible({ open, children }: { open: boolean; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(open)
+  const [expanded, setExpanded] = useState(open)
+  useLayoutEffect(() => {
+    if (open) {
+      setMounted(true)
+      // Two frames: the closed state has to be painted before the open one can transition from it.
+      let raf = requestAnimationFrame(() => (raf = requestAnimationFrame(() => setExpanded(true))))
+      return () => cancelAnimationFrame(raf)
+    }
+    setExpanded(false)
+    const t = setTimeout(() => setMounted(false), FOLD_MS + 40)
+    return () => clearTimeout(t)
+  }, [open])
+  return (
+    <div className={'collapsible' + (expanded ? ' open' : '')}>
+      <div className="collapsible-inner">{mounted && children}</div>
     </div>
   )
 }
@@ -134,7 +340,23 @@ function release(v: HTMLVideoElement) {
   v.load()
 }
 
-const Cell = memo(function Cell({ asset, board, width, active }: { asset: Asset; board: Artboard; width: number; active: boolean }) {
+const Cell = memo(function Cell({
+  asset,
+  board,
+  width,
+  active,
+  names,
+  withFolder
+}: {
+  asset: Asset
+  board: Artboard
+  width: number
+  active: boolean
+  /** Show the caption row (name, adjusted dot, duration). */
+  names: boolean
+  /** Prefix the name with its folder (when the grid isn't grouped by folder). */
+  withFolder: boolean
+}) {
   const selected = useStore((s) => s.selection.includes(asset.name))
   const focused = useStore((s) => s.focus === asset.name)
   const clip = useStore((s) => s.project.clips[asset.name]) as Clip | undefined
@@ -227,11 +449,29 @@ const Cell = memo(function Cell({ asset, board, width, active }: { asset: Asset;
     [asset.path, asset.thumb]
   )
 
+  // A hover becomes a preview only once the pointer has rested on the thumbnail and the grid has
+  // stopped scrolling: thumbnails sliding under a still pointer mid-scroll shouldn't each start
+  // loading and decoding a video.
+  const [previewing, setPreviewing] = useState(false)
+  useEffect(() => {
+    if (!hover || asset.kind !== 'video') return setPreviewing(false)
+    const since = performance.now()
+    let t: ReturnType<typeof setTimeout> | undefined
+    const check = () => {
+      const now = performance.now()
+      const wait = Math.max(since + PREVIEW_DWELL - now, lastScroll + SCROLL_SETTLE - now)
+      if (wait > 0) t = setTimeout(check, wait)
+      else setPreviewing(true)
+    }
+    check()
+    return () => clearTimeout(t)
+  }, [hover, asset.kind])
+
   // Hover to preview video in place. Starts on the thumbnail's own frame and only fades in once
   // the video has actually presented a frame, so there's no jump or blank flash either way.
   useEffect(() => {
     // Not while the eyedropper is open: the exact thumbnail is what should be on screen.
-    if (!hover || picking || asset.kind !== 'video' || !asset.w) return
+    if (!previewing || picking || asset.kind !== 'video' || !asset.w) return
     const v = document.createElement('video') as HTMLVideoElement & {
       requestVideoFrameCallback?: (cb: () => void) => number
     }
@@ -276,15 +516,12 @@ const Cell = memo(function Cell({ asset, board, width, active }: { asset: Asset;
       fadeTo(1)
       onFrame()
     }
-    const dwell = setTimeout(() => {
-      v.play()
-        .then(() => (v.requestVideoFrameCallback ? v.requestVideoFrameCallback(first) : requestAnimationFrame(first)))
-        .catch(() => {})
-    }, 150)
+    v.play()
+      .then(() => (v.requestVideoFrameCallback ? v.requestVideoFrameCallback(first) : requestAnimationFrame(first)))
+      .catch(() => {})
 
     return () => {
       alive = false
-      clearTimeout(dwell)
       if (live.current !== v) return release(v)
       // Hold the last frame and fade back to the thumbnail.
       v.pause()
@@ -293,7 +530,7 @@ const Cell = memo(function Cell({ asset, board, width, active }: { asset: Asset;
         release(v)
       })
     }
-  }, [hover, picking, asset.path, asset.w, asset.duration, clip?.start, clip?.end])
+  }, [previewing, picking, asset.path, asset.w, asset.duration, clip?.start, clip?.end])
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return
@@ -351,13 +588,16 @@ const Cell = memo(function Cell({ asset, board, width, active }: { asset: Asset;
         {!asset.thumb && !asset.error && <div className="cell-loading" />}
         {asset.error && <div className="cell-error">Can’t read file</div>}
       </div>
-      <div className="cell-meta">
-        {overridden && <span className="dot" title="Adjusted" />}
-        <span className="cell-name" title={asset.name}>
-          {asset.name}
-        </span>
-        {asset.kind === 'video' && asset.duration > 0 && <span className="cell-dur">{fmtTime((clip?.end ?? asset.duration) - (clip?.start ?? 0))}</span>}
-      </div>
+      {names && (
+        <div className="cell-meta">
+          {overridden && <span className="dot" title="Adjusted" />}
+          <span className="cell-name" title={asset.name}>
+            {withFolder && folderOf(asset.name) && <span className="cell-folder">{folderOf(asset.name)}/</span>}
+            {baseName(asset.name)}
+          </span>
+          {asset.kind === 'video' && asset.duration > 0 && <span className="cell-dur">{fmtTime((clip?.end ?? asset.duration) - (clip?.start ?? 0))}</span>}
+        </div>
+      )}
     </div>
   )
 })

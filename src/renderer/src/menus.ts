@@ -2,7 +2,7 @@ import { DEFAULT_SETTINGS, resolveSettings } from '@shared/layout'
 import type { SettingKey } from '@shared/types'
 import { combo, MOD, SHIFT } from './keys'
 import { api } from './media'
-import { hasOverrides, useStore, type AppMenuItem } from './store'
+import { baseName, folderOf, hasOverrides, useStore, type AppMenuItem } from './store'
 
 const mac = api.platform === 'darwin'
 const revealLabel = mac ? 'Reveal in Finder' : api.platform === 'win32' ? 'Show in Explorer' : 'Show in Folder'
@@ -15,7 +15,7 @@ export function resetSelection(): void {
   const names = st.selection.filter((n) => board && hasOverrides(board, n))
   if (!names.length) return
   st.resetKeys(Object.keys(DEFAULT_SETTINGS) as SettingKey[], names)
-  st.showHud(`Reset ${names.length === 1 ? names[0] : `${names.length} assets`} · ${key('Z')} to undo`)
+  st.showHud(`Reset ${names.length === 1 ? baseName(names[0]) : `${names.length} assets`} · ${key('Z')} to undo`)
 }
 
 let resolver: ((id: string | null) => void) | null = null
@@ -95,4 +95,51 @@ export async function boardMenu(boardId: string, at: { x: number; y: number }): 
     s.removeBoard(boardId)
     s.showHud(`Deleted “${board.name}” · ${key('Z')} to undo`)
   }
+}
+
+const sep = api.platform === 'win32' ? '\\' : '/'
+const lastPart = (folder: string) => folder.slice(folder.lastIndexOf('/') + 1)
+
+async function rescan(): Promise<void> {
+  const scan = await api.rescanFolder()
+  if (scan) useStore.getState().rescan(scan)
+}
+
+/** Right-click on a folder's section header in the grid. */
+export async function folderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
+  const st = useStore.getState()
+  const names = st.assets.filter((a) => folderOf(a.name) === folder).map((a) => a.name)
+  const id = await showMenu(at.x, at.y, [
+    { id: 'select', label: 'Select All in Folder', icon: 'check', enabled: names.length > 0 },
+    { id: 'reveal', label: revealLabel, icon: 'reveal' },
+    ...(folder ? [{ separator: true }, { id: 'exclude', label: 'Exclude from Reframe', icon: 'exclude' as const }] : [])
+  ])
+  if (id === 'select') useStore.getState().setSelection(names)
+  else if (id === 'reveal') api.reveal(folder ? st.dir + sep + folder.split('/').join(sep) : st.dir!)
+  else if (id === 'exclude') excludeFolder(folder)
+}
+
+/** Leaves a folder (and everything in it) out of the project; its bar stays, dimmed, to bring it back. */
+export async function excludeFolder(folder: string): Promise<void> {
+  await api.excludeFolder(folder)
+  await rescan()
+  useStore.getState().showHud(`Excluded “${lastPart(folder)}” · right-click its bar to bring it back`)
+}
+
+/** Right-click on an excluded folder's bar in the grid. */
+export async function excludedFolderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
+  const st = useStore.getState()
+  const id = await showMenu(at.x, at.y, [
+    { id: 'include', label: 'Include in Reframe', icon: 'show' },
+    { id: 'reveal', label: revealLabel, icon: 'reveal' }
+  ])
+  if (id === 'include') includeFolder(folder)
+  else if (id === 'reveal') api.reveal(st.dir + sep + folder.split('/').join(sep))
+}
+
+/** Brings an excluded (or export) folder back into the project. */
+export async function includeFolder(folder: string): Promise<void> {
+  await api.includeFolder(folder)
+  await rescan()
+  useStore.getState().showHud(`Included “${lastPart(folder)}”`)
 }

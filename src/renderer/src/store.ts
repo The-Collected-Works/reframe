@@ -1,7 +1,8 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import { DEFAULT_SETTINGS, resolveSettings } from '@shared/layout'
 import type { IconName } from './components/ui'
-import type { Artboard, AssetEntry, Clip, ColorMeta, CropSettings, ExportPrefs, FolderScan, ProjectFile, SettingKey } from '@shared/types'
+import type { Artboard, AssetEntry, Clip, ColorMeta, CropSettings, ExportPrefs, FolderScan, ProjectFile, SettingKey, SkippedFolder } from '@shared/types'
 
 export interface Asset extends AssetEntry {
   w: number
@@ -81,12 +82,20 @@ function normalizeProject(p: ProjectFile | null): ProjectFile {
 interface State {
   dir: string | null
   assets: Asset[]
+  /** Subfolders the scan left out (exports, or excluded by the user). */
+  skipped: SkippedFolder[]
+  /** The scan stopped at its file limit. */
+  truncated: boolean
   project: ProjectFile
   boardId: string
   selection: string[]
   focus: string | null
   view: View
   cellSize: number
+  /** How the grid shows assets (filter, sort, grouping, captions). Per user, remembered. */
+  viewPrefs: ViewPrefs
+  /** Folders folded away in the grid (with everything inside). Remembered per project folder. */
+  collapsed: string[]
   clipboard: Partial<CropSettings> | null
   past: ProjectFile[]
   future: ProjectFile[]
@@ -109,6 +118,12 @@ interface Actions {
   patchAsset(name: string, patch: Partial<Asset>): void
   setView(view: View): void
   setCellSize(n: number): void
+  setViewPrefs(patch: Partial<ViewPrefs>): void
+  /** Default filter, sort, grouping and captions, and every folder open. */
+  resetView(): void
+  toggleCollapsed(folder: string): void
+  /** Folds away every folder, or none. */
+  setAllCollapsed(collapse: boolean): void
   select(name: string, mode?: 'replace' | 'toggle' | 'range'): void
   selectAll(): void
   clearSelection(): void
@@ -144,6 +159,41 @@ interface Actions {
 export type Store = State & Actions
 
 let lastCommit = 0
+
+export type SortKey = 'name' | 'date' | 'type'
+export type FilterKey = 'all' | 'images' | 'videos' | 'adjusted' | 'excluded'
+export interface ViewPrefs {
+  filter: FilterKey
+  sort: SortKey
+  /** Sections per folder; off, one continuous grid. */
+  group: boolean
+  /** File names under thumbnails. */
+  names: boolean
+}
+export const VIEW_DEFAULTS: ViewPrefs = { filter: 'all', sort: 'name', group: true, names: true }
+
+function read<T>(key: string, fallback: T): T {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? 'null')
+    return v ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
+function store(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Not persisted; fine.
+  }
+}
+
+const storedView = (): ViewPrefs => ({ ...VIEW_DEFAULTS, ...read<Partial<ViewPrefs>>('reframe.view', {}) })
+const storedCollapsed = (dir: string): string[] => {
+  const v = read<unknown>('reframe.collapsed:' + dir, [])
+  return Array.isArray(v) ? v.filter((f): f is string => typeof f === 'string') : []
+}
 
 function storedVolume(): number {
   try {
@@ -200,6 +250,8 @@ export const useStore = create<Store>()((set, get) => {
 
   return {
     dir: null,
+    skipped: [],
+    truncated: false,
     assets: [],
     project: emptyProject(),
     boardId: '',
@@ -207,6 +259,8 @@ export const useStore = create<Store>()((set, get) => {
     focus: null,
     view: 'grid',
     cellSize: 220,
+    viewPrefs: storedView(),
+    collapsed: [],
     clipboard: null,
     past: [],
     future: [],
@@ -223,6 +277,9 @@ export const useStore = create<Store>()((set, get) => {
       set({
         dir: scan.dir,
         assets: scan.assets.map((e) => toAsset(e)),
+        skipped: scan.skipped,
+        truncated: scan.truncated,
+        collapsed: storedCollapsed(scan.dir),
         project,
         boardId: project.artboards[0].id,
         selection: [],
@@ -239,7 +296,7 @@ export const useStore = create<Store>()((set, get) => {
       const names = new Set(assets.map((a) => a.name))
       const selection = get().selection.filter((n) => names.has(n))
       const focus = get().focus && names.has(get().focus!) ? get().focus : selection[0] ?? null
-      set({ assets, selection, focus, view: focus ? get().view : 'grid' })
+      set({ assets, selection, focus, view: focus ? get().view : 'grid', skipped: scan.skipped, truncated: scan.truncated })
     },
 
     patchAsset(name, patch) {
@@ -247,9 +304,9 @@ export const useStore = create<Store>()((set, get) => {
     },
 
     setView(view) {
-      const { focus, selection, assets } = get()
+      const { focus, selection } = get()
       if (view === 'loupe' && !focus) {
-        const first = selection[0] ?? assets[0]?.name
+        const first = selection[0] ?? layout(get()).visible[0]?.name
         if (!first) return
         set({ focus: first, selection: selection.length ? selection : [first] })
       }
@@ -258,14 +315,49 @@ export const useStore = create<Store>()((set, get) => {
 
     setCellSize: (cellSize) => set({ cellSize }),
 
+    setViewPrefs(patch) {
+      const viewPrefs = { ...get().viewPrefs, ...patch }
+      set({ viewPrefs })
+      store('reframe.view', viewPrefs)
+      keepVisibleSelection()
+    },
+
+    resetView() {
+      const { dir } = get()
+      set({ viewPrefs: { ...VIEW_DEFAULTS }, collapsed: [] })
+      store('reframe.view', VIEW_DEFAULTS)
+      if (dir) store('reframe.collapsed:' + dir, [])
+      keepVisibleSelection()
+    },
+
+    toggleCollapsed(folder) {
+      const { collapsed, dir } = get()
+      const next = collapsed.includes(folder) ? collapsed.filter((f) => f !== folder) : [...collapsed, folder]
+      set({ collapsed: next })
+      if (dir) store('reframe.collapsed:' + dir, next)
+      keepVisibleSelection()
+    },
+
+    setAllCollapsed(collapse) {
+      const { assets, dir } = get()
+      // Every folder, including ones that only hold other folders.
+      const folders = new Set<string>()
+      for (const a of assets) for (let f = folderOf(a.name); f; f = folderOf(f)) folders.add(f)
+      const next = collapse ? [...folders] : []
+      set({ collapsed: next })
+      if (dir) store('reframe.collapsed:' + dir, next)
+      keepVisibleSelection()
+    },
+
     select(name, mode = 'replace') {
-      const { selection, focus, assets } = get()
+      const { selection, focus } = get()
       if (mode === 'toggle') {
         const has = selection.includes(name)
         const next = has ? selection.filter((n) => n !== name) : [...selection, name]
         set({ selection: next, focus: has ? next[next.length - 1] ?? null : name })
       } else if (mode === 'range' && focus) {
-        const names = assets.map((a) => a.name)
+        // A shift-click range covers what's on screen, in on-screen order.
+        const names = layout(get()).visible.map((a) => a.name)
         const [a, b] = [names.indexOf(focus), names.indexOf(name)].sort((x, y) => x - y)
         set({ selection: names.slice(a, b + 1) })
       } else {
@@ -278,12 +370,14 @@ export const useStore = create<Store>()((set, get) => {
       set({ selection: names, focus: focus && names.includes(focus) ? focus : names[0] ?? null })
     },
 
-    selectAll: () => set({ selection: get().assets.map((a) => a.name) }),
+    selectAll: () => set({ selection: layout(get()).visible.map((a) => a.name) }),
     // In single view the focused asset stays on screen; only the inspector switches to defaults.
     clearSelection: () => set({ selection: [], focus: get().view === 'loupe' ? get().focus : null }),
 
+    // Through what's visible, in on-screen order (filtered, sorted, collapsed folders skipped).
     step(delta) {
-      const { assets, focus } = get()
+      const { focus } = get()
+      const assets = layout(get()).visible
       if (!assets.length) return
       const i = focus ? assets.findIndex((a) => a.name === focus) : -1
       const next = assets[Math.max(0, Math.min(assets.length - 1, i + delta))].name
@@ -441,4 +535,135 @@ export const hasOverrides = (board: Artboard, name: string): boolean =>
 export const clipFor = (project: ProjectFile, name: string, duration: number): { start: number; end: number } => {
   const c = project.clips[name]
   return { start: c?.start ?? 0, end: c?.end ?? duration }
+}
+
+/** An asset's file name, without the folders it's in ("Shoot A/clip.mp4" → "clip.mp4"). */
+export const baseName = (name: string): string => name.slice(name.lastIndexOf('/') + 1)
+
+/** The folder an asset is in, relative to the open one ("" for the top level). */
+export const folderOf = (name: string): string => name.slice(0, Math.max(0, name.lastIndexOf('/')))
+
+const natural = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+
+/**
+ * A folder in the grid: its own assets (filtered and sorted) and its subfolders, as the tree it is
+ * on disk. `count` is everything inside it. Excluded folders are leaves, marked with why.
+ */
+export interface FolderNode {
+  /** Relative path, "/"-separated; "" is the top level's own files. */
+  folder: string
+  name: string
+  assets: Asset[]
+  children: FolderNode[]
+  count: number
+  collapsed: boolean
+  excluded?: SkippedFolder
+}
+
+type LayoutInput = Pick<State, 'assets' | 'project' | 'boardId' | 'viewPrefs' | 'collapsed' | 'skipped'>
+
+/**
+ * What the grid shows, from the assets and the view options. Grouped, a tree of folders: the top
+ * level's own files first (if any), then each top-level folder with its subfolders inside it.
+ * Not grouped, one node holding everything. Also the flat list of visible assets in on-screen
+ * order (a folder's files, then its subfolders; nothing inside a collapsed folder), which the
+ * filmstrip, arrow keys, Select All, shift-click ranges and the export dialog's "Visible" scope
+ * all follow.
+ */
+export function layout(s: LayoutInput): { tree: FolderNode[]; visible: Asset[] } {
+  const { filter, sort, group } = s.viewPrefs
+  const board = s.project.artboards.find((b) => b.id === s.boardId) ?? s.project.artboards[0]
+  const pass = (a: Asset) =>
+    filter === 'images'
+      ? a.kind === 'image'
+      : filter === 'videos'
+        ? a.kind === 'video'
+        : filter === 'adjusted'
+          ? !!board && hasOverrides(board, a.name)
+          : filter === 'excluded'
+            ? !!board && resolveSettings(board, a.name).skip
+            : true
+  const byName = (a: Asset, b: Asset) => natural(baseName(a.name), baseName(b.name)) || natural(folderOf(a.name), folderOf(b.name))
+  const cmp =
+    sort === 'date'
+      ? (a: Asset, b: Asset) => b.mtime - a.mtime || byName(a, b)
+      : sort === 'type'
+        ? (a: Asset, b: Asset) => natural(a.kind, b.kind) || byName(a, b)
+        : byName
+  const node = (folder: string): FolderNode => ({
+    folder,
+    name: folder.slice(folder.lastIndexOf('/') + 1),
+    assets: [],
+    children: [],
+    count: 0,
+    collapsed: s.collapsed.includes(folder)
+  })
+  if (!group) {
+    const all = { ...node(''), collapsed: false, assets: s.assets.filter(pass).sort(cmp) }
+    all.count = all.assets.length
+    return { tree: [all], visible: all.assets }
+  }
+
+  // Build the tree: every folder with something to show, and the folders leading to it.
+  const nodes = new Map<string, FolderNode>()
+  const top = node('')
+  const ensure = (folder: string): FolderNode => {
+    let n = nodes.get(folder)
+    if (!n) {
+      n = node(folder)
+      nodes.set(folder, n)
+      const parent = folderOf(folder)
+      if (parent) ensure(parent).children.push(n)
+    }
+    return n
+  }
+  for (const a of s.assets) {
+    if (!pass(a)) continue
+    const folder = folderOf(a.name)
+    ;(folder ? ensure(folder) : top).assets.push(a)
+  }
+  for (const f of s.skipped) ensure(f.path).excluded = f
+  const roots = [...nodes.values()].filter((n) => !n.folder.includes('/'))
+  const finish = (n: FolderNode): number => {
+    n.assets.sort(cmp)
+    n.children.sort((a, b) => natural(a.name, b.name))
+    n.count = n.assets.length + n.children.reduce((sum, c) => sum + finish(c), 0)
+    return n.count
+  }
+  roots.sort((a, b) => natural(a.name, b.name)).forEach(finish)
+  top.assets.sort(cmp)
+  top.count = top.assets.length
+  const tree = [...(top.assets.length ? [top] : []), ...roots]
+
+  const visible: Asset[] = []
+  const walk = (n: FolderNode) => {
+    if (n.collapsed || n.excluded) return
+    visible.push(...n.assets)
+    n.children.forEach(walk)
+  }
+  tree.forEach(walk)
+  return { tree, visible }
+}
+
+/** The visible assets, in on-screen order, for components (see layout). */
+export function useVisible(): Asset[] {
+  const assets = useStore((s) => s.assets)
+  const project = useStore((s) => s.project)
+  const boardId = useStore((s) => s.boardId)
+  const viewPrefs = useStore((s) => s.viewPrefs)
+  const collapsed = useStore((s) => s.collapsed)
+  const skipped = useStore((s) => s.skipped)
+  return useMemo(
+    () => layout({ assets, project, boardId, viewPrefs, collapsed, skipped }).visible,
+    [assets, project, boardId, viewPrefs, collapsed, skipped]
+  )
+}
+
+/** After the view changes, nothing hidden stays selected (edits would land on assets out of sight). */
+function keepVisibleSelection(): void {
+  const st = useStore.getState()
+  const visible = new Set(layout(st).visible.map((a) => a.name))
+  const selection = st.selection.filter((n) => visible.has(n))
+  const focus = st.focus && visible.has(st.focus) ? st.focus : selection[0] ?? null
+  useStore.setState({ selection, focus })
 }

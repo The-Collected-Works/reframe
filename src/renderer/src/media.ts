@@ -8,13 +8,32 @@ export const mediaUrl = (path: string): string => 'media://f/' + encodeURICompon
 /** Long edge of grid thumbnails: enough for the largest cell size at this display density. */
 const THUMB = Math.round(Math.min(960, 480 * (window.devicePixelRatio || 1)))
 
-async function shrink(src: ImageBitmap | HTMLImageElement, w: number, h: number): Promise<ImageBitmap> {
+/** Natural size of an encoded image (rotation from EXIF applied), read without decoding its pixels. */
+function measure(blob: Blob): Promise<{ w: number; h: number }> {
+  const url = URL.createObjectURL(blob)
+  const img = new Image()
+  return new Promise<{ w: number; h: number }>((resolve, reject) => {
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
+    img.onerror = () => reject(new Error('Could not read image'))
+    img.src = url
+  }).finally(() => URL.revokeObjectURL(url))
+}
+
+/**
+ * Grid thumbnail straight from the encoded file. Decoding and downscaling in one step from a Blob
+ * happens on a background thread; shrinking an already-decoded full-size image would happen on the
+ * main thread and stall scrolling for tens of milliseconds per photo or 4K poster.
+ */
+async function thumbnail(blob: Blob): Promise<{ w: number; h: number; thumb: ImageBitmap }> {
+  const { w, h } = await measure(blob)
   const k = Math.min(1, THUMB / Math.max(w, h))
-  return createImageBitmap(src, {
+  const thumb = await createImageBitmap(blob, {
     resizeWidth: Math.max(1, Math.round(w * k)),
     resizeHeight: Math.max(1, Math.round(h * k)),
-    resizeQuality: 'high'
+    resizeQuality: 'high',
+    imageOrientation: 'from-image'
   })
+  return { w, h, thumb }
 }
 
 export function loadImage(path: string): Promise<HTMLImageElement> {
@@ -32,15 +51,10 @@ export async function loadPoster(path: string): Promise<{ bitmap: ImageBitmap; d
 }
 
 async function loadMeta(a: Asset): Promise<Partial<Asset>> {
-  if (a.kind === 'image') {
-    const img = await loadImage(a.path)
-    return { w: img.naturalWidth, h: img.naturalHeight, thumb: await shrink(img, img.naturalWidth, img.naturalHeight) }
-  }
-  const { bitmap, duration, color, audio, fps } = await loadPoster(a.path)
-  const thumb = await shrink(bitmap, bitmap.width, bitmap.height)
-  const meta = { w: bitmap.width, h: bitmap.height, duration, color, audio, fps, thumb }
-  bitmap.close()
-  return meta
+  if (a.kind === 'image') return thumbnail(await (await fetch(mediaUrl(a.path))).blob())
+  const res = await api.poster(a.path)
+  const { w, h, thumb } = await thumbnail(new Blob([res.data as BlobPart], { type: 'image/jpeg' }))
+  return { w, h, thumb, duration: res.duration, color: res.color, audio: res.audio, fps: res.fps }
 }
 
 const queued = new Set<string>()

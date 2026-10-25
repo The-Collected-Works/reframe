@@ -69,10 +69,20 @@ export interface AssetEntry {
   mtime: number
 }
 
+/** A subfolder the scan left out: Reframe's own exports, or one the user excluded. */
+export interface SkippedFolder {
+  /** Relative to the open folder, "/"-separated. */
+  path: string
+  reason: 'export' | 'excluded'
+}
+
 export interface FolderScan {
   dir: string
   assets: AssetEntry[]
   project: ProjectFile | null
+  skipped: SkippedFolder[]
+  /** Stopped at the file limit; some media wasn't included. */
+  truncated: boolean
 }
 
 export interface ColorMeta {
@@ -136,6 +146,13 @@ export interface ReframeApi {
   openFolder(): Promise<FolderScan | null>
   scanFolder(dir: string): Promise<FolderScan>
   lastFolder(): Promise<string | null>
+  /** Scans the open folder again (after files changed). */
+  rescanFolder(): Promise<FolderScan | null>
+  /** Leaves a subfolder (relative to the open folder) out of the project, or brings it back. */
+  excludeFolder(rel: string): Promise<void>
+  includeFolder(rel: string): Promise<void>
+  /** Marks export destinations as output, so their files are never scanned as assets. */
+  markOutput(dirs: string[]): Promise<void>
   /** Recently opened folders that still exist, newest first. */
   recentFolders(): Promise<string[]>
   /** Removes a folder from the recent list; returns the updated list. */

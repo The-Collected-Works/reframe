@@ -56,8 +56,8 @@ export function App() {
   useEffect(
     () =>
       api.onFolderChanged(async () => {
-        const d = useStore.getState().dir
-        if (d) useStore.getState().rescan(await api.scanFolder(d))
+        const scan = await api.rescanFolder()
+        if (scan && scan.dir === useStore.getState().dir) useStore.getState().rescan(scan)
       }),
     []
   )
@@ -118,10 +118,8 @@ export function App() {
       else if (k === ' ' && st.view === 'grid' && st.focus && !(e.target as HTMLElement).closest('button')) st.setView('loupe')
       else if (k === 'arrowright' || (k === 'arrowdown' && st.view === 'loupe')) st.step(1)
       else if (k === 'arrowleft' || (k === 'arrowup' && st.view === 'loupe')) st.step(-1)
-      else if (k === 'arrowdown' || k === 'arrowup') {
-        const cols = Math.round(document.querySelector('.grid')!.clientWidth / (document.querySelector('.cell')?.clientWidth ?? 1))
-        st.step(k === 'arrowdown' ? cols : -cols)
-      } else return
+      else if (k === 'arrowdown' || k === 'arrowup') stepRow(k === 'arrowdown' ? 1 : -1)
+      else return
       e.preventDefault()
     }
     window.addEventListener('keydown', key)
@@ -226,4 +224,25 @@ export function App() {
       <ContextMenu />
     </div>
   )
+}
+
+/**
+ * Up / down in the grid: to the nearest thumbnail in the next row that way, by position on screen,
+ * so folder headers and short last rows don't throw it off.
+ */
+function stepRow(dir: 1 | -1): void {
+  const st = useStore.getState()
+  const cur = document.querySelector<HTMLElement>('.grid .cell.focused')
+  if (!cur) return st.step(dir)
+  const r = cur.getBoundingClientRect()
+  const cx = r.left + r.width / 2
+  let best: { name: string; dy: number; dx: number } | null = null
+  for (const c of document.querySelectorAll<HTMLElement>('.grid .cell')) {
+    const q = c.getBoundingClientRect()
+    const dy = (q.top - r.top) * dir
+    if (dy < 2) continue
+    const dx = Math.abs(q.left + q.width / 2 - cx)
+    if (!best || dy < best.dy - 2 || (Math.abs(dy - best.dy) <= 2 && dx < best.dx)) best = { name: c.dataset.name!, dy, dx }
+  }
+  if (best) st.select(best.name)
 }

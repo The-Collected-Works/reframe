@@ -3,9 +3,9 @@ import type { Artboard, ReleaseNote, UpdateStatus } from '@shared/types'
 import { version } from '../../../../package.json'
 import { ALT, combo, MOD, SHIFT } from '../keys'
 import { api } from '../media'
-import { boardMenu } from '../menus'
+import { boardMenu, showMenu } from '../menus'
 import { reducedMotion } from '../motion'
-import { PRESETS, useStore } from '../store'
+import { PRESETS, useStore, VIEW_DEFAULTS, type FilterKey, type SortKey, type ViewPrefs } from '../store'
 import { Icon, NumberField, Popover, Segmented } from './ui'
 
 const basename = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
@@ -96,6 +96,7 @@ export function TopBar({ onOpen }: { onOpen: (dir?: string) => void }) {
 
       {dir && (
         <div className="tools">
+          {view === 'grid' && <ViewOptions />}
           {view === 'grid' && (
             <input
               type="range"
@@ -123,6 +124,77 @@ export function TopBar({ onOpen }: { onOpen: (dir?: string) => void }) {
         </div>
       )}
     </header>
+  )
+}
+
+const FILTERS: { value: FilterKey; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'images', label: 'Images' },
+  { value: 'videos', label: 'Videos' },
+  { value: 'adjusted', label: 'Adjusted' },
+  { value: 'excluded', label: 'Excluded from export' }
+]
+const SORTS: { value: SortKey; label: string }[] = [
+  { value: 'name', label: 'Name' },
+  { value: 'date', label: 'Date modified' },
+  { value: 'type', label: 'Type' }
+]
+
+/**
+ * Grid view options: what to show, how to sort it, grouping by folder, captions, and folding
+ * every folder at once. It stays open while things are changed; a dot on the button says a
+ * filter is hiding something.
+ */
+function ViewOptions() {
+  const [open, setOpen] = useState(false)
+  const prefs = useStore((s) => s.viewPrefs)
+  const hasFolders = useStore((s) => s.assets.some((a) => a.name.includes('/')))
+  const anyCollapsed = useStore((s) => s.collapsed.length > 0)
+  const { setViewPrefs, setAllCollapsed, resetView } = useStore.getState()
+  const changed = anyCollapsed || (Object.keys(VIEW_DEFAULTS) as (keyof ViewPrefs)[]).some((k) => prefs[k] !== VIEW_DEFAULTS[k])
+  const filter = FILTERS.find((f) => f.value === prefs.filter)!
+  const option = (on: boolean, label: string, onClick: () => void) => (
+    <button key={label} className="menu-item" onClick={onClick}>
+      <span>{label}</span>
+      {on && <Icon name="check" size={14} />}
+    </button>
+  )
+  return (
+    <div className="tab-wrap">
+      <button
+        className={'icon-btn view-btn' + (open ? ' on' : '') + (prefs.filter !== 'all' ? ' filtered' : '')}
+        title={prefs.filter !== 'all' ? `View options (showing ${filter.label.toLowerCase()})` : 'View options'}
+        onClick={() => setOpen(!open)}
+        onContextMenu={async (e) => {
+          e.preventDefault()
+          const id = await showMenu(e.clientX, e.clientY, [{ id: 'reset', label: 'Reset View', icon: 'reset', enabled: changed }])
+          if (id === 'reset') resetView()
+        }}
+      >
+        <Icon name="viewOptions" size={15} />
+      </button>
+      <Popover open={open} onClose={() => setOpen(false)} className="menu view-menu">
+        <div className="menu-label">Show</div>
+        {FILTERS.map((f) => option(prefs.filter === f.value, f.label, () => setViewPrefs({ filter: f.value })))}
+        <div className="menu-sep" />
+        <div className="menu-label">Sort by</div>
+        {SORTS.map((o) => option(prefs.sort === o.value, o.label, () => setViewPrefs({ sort: o.value })))}
+        <div className="menu-sep" />
+        {option(prefs.group, 'Group by folder', () => setViewPrefs({ group: !prefs.group }))}
+        {option(prefs.names, 'Show file names', () => setViewPrefs({ names: !prefs.names }))}
+        {hasFolders && prefs.group && (
+          <>
+            <div className="menu-sep" />
+            {option(false, 'Collapse all folders', () => setAllCollapsed(true))}
+            {option(false, 'Expand all folders', () => setAllCollapsed(false))}
+          </>
+        )}
+        <div className="menu-sep" />
+        <button className="menu-item" disabled={!changed} onClick={resetView}>
+          <span>Reset View</span>
+        </button>
+      </Popover>
+    </div>
   )
 }
 

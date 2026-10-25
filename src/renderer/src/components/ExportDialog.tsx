@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { drawFrame, resolveSettings } from '@shared/layout'
 import type { Artboard, CropSettings, ExportPrefs } from '@shared/types'
 import { api, loadImage, loadPoster } from '../media'
-import { useStore, type Asset } from '../store'
+import { useStore, type Asset, useVisible } from '../store'
 import { Icon, Segmented, Slider } from './ui'
 
 interface Item {
@@ -11,6 +11,8 @@ interface Item {
   asset: Asset
   settings: CropSettings
   output: string
+  /** The artboard's folder inside the export folder; it gets the output marker. */
+  boardDir: string
 }
 
 type Status = { state: 'queued' | 'running' | 'done' | 'error'; progress: number; error?: string }
@@ -37,10 +39,12 @@ function plan(boards: Artboard[], assets: Asset[], out: string, prefs: ExportPre
       const settings = resolveSettings(board, asset.name)
       if (settings.skip || asset.error) continue
       const ext = asset.kind === 'video' ? 'mp4' : prefs.imageFormat
+      // Subfolders are mirrored under the artboard's folder ("Square/Shoot A/clip.mp4").
       let file = `${stem(asset.name)}.${ext}`
       if (used.has(file)) file = `${asset.name.replace(/\./g, '_')}.${ext}`
       used.add(file)
-      items.push({ id: `${board.id}/${asset.name}`, board, asset, settings, output: join(out, folder, file) })
+      const boardDir = join(out, folder)
+      items.push({ id: `${board.id}/${asset.name}`, board, asset, settings, output: join(boardDir, ...file.split('/')), boardDir })
     }
   }
   return items
@@ -92,16 +96,18 @@ export function ExportDialog({ closing = false }: { closing?: boolean }) {
   const out = prefs.dir ?? join(dir, 'export')
 
   const [boards, setBoards] = useState<Set<string>>(() => new Set(project.artboards.map((b) => b.id)))
-  const [scope, setScope] = useState<'all' | 'selected'>(selection.length > 1 ? 'selected' : 'all')
+  // What the grid shows (filters, collapsed folders); offered as a scope when it differs from all.
+  const visible = useVisible()
+  const [scope, setScope] = useState<'all' | 'visible' | 'selected'>(selection.length > 1 ? 'selected' : visible.length < assets.length ? 'visible' : 'all')
   const [phase, setPhase] = useState<'setup' | 'running' | 'done'>('setup')
   const [status, setStatus] = useState<Record<string, Status>>({})
   const cancelled = useRef(false)
 
   const items = useMemo(() => {
     const chosen = project.artboards.filter((b) => boards.has(b.id))
-    const pool = scope === 'selected' ? assets.filter((a) => selection.includes(a.name)) : assets
+    const pool = scope === 'selected' ? assets.filter((a) => selection.includes(a.name)) : scope === 'visible' ? visible : assets
     return plan(chosen, pool, out, prefs)
-  }, [project, boards, scope, assets, selection, out, prefs])
+  }, [project, boards, scope, assets, visible, selection, out, prefs])
 
   const [frozen, setFrozen] = useState<Item[]>([])
   const list = phase === 'setup' ? items : frozen
@@ -127,6 +133,8 @@ export function ExportDialog({ closing = false }: { closing?: boolean }) {
     setFrozen(items)
     setStatus(Object.fromEntries(items.map((i) => [i.id, { state: 'queued', progress: 0 } as Status])))
     setPhase('running')
+    // Mark the destinations first, so files appearing there are never picked up as assets.
+    await api.markOutput([out, ...new Set(items.map((i) => i.boardDir))]).catch(() => {})
     const update = (id: string, s: Partial<Status>) => setStatus((prev) => ({ ...prev, [id]: { ...prev[id], ...s } }))
     // Images are quick: render a few in parallel, then run videos one at a time.
     const images = items.filter((i) => i.asset.kind === 'image')
@@ -243,14 +251,15 @@ export function ExportDialog({ closing = false }: { closing?: boolean }) {
               </div>
             </div>
 
-            {selection.length > 0 && (
+            {(selection.length > 0 || visible.length < assets.length) && (
               <div className="field">
                 <div className="field-label">Assets</div>
                 <Segmented
                   value={scope}
                   options={[
-                    { value: 'all', label: `All ${assets.length}` },
-                    { value: 'selected', label: `Selected ${selection.length}` }
+                    { value: 'all' as const, label: `All ${assets.length}` },
+                    ...(visible.length < assets.length ? [{ value: 'visible' as const, label: `Visible ${visible.length}`, title: 'What the grid shows' }] : []),
+                    ...(selection.length > 0 ? [{ value: 'selected' as const, label: `Selected ${selection.length}` }] : [])
                   ]}
                   onChange={setScope}
                 />

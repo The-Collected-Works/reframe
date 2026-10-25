@@ -4,7 +4,7 @@ import type { Artboard } from '@shared/types'
 import { observeVisibility, scheduleDraw } from '../lazydraw'
 import { prioritize } from '../media'
 import { reducedMotion } from '../motion'
-import { useBoard, useStore, type Asset } from '../store'
+import { useBoard, useStore, useVisible, type Asset } from '../store'
 
 const HEIGHT = 52
 /** Matches .film-item padding and .film-scroll gap. */
@@ -24,7 +24,8 @@ const MOMENTUM_MS = 220
  * the first and last items reach the centre.
  */
 export function Filmstrip() {
-  const assets = useStore((s) => s.assets)
+  // What the grid shows, in its order (filtered, sorted, collapsed folders left out).
+  const assets = useVisible()
   const focus = useStore((s) => s.focus)
   const board = useBoard()
   const strip = useRef<HTMLDivElement>(null)

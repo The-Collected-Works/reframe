@@ -5,7 +5,7 @@ import { ZOOM_MAX, ZOOM_MIN } from '../interact'
 import { combo, MOD, SHIFT } from '../keys'
 import { pickBackground } from '../media'
 import { resetSelection } from '../menus'
-import { hasOverrides, useBoard, useStore, type Asset } from '../store'
+import { baseName, hasOverrides, useBoard, useStore, type Asset } from '../store'
 import { ColorField, fmtTime, Icon, NumberField, Segmented, Slider, Toggle } from './ui'
 
 const FITS: { value: FitMode; label: string; title: string }[] = [
@@ -50,7 +50,7 @@ export function Inspector() {
     editing ? resetKeys(keys) : edit(Object.fromEntries(keys.map((k) => [k, DEFAULT_SETTINGS[k]])) as Partial<CropSettings>)
 
   const chosen = assets.filter((a) => selection.includes(a.name))
-  const title = selection.length === 1 ? primary! : `${selection.length} assets`
+  const title = selection.length === 1 ? baseName(primary!) : `${selection.length} assets`
   const tags = !editing
     ? [`${board.width}×${board.height}`, plural(assets.length, 'asset'), plural(assets.filter((a) => hasOverrides(board, a.name)).length, 'adjusted', 'adjusted')]
     : selection.length === 1 && primaryAsset
@@ -78,7 +78,7 @@ export function Inspector() {
               <span className="crumb-sep">
                 <Icon name="next" size={12} />
               </span>
-              <span className="crumb current" title={title}>
+              <span className="crumb current" title={selection.length === 1 ? primary! : title}>
                 {title}
               </span>
             </>

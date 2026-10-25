@@ -1,10 +1,10 @@
 import { createReadStream, promises as fs } from 'node:fs'
-import { dirname, extname, join, normalize } from 'node:path'
+import { dirname, extname, isAbsolute, join, normalize, relative, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import type { ColorMeta, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
 import { cancelExport, exportVideo, frame, poster, scrubProxy, stopWorker } from './jobs'
-import { saveProject, scanFolder, watchFolder } from './folder'
+import { markFolder, noteSkipped, saveProject, scanFolder, unmarkFolder, watchFolder } from './folder'
 import { installUpdate, pollAutoUpdate, updateStatus } from './autoupdate'
 import { folderArg, forget, readState, recentFolders, remember, updateSystemMenus } from './recent'
 import { checkForUpdate, openRelease } from './updates'
@@ -33,11 +33,38 @@ if (!primary) app.quit()
 const BG = '#111113'
 let win: BrowserWindow | null = null
 let currentDir: string | null = null
+/** The open folder with links resolved, for checking where a path really leads. */
+let currentReal: string | null = null
+
+/** Strictly inside `root` (not `root` itself), by path alone. */
+const within = (root: string, path: string) => {
+  const rel = relative(root, path)
+  return !!rel && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+/**
+ * Whether a file may be read: inside the open folder (any depth), both as written and once links
+ * are resolved, so neither ".." nor a link can reach outside it.
+ */
+async function inOpenFolder(path: string): Promise<boolean> {
+  if (!currentDir || !currentReal || !within(currentDir, normalize(path))) return false
+  const real = await fs.realpath(path).catch(() => null)
+  return !!real && within(currentReal, real)
+}
+
+/** A folder path from the renderer, relative to the open one ("Shoot A/Rejects"), made absolute. */
+function subfolder(rel: string): string {
+  if (!currentDir) throw new Error('No folder open')
+  const abs = resolve(currentDir, rel)
+  if (!within(currentDir, abs)) throw new Error('Not in the open folder')
+  return abs
+}
 
 async function open(path: string) {
   const dir = (await fs.stat(path)).isDirectory() ? path : dirname(path)
   const scan = await scanFolder(dir)
   currentDir = normalize(dir)
+  currentReal = await fs.realpath(dir).catch(() => currentDir)
   watchFolder(dir, () => win?.webContents.send('folder-changed'))
   await remember(dir)
   return scan
@@ -45,9 +72,12 @@ async function open(path: string) {
 
 function serveMedia(req: Request): Promise<Response> | Response {
   const path = normalize(decodeURIComponent(new URL(req.url).pathname.slice(1)))
-  // The open folder, plus the scrub proxies made from it.
-  const allowed = (currentDir && dirname(path) === currentDir) || dirname(path) === normalize(join(app.getPath('userData'), 'posters', 'scrub'))
-  if (!allowed) return new Response(null, { status: 403 })
+  // The open folder (any depth), plus the scrub proxies made from it.
+  const proxy = dirname(path) === normalize(join(app.getPath('userData'), 'posters', 'scrub'))
+  return (proxy ? Promise.resolve(true) : inOpenFolder(path)).then((allowed) => (allowed ? respond(req, path) : new Response(null, { status: 403 })))
+}
+
+function respond(req: Request, path: string): Promise<Response> {
   return fs.stat(path).then(
     (st) => {
       const headers: Record<string, string> = {
@@ -122,6 +152,25 @@ ipcMain.handle('open-folder', async () => {
   return res.canceled || !res.filePaths[0] ? null : open(res.filePaths[0])
 })
 ipcMain.handle('scan-folder', (_e, dir: string) => open(dir))
+// Rescans the open folder without reopening it (no new watcher, no recent-folders update).
+ipcMain.handle('rescan-folder', () => (currentDir ? scanFolder(currentDir) : null))
+// Leave a subfolder out of the project, or bring it back: the marker travels with the folder.
+ipcMain.handle('exclude-folder', async (_e, rel: string) => {
+  await markFolder(subfolder(rel), 'excluded')
+  noteSkipped(rel)
+})
+ipcMain.handle('include-folder', (_e, rel: string) => unmarkFolder(subfolder(rel)))
+// Export destinations get the marker before anything is written, so exports never show up as
+// assets. The open folder itself (or a folder containing it) is never marked: that would hide
+// the whole project; exports always go into a subfolder per artboard, which is marked instead.
+ipcMain.handle('mark-output', async (_e, dirs: string[]) => {
+  for (const d of dirs) {
+    const abs = normalize(d)
+    if (currentDir && (abs === currentDir || within(abs, currentDir))) continue
+    await markFolder(abs, 'export')
+    if (currentDir && within(currentDir, abs)) noteSkipped(relative(currentDir, abs).split(/[\\/]/).join('/'))
+  }
+})
 ipcMain.handle('recent-folders', () => recentFolders())
 ipcMain.handle('forget-folder', (_e, dir: string) => forget(dir))
 // On launch: a folder the app was started with (from the taskbar's recent folders), else the last.
@@ -147,15 +196,15 @@ ipcMain.handle('export-video', async (e, job: VideoExportJob) => {
 })
 ipcMain.handle('cancel-export', () => cancelExport())
 ipcMain.handle('poster', (_e, path: string) => poster(path))
-const inFolder = (path: string) => {
-  if (!currentDir || dirname(normalize(path)) !== currentDir) throw new Error('Not in the open folder')
+const inFolder = async (path: string) => {
+  if (!(await inOpenFolder(path))) throw new Error('Not in the open folder')
 }
-ipcMain.handle('frame', (_e, path: string, time: number, color?: ColorMeta) => {
-  inFolder(path)
+ipcMain.handle('frame', async (_e, path: string, time: number, color?: ColorMeta) => {
+  await inFolder(path)
   return frame(path, time, color)
 })
-ipcMain.handle('scrub-proxy', (_e, path: string, w: number, h: number, color?: ColorMeta) => {
-  inFolder(path)
+ipcMain.handle('scrub-proxy', async (_e, path: string, w: number, h: number, color?: ColorMeta) => {
+  await inFolder(path)
   return scrubProxy(path, w, h, color)
 })
 // Export progress on the taskbar / Dock icon (-1 clears it).
