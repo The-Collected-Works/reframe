@@ -629,7 +629,7 @@ input {
 /* The stuck bar (::before), the same colour as the window behind it, and over it the folder's tint
    (::after), which the bar would otherwise hide: the card's shade (--well with 2.5% white) as a
    colour of its own (a faint white layer over the bar blends unevenly and shows bands), inset to
-   the card's width and rounded where the card's top would be. */
+   the card's width. Square: the card's top has scrolled away, so it runs on off the top edge. */
 .grid-section::before,
 .grid-section::after {
   content: '';
@@ -662,10 +662,6 @@ input {
 
 .grid-folder:has(> .grid-section:not(.excluded):hover) .grid-section:not(.excluded)::after {
   opacity: 1;
-}
-
-.grid-folder:has(> .grid-section:not(.excluded):hover) > .grid-section::after {
-  border-radius: 12px 12px 0 0;
 }
 
 /* Folding a folder open and closed: the body animates between no height and its content's. Only
