@@ -13,13 +13,6 @@ import { fmtTime, Icon } from './ui'
 const GAP = 8
 /** Mat around each frame; matches .cell padding in styles.css. */
 const PAD = 10
-/**
- * Horizontal padding of the scroller (matches .grid-scroll): 26 on the left, 16 on the right
- * beside the 10px scrollbar lane. With the 10px mat, frame-to-edge is 36px on every side,
- * deliberately larger than frame-to-frame (PAD + GAP + PAD = 28) so the grid sits inside a margin.
- */
-const EDGE_LEFT = 26
-const EDGE_RIGHT = 16
 
 /**
  * Stays mounted (hidden) while the single view is open, so switching back is instant and keeps
@@ -46,7 +39,8 @@ export function Grid({ active }: { active: boolean }) {
 
   useLayoutEffect(() => {
     const el = ref.current!
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth - EDGE_LEFT - EDGE_RIGHT))
+    // The scroller's content box: inside its padding and the scrollbar lane (see .grid-scroll).
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width))
     ro.observe(el)
     return () => ro.disconnect()
   }, [])

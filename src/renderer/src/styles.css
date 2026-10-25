@@ -382,11 +382,7 @@ input {
   cursor: default;
 }
 
-.update.downloading:hover {
-  background: linear-gradient(to right, var(--tint-3) var(--p), var(--tint-2) var(--p));
-}
-
-.update:hover {
+.update:not(.downloading):hover {
   background: var(--tint-3);
 }
 
@@ -1714,7 +1710,8 @@ button.crumb:hover {
   background: var(--tint-3);
 }
 
-.icon-btn.on {
+/* The eyedropper while it's picking. */
+.icon-btn.armed {
   color: var(--accent);
 }
 
@@ -1825,7 +1822,6 @@ button.crumb:hover {
   height: 16px;
   border-radius: 8px;
   background: var(--line-strong);
-  transition: background 0.15s;
   flex-shrink: 0;
 }
 
@@ -2252,7 +2248,6 @@ button.crumb:hover {
 .overall .bar div {
   height: 100%;
   background: var(--text);
-  transition: width 0.2s;
 }
 
 .overall-meta {

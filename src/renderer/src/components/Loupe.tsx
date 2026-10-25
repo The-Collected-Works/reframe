@@ -5,7 +5,7 @@ import { dragOffset, NO_GUIDES, rotateAbout, snapAngle, snapScale, snapZoom, wit
 import { combo, MOD } from '../keys'
 import { api, loadStill, mediaUrl } from '../media'
 import { assetMenu } from '../menus'
-import { crossfade, fly, settledRect, snapshot } from '../motion'
+import { crossfade, fly, reducedMotion, settledRect, snapshot } from '../motion'
 import { clipFor, useAsset, useBoard, useStore, useVisible } from '../store'
 import { Filmstrip } from './Filmstrip'
 import { fmtTime, Icon, Slider } from './ui'
@@ -1090,7 +1090,7 @@ function useEased(target: View, instantKey: string, hold: View | null): View {
       lastKey.current = instantKey
       return setView({ k, bx, by })
     }
-    if (from.k === k && from.bx === bx && from.by === by) return setView({ k, bx, by })
+    if ((from.k === k && from.bx === bx && from.by === by) || reducedMotion()) return setView({ k, bx, by })
     // Start from what was on screen (possibly the manual view) before this paint.
     setView(from)
     const t0 = performance.now()

@@ -153,7 +153,7 @@ export function Inspector() {
             <div className="color-row">
               <ColorField value={s.bgColor} onChange={(bgColor) => edit({ bgColor })} onReset={back('bgColor')} />
               <button
-                className={'icon-btn' + (picking ? ' on' : '')}
+                className={'icon-btn' + (picking ? ' armed' : '')}
                 title="Pick from media (I)"
                 onClick={pickBackground}
               >
