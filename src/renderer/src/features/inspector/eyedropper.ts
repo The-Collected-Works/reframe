@@ -1,4 +1,5 @@
-import { app } from '../../state/app.svelte'
+import { edit } from '../../state/actions'
+import { shell } from '../../state/shell.svelte'
 
 type EyeDropperCtor = new () => { open(options?: { signal?: AbortSignal }): Promise<{ sRGBHex: string }> }
 
@@ -15,16 +16,16 @@ export function cancelPick(): void {
  */
 export async function pickBackground(): Promise<void> {
   const EyeDropper = (window as unknown as { EyeDropper?: EyeDropperCtor }).EyeDropper
-  if (!EyeDropper || app.picking) return
-  app.setPicking(true)
+  if (!EyeDropper || shell.picking) return
+  shell.picking = true
   pickAbort = new AbortController()
   try {
     const { sRGBHex } = await new EyeDropper().open({ signal: pickAbort.signal })
-    if (/^#[0-9a-f]{6}$/i.test(sRGBHex)) app.edit({ bg: 'color', bgColor: sRGBHex.toLowerCase() })
+    if (/^#[0-9a-f]{6}$/i.test(sRGBHex)) edit({ bg: 'color', bgColor: sRGBHex.toLowerCase() })
   } catch {
     // Cancelled.
   } finally {
     pickAbort = null
-    app.setPicking(false)
+    shell.picking = false
   }
 }

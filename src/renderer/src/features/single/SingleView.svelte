@@ -1,35 +1,54 @@
 <!--
   One asset at a time, large: the stage, and floating over the band reserved at its bottom, the
-  player (for videos) and the filmstrip.
+  player (for videos) and the filmstrip. The single view's connection to app state; the parts
+  inside take props.
 -->
 <script lang="ts">
-  import { app } from '../../state/app.svelte'
-  import { clipFor } from '../../state/project'
-  import Icon from '../../ui/Icon.svelte'
+  import { setMode } from '../../state/actions'
+  import { library, withMeta } from '../../state/library.svelte'
+  import { prioritize } from '../../state/loading'
+  import { clipFor } from '../../state/model/project'
+  import { preview } from '../../state/preview.svelte'
+  import { project } from '../../state/project.svelte'
+  import { selection } from '../../state/selection.svelte'
+  import { shell } from '../../state/shell.svelte'
+  import { view } from '../../state/view.svelte'
+  import { Button } from '../../ui'
+  import { assetMenu } from '../menus'
   import Filmstrip from './Filmstrip.svelte'
   import { Player } from './player.svelte'
   import PlayerBar from './PlayerBar.svelte'
   import Stage from './Stage.svelte'
 
-  const asset = $derived(app.asset(app.focus))
+  const asset = $derived(library.asset(selection.focus))
+  const board = $derived(project.board)
+  const settings = $derived(asset ? project.settingsOf(asset.name) : board.defaults)
   // Position among what the grid shows (filtered, sorted, collapsed folders left out).
-  const index = $derived(app.visible.findIndex((a) => a.name === app.focus))
-  const count = $derived(app.visible.length)
-  const settings = $derived(asset ? app.settingsOf(asset.name) : app.board.defaults)
+  const strip = $derived(view.visible.map((e) => withMeta(e, library.meta.get(e.name))))
+  const index = $derived(view.visible.findIndex((a) => a.name === selection.focus))
+  const count = $derived(view.visible.length)
 
   // While a trim handle is dragged its value lives here, and is saved once on release.
   let trimDraft = $derived.by((): { start: number; end: number } | null => {
-    void app.focus
+    void selection.focus
     return null
   })
-  const clip = $derived(asset?.kind === 'video' ? (trimDraft ?? clipFor(app.project, asset.name, asset.duration)) : { start: 0, end: 0 })
+  const clip = $derived(asset?.kind === 'video' ? (trimDraft ?? clipFor(project.file, asset.name, asset.duration)) : { start: 0, end: 0 })
 
   // A player per video file.
   const video = $derived(asset?.kind === 'video' ? `${asset.path}|${asset.mtime}` : null)
   let player = $state.raw<Player | null>(null)
   $effect(() => {
     if (!video) return
-    const p = new Player({ asset: () => asset!, clip: () => clip, muted: () => settings.mute, board: () => app.board, settings: () => settings })
+    const p = new Player({
+      asset: () => asset!,
+      clip: () => clip,
+      muted: () => settings.mute,
+      volume: () => preview.volume,
+      picking: () => shell.picking,
+      board: () => board,
+      settings: () => settings
+    })
     player = p
     return () => {
       p.destroy()
@@ -40,7 +59,7 @@
   function onTrimEnd(start: number, end: number) {
     trimDraft = null
     if (!asset) return
-    app.setClip(asset.name, { start, end: end >= asset.duration - 0.01 ? null : end })
+    project.setClip(asset.name, { start, end: end >= asset.duration - 0.01 ? null : end })
     // Keep the view's frame unless it's now outside the trimmed range.
     const v = player?.video
     if (v && (v.currentTime < start || v.currentTime > end)) player?.seek(start)
@@ -57,7 +76,18 @@
 <svelte:window {onkeydown} />
 
 <div class="single">
-  <Stage {asset} {player} />
+  <Stage
+    {asset}
+    {board}
+    {settings}
+    {player}
+    picking={shell.picking}
+    onEdit={(patch) => asset && project.edit([asset.name], patch)}
+    onSelect={() => asset && !selection.has(asset.name) && selection.set([asset.name])}
+    onReset={(keys) => asset && project.resetKeys([asset.name], keys)}
+    onExit={() => setMode('grid')}
+    onMenu={(at) => asset && assetMenu(asset.name, asset.path, at, true)}
+  />
   <div class="single-fade"></div>
   <div class="single-overlay">
     {#if asset && player && asset.duration > 0}
@@ -65,17 +95,20 @@
         {player}
         {asset}
         {clip}
-        aspect={app.board.width / app.board.height}
+        aspect={board.width / board.height}
         muted={settings.mute}
+        volume={preview.volume}
+        onVolume={(v) => preview.setVolume(v)}
+        onToggleMute={() => preview.toggleMute()}
         onTrim={(start, end) => (trimDraft = { start, end })}
         {onTrimEnd}
       />
     {/if}
     <div class="film-row">
       <span class="film-count">{index + 1}<span class="muted">{` / ${count}`}</span></span>
-      <button class="icon-btn" title="Previous (←)" disabled={index <= 0} onclick={() => app.step(-1)}><Icon name="prev" /></button>
-      <Filmstrip />
-      <button class="icon-btn" title="Next (→)" disabled={index >= count - 1} onclick={() => app.step(1)}><Icon name="next" /></button>
+      <Button variant="icon" icon="prev" title="Previous (←)" disabled={index <= 0} onclick={() => selection.step(-1)} />
+      <Filmstrip assets={strip} {board} focus={selection.focus} onSelect={(name) => selection.select(name)} onSeen={(a) => prioritize(a.path)} />
+      <Button variant="icon" icon="next" title="Next (→)" disabled={index >= count - 1} onclick={() => selection.step(1)} />
     </div>
   </div>
 </div>

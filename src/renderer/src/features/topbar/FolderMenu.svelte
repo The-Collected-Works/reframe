@@ -1,26 +1,34 @@
 <!--
-  The folder button: a menu with Open Folder… and the folders opened recently, newest first (so the
-  open one leads). Each recent folder can be dropped from the list.
+  The folder button: a menu with Open Folder… and the folders opened recently, newest first (so
+  the open one leads). Each recent folder can be dropped from the list.
 -->
 <script lang="ts">
-  import { api } from '../../lib/bridge'
   import { combo, MOD } from '../../lib/keys'
   import { basename, samePath } from '../../lib/paths'
-  import Icon from '../../ui/Icon.svelte'
-  import Popover from '../../ui/Popover.svelte'
+  import { Icon, MenuItem, MenuLabel, MenuSeparator, Popover } from '../../ui'
 
-  let { dir, onOpen }: { dir: string | null; onOpen: (dir?: string) => void } = $props()
+  let {
+    dir,
+    recent,
+    onShow,
+    onOpen,
+    onForget
+  }: {
+    dir: string | null
+    recent: string[]
+    /** The menu is opening (time to fetch the recent folders). */
+    onShow: () => void
+    /** Opens `dir`, or (without one) asks which folder. */
+    onOpen: (dir?: string) => void
+    onForget: (dir: string) => void
+  } = $props()
+
   let open = $state(false)
-  let recent = $state<string[]>([])
+  const shown = $derived(recent.slice(0, 5))
   const toggle = () => {
     open = !open
-    if (open)
-      api.recentFolders().then(
-        (r) => (recent = r),
-        () => {}
-      )
+    if (open) onShow()
   }
-  const shown = $derived(recent.slice(0, 5))
   const pick = (d?: string) => {
     open = false
     // Picking the folder that's already open just closes the menu.
@@ -44,29 +52,17 @@
   </button>
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
-      <button class="menu-item" onclick={() => pick()}>
-        <span>Open Folder…</span>
-        <span class="muted">{combo(MOD, 'O')}</span>
-      </button>
+      <MenuItem detail={combo(MOD, 'O')} onclick={() => pick()}>Open Folder…</MenuItem>
       {#if shown.length > 0}
-        <div class="menu-sep"></div>
-        <div class="menu-label">Recent</div>
+        <MenuSeparator />
+        <MenuLabel>Recent</MenuLabel>
         {#each shown as d (d)}
           <div class="recent">
-            <button class="menu-item" title={d} onclick={() => pick(d)}>
+            <MenuItem title={d} onclick={() => pick(d)}>
               <span class="recent-name">{basename(d) || d}</span>
               <span class="recent-path muted">{shortParent(d)}</span>
-            </button>
-            <button
-              class="recent-forget"
-              title="Remove from recent folders"
-              aria-label="Remove from recent folders"
-              onclick={() =>
-                api.forgetFolder(d).then(
-                  (r) => (recent = r),
-                  () => {}
-                )}
-            >
+            </MenuItem>
+            <button class="recent-forget" title="Remove from recent folders" aria-label="Remove from recent folders" onclick={() => onForget(d)}>
               <Icon name="close" size={12} />
             </button>
           </div>
@@ -127,7 +123,8 @@
     position: relative;
   }
 
-  .recent .menu-item {
+  /* (Specific enough to win over MenuItem's own layout.) */
+  .menu .recent :global(.menu-item) {
     justify-content: flex-start;
     gap: 8px;
     text-align: left;

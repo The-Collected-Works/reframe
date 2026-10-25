@@ -1,4 +1,4 @@
-import type { IconName } from './icons'
+import type { IconName } from '../icons/icons'
 
 export interface MenuItem {
   id?: string

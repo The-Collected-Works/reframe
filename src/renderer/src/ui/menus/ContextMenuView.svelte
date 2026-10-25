@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'
-  import { api } from '../lib/bridge'
-  import { closing } from '../lib/motion'
-  import Icon from './Icon.svelte'
-  import { contextMenu, type OpenMenu } from './menu.svelte'
+  import { api } from '../../lib/bridge'
+  import { closing } from '../../lib/motion'
+  import Icon from '../icons/Icon.svelte'
+  import { contextMenu, type OpenMenu } from './context-menu.svelte'
 
   let { menu, onChoose }: { menu: OpenMenu; onChoose: (id: string | null) => void } = $props()
   // Fixed for the menu's life (a new menu is a new instance), and kept while it animates out.

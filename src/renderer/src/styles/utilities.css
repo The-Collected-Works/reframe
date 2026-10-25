@@ -1,0 +1,34 @@
+/* Small utilities for text and layout. Components (buttons, menus, tags…) live in ui/. */
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 11px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* A quiet line in the middle of an empty area. */
+.empty-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  pointer-events: none;
+}
+
+/* Over the whole content area, beside the inspector. */
+.empty-hint.center {
+  position: fixed;
+  top: var(--topbar-h);
+  right: var(--inspector-w);
+}

@@ -4,17 +4,15 @@
   once the installed app has downloaded the update itself, restarts into it.
 -->
 <script lang="ts">
-  import { api } from '../../lib/bridge'
-  import Icon from '../../ui/Icon.svelte'
-  import Popover from '../../ui/Popover.svelte'
+  import { Button, Icon, MenuSeparator, Popover } from '../../ui'
   import ReleaseNotes from './ReleaseNotes.svelte'
   import type { Update } from './updates.svelte'
 
-  let { update }: { update: Update } = $props()
+  let { update, onInstall, onOpenRelease }: { update: Update; onInstall: () => void; onOpenRelease: () => void } = $props()
   const status = $derived(update.status)
   const ready = $derived(status.state === 'ready')
   const downloading = $derived(status.state === 'downloading')
-  const act = () => (ready ? api.installUpdate() : downloading ? undefined : api.openRelease())
+  const act = () => (ready ? onInstall() : downloading ? undefined : onOpenRelease())
 
   // Open on hover: after a short pause (so passing over doesn't flash it), and staying open while
   // the pointer moves from the anchor into the dropdown (`keep`) and briefly after it leaves both.
@@ -66,11 +64,10 @@
           </section>
         {/each}
       </div>
-      <div class="menu-sep"></div>
-      <button class="ghost download" disabled={downloading} onclick={act}>
-        <Icon name={ready ? 'update' : 'download'} size={14} />
+      <MenuSeparator />
+      <Button block icon={ready ? 'update' : 'download'} iconSize={14} disabled={downloading} onclick={act}>
         {ready ? `Restart to update to ${update.version}` : downloading ? `Downloading ${update.version}…` : `Download ${update.version}`}
-      </button>
+      </Button>
     </div>
   </Popover>
 </div>
@@ -153,10 +150,5 @@
 
   .release header .muted {
     font-size: 11px;
-  }
-
-  .download {
-    justify-content: center;
-    width: 100%;
   }
 </style>

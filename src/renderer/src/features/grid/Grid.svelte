@@ -4,23 +4,28 @@
 -->
 <script lang="ts">
   import { basename } from '../../lib/paths'
-  import { includeFolder } from '../../state/actions'
-  import { app } from '../../state/app.svelte'
-  import Icon from '../../ui/Icon.svelte'
+  import { includeFolder, setMode, toggleCollapsed } from '../../state/actions'
+  import { library, withMeta } from '../../state/library.svelte'
+  import { prioritize } from '../../state/loading'
+  import { project } from '../../state/project.svelte'
+  import { selection } from '../../state/selection.svelte'
+  import { shell } from '../../state/shell.svelte'
+  import { view } from '../../state/view.svelte'
+  import { Icon } from '../../ui'
+  import { assetMenu, excludedFolderMenu, folderMenu } from '../menus'
+  import { GAP, PAD, provideGrid, scroll } from './context'
   import GridFolder from './GridFolder.svelte'
   import { boxSelect } from './marquee'
-  import { GAP, PAD, scroll, type GridLayout } from './shared'
 
   let { active }: { active: boolean } = $props()
 
-  const tree = $derived(app.layout.tree)
-  const prefs = $derived(app.viewPrefs)
+  const tree = $derived(view.layout.tree)
   // A flat folder needs no headers; as soon as there are subfolders (or excluded ones), every
   // folder gets one.
-  const sectioned = $derived(prefs.group && (tree.length > 1 || (tree.length === 1 && tree[0].folder !== '')))
-  let frozen = app.board
+  const sectioned = $derived(view.prefs.group && (tree.length > 1 || (tree.length === 1 && tree[0].folder !== '')))
+  let frozen = project.board
   const board = $derived.by(() => {
-    if (active) frozen = app.board
+    if (active) frozen = project.board
     return frozen
   })
 
@@ -30,26 +35,69 @@
   let content = $state<DOMRectReadOnly>()
   const width = $derived(content?.width ?? 0)
 
-  // Cells are sized so the artboard's longer side is roughly `cellSize`.
-  const g: GridLayout = $derived.by(() => {
+  // Cells are sized so the artboard's longer side is roughly the thumbnail size.
+  const cols = $derived.by(() => {
     const aspect = board.width / board.height
-    const target = aspect >= 1 ? app.cellSize : app.cellSize * aspect
-    const cols = Math.max(1, Math.floor((width + GAP) / (target + PAD * 2 + GAP)))
-    // Exact (fractional) widths, so no rounding leftover piles up on the right.
-    const cellW = width > 0 ? (width - GAP * (cols - 1)) / cols : 0
-    return {
-      cols,
-      cellW,
-      board,
-      active,
-      names: prefs.names,
-      withFolder: !prefs.group,
-      headers: !!sectioned,
-      rootName: app.dir ? basename(app.dir) : ''
-    }
+    const target = aspect >= 1 ? view.cellSize : view.cellSize * aspect
+    return Math.max(1, Math.floor((width + GAP) / (target + PAD * 2 + GAP)))
+  })
+  // Exact (fractional) widths, so no rounding leftover piles up on the right.
+  const cellW = $derived(width > 0 ? (width - GAP * (cols - 1)) / cols : 0)
+
+  provideGrid({
+    get cols() {
+      return cols
+    },
+    get cellW() {
+      return cellW
+    },
+    get board() {
+      return board
+    },
+    get active() {
+      return active
+    },
+    get names() {
+      return view.prefs.names
+    },
+    get withFolder() {
+      return !view.prefs.group
+    },
+    get headers() {
+      return !!sectioned
+    },
+    get rootName() {
+      return library.dir ? basename(library.dir) : ''
+    },
+    get previews() {
+      return active && !shell.picking
+    },
+    asset: (entry) => withMeta(entry, library.meta.get(entry.name)),
+    selected: (name) => selection.has(name),
+    focused: (name) => selection.focus === name,
+    clip: (name) => project.file.clips[name],
+    press: (name, mode) => {
+      if (mode !== 'replace') selection.select(name, mode)
+      else if (selection.has(name)) selection.focus = name
+      else selection.select(name)
+    },
+    click: (name) => selection.select(name),
+    open: () => setMode('single'),
+    move: (name, patch) => project.edit([name], patch),
+    menu: (a, at) => assetMenu(a.name, a.path, at),
+    seen: (a) => prioritize(a.path),
+    toggleFolder: toggleCollapsed,
+    folderMenu,
+    excludedMenu: excludedFolderMenu
   })
 
   const onpointerdown = (e: PointerEvent) => boxSelect(e, el, marquee)
+
+  // Keep the focused thumbnail in view when moving with the keyboard.
+  $effect(() => {
+    if (view.mode !== 'grid' || !selection.focus) return
+    document.querySelector('.cell.focused')?.scrollIntoView({ block: 'nearest' })
+  })
 </script>
 
 <div
@@ -62,18 +110,18 @@
 >
   <!-- The folders as the tree they are: each holds its header, its own thumbnails and its
        subfolders, so folding, hover tints and sticky headers all follow from the nesting. -->
-  {#if g.cellW > 0}
+  {#if cellW > 0}
     {#each tree as node (node.folder || '/')}
-      <GridFolder {node} {g} />
+      <GridFolder {node} />
     {/each}
   {/if}
-  {#if app.assets.length > 0 && !tree.length}<div class="empty-hint center">Nothing matches this filter</div>{/if}
-  {#if (app.skipped.length > 0 && !sectioned) || app.truncated}
+  {#if library.assets.length > 0 && !tree.length}<div class="empty-hint center">Nothing matches this filter</div>{/if}
+  {#if (library.skipped.length > 0 && !sectioned) || library.truncated}
     <div class="grid-foot">
-      {#if app.skipped.length > 0 && !sectioned}
+      {#if library.skipped.length > 0 && !sectioned}
         <div class="grid-foot-row">
           <span class="muted">Not shown</span>
-          {#each app.skipped as f (f.path)}
+          {#each library.skipped as f (f.path)}
             <button
               class="skipped-folder"
               title={`${f.reason === 'export' ? 'Reframe exports' : 'Excluded'}. Click to include it`}
@@ -86,7 +134,7 @@
           {/each}
         </div>
       {/if}
-      {#if app.truncated}<div class="muted">Stopped at 20,000 files. Open a subfolder to see the rest.</div>{/if}
+      {#if library.truncated}<div class="muted">Stopped at 20,000 files. Open a subfolder to see the rest.</div>{/if}
     </div>
   {/if}
   <div class="marquee" bind:this={marquee}></div>

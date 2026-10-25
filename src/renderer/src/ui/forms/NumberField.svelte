@@ -1,6 +1,6 @@
 <!-- Numeric input that commits on enter/blur, steps with arrow keys, and scrubs by dragging its label. -->
 <script lang="ts">
-  import { middleReset } from '../lib/format'
+  import { middleReset } from './middle-reset'
 
   let {
     value,

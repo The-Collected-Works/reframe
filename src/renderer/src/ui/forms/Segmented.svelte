@@ -1,6 +1,6 @@
 <script lang="ts" generics="T extends string">
-  import Icon from './Icon.svelte'
-  import type { IconName } from './icons'
+  import Icon from '../icons/Icon.svelte'
+  import type { IconName } from '../icons/icons'
   import Indicator from './Indicator.svelte'
 
   type Option = { value: T; label?: string; icon?: IconName; title?: string; disabled?: boolean }

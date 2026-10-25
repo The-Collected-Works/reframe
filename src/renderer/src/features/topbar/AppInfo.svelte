@@ -2,8 +2,7 @@
 <script lang="ts">
   import { version } from '../../../../../package.json'
   import { ALT, MOD, SHIFT } from '../../lib/keys'
-  import Icon from '../../ui/Icon.svelte'
-  import Popover from '../../ui/Popover.svelte'
+  import { Button, Kbd, Popover } from '../../ui'
 
   /** Every shortcut, grouped. Keys are shown as separate chips; " / " separates alternatives. */
   const SHORTCUTS: { title: string; items: [string, string[]][] }[] = [
@@ -63,14 +62,14 @@
 </script>
 
 <div class="anchor">
-  <button
-    class={['icon-btn', { on: open }]}
+  <Button
+    variant="icon"
+    icon="info"
+    pressed={open}
     title="About Reframe and keyboard shortcuts"
     aria-label="About Reframe and keyboard shortcuts"
     onclick={() => (open = !open)}
-  >
-    <Icon name="info" size={16} />
-  </button>
+  />
   <Popover {open} onClose={() => (open = false)} padding={0}>
     <div class="body">
       <header>
@@ -85,7 +84,7 @@
               <div class="key-row">
                 <span>{label}</span>
                 <span class="key-combo">
-                  {#each keys as k, i (i)}{#if k === '/'}<span class="key-or">/</span>{:else}<kbd>{k}</kbd>{/if}{/each}
+                  {#each keys as k, i (i)}{#if k === '/'}<span class="key-or">/</span>{:else}<Kbd>{k}</Kbd>{/if}{/each}
                 </span>
               </div>
             {/each}
@@ -157,19 +156,6 @@
     align-items: center;
     gap: 3px;
     flex-shrink: 0;
-  }
-
-  kbd {
-    min-width: 20px;
-    height: 20px;
-    padding: 0 5px;
-    display: inline-grid;
-    place-items: center;
-    border-radius: 5px;
-    background: var(--tint-2);
-    color: var(--text);
-    /* (The original 500 11px/1 never applied: it was invalid CSS. This is what has always shown.) */
-    font-family: inherit;
   }
 
   .key-or {

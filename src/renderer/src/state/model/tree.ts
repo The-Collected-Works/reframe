@@ -1,6 +1,6 @@
 import { resolveSettings } from '@shared/layout'
 import type { Artboard, AssetEntry, SkippedFolder } from '@shared/types'
-import type { ViewPrefs } from './prefs'
+import type { ViewPrefs } from '../prefs'
 import { hasOverrides } from './project'
 
 /**

@@ -7,10 +7,27 @@
 <script lang="ts">
   import { expoOut } from 'svelte/easing'
   import { Tween } from 'svelte/motion'
+  import type { Artboard } from '@shared/types'
   import { reducedMotion } from '../../lib/motion'
-  import { app } from '../../state/app.svelte'
+  import type { Asset } from '../../state/library.svelte'
   import { FILM_GAP, FILM_HEIGHT, FILM_PAD } from './film'
   import FilmstripItem from './FilmstripItem.svelte'
+
+  let {
+    assets,
+    board,
+    focus,
+    onSelect,
+    onSeen
+  }: {
+    /** What the grid shows, in its order (filtered, sorted, collapsed folders left out). */
+    assets: Asset[]
+    board: Artboard
+    /** The one the single view shows. */
+    focus: string | null
+    onSelect: (name: string) => void
+    onSeen: (asset: Asset) => void
+  } = $props()
 
   /** Window width in items: the active one, one either side, one more each side fading out. */
   const VISIBLE = 5
@@ -19,9 +36,6 @@
   /** How far a fling carries: release velocity (px/ms) × this. */
   const MOMENTUM_MS = 220
 
-  // What the grid shows, in its order (filtered, sorted, collapsed folders left out).
-  const assets = $derived(app.visible)
-  const board = $derived(app.board)
   let strip: HTMLDivElement
   let stripWidth = $state(0)
   const itemWidth = $derived(Math.round((FILM_HEIGHT * board.width) / board.height) + FILM_PAD * 2)
@@ -39,7 +53,7 @@
   })
   const hold = () => scroll.set(strip.scrollLeft, { duration: 0 })
   // With half the strip's width of padding either side, item i is centred at i steps along.
-  const index = $derived(assets.findIndex((a) => a.name === app.focus))
+  const index = $derived(assets.findIndex((a) => a.name === focus))
   let placed = false
   function centre() {
     if (!pad || index < 0) return
@@ -53,7 +67,7 @@
   function settleAt(scrollLeft: number) {
     const i = Math.round((scrollLeft + strip.clientWidth / 2 - pad - itemWidth / 2) / step)
     const target = assets[Math.max(0, Math.min(assets.length - 1, i))]
-    if (target && target.name !== app.focus) app.select(target.name)
+    if (target && target.name !== focus) onSelect(target.name)
     else centre()
   }
 
@@ -129,7 +143,7 @@
   style:--item={`${step}px`}
 >
   {#each assets as a (a.name)}
-    <FilmstripItem entry={a} {board} on={a.name === app.focus} />
+    <FilmstripItem asset={a} {board} on={a.name === focus} onclick={() => onSelect(a.name)} onSeen={() => onSeen(a)} />
   {/each}
 </div>
 

@@ -2,16 +2,19 @@ import { untrack } from 'svelte'
 import { drawFrame } from '@shared/layout'
 import type { Artboard, CropSettings } from '@shared/types'
 import { api, mediaUrl } from '../../lib/bridge'
-import { app, type Asset } from '../../state/app.svelte'
-import { showToast } from '../../ui/toast.svelte'
+import type { Asset } from '../../state/library.svelte'
+import { showToast } from '../../ui'
 
 export interface PlayerOptions {
   /** The video (the same file for the player's life; its details can still arrive). */
   asset: () => Asset
   /** The kept range, which playback loops within. */
   clip: () => { start: number; end: number }
-  /** Silent (exported muted); otherwise the shared preview volume. */
+  /** Silent (exported muted); otherwise at `volume`. */
   muted: () => boolean
+  volume: () => number
+  /** The eyedropper is open: it samples the screen, so playback pauses on the exact frame. */
+  picking: () => boolean
   /** How trim previews frame the video. */
   board: () => Artboard
   settings: () => CropSettings
@@ -57,22 +60,22 @@ export class Player {
   /** Bumped whenever a new frame is ready to draw. */
   frame = $state(0)
 
-  #opts: PlayerOptions
-  #el: HTMLVideoElement
+  private opts: PlayerOptions
+  private el: HTMLVideoElement
   /** Low-res, all-keyframe copy for scrubbing; drawn in place of the video while scrubbing. */
-  #proxy = $state.raw<HTMLVideoElement | null>(null)
-  #scrubSrc: HTMLVideoElement | null = null
-  #scrubbing: { resume: boolean } | null = null
+  private proxy = $state.raw<HTMLVideoElement | null>(null)
+  private scrubSrc: HTMLVideoElement | null = null
+  private scrubbing: { resume: boolean } | null = null
   /** At most one seek in flight; while it runs only the newest target is kept. Issuing a seek per
       pointer move makes the browser abandon most of them and the frame stutters. */
-  #pendingSeek: number | null = null
-  #proxyPending: number | null = null
-  #previews: { v: HTMLVideoElement; pending: number | null; canvas: HTMLCanvasElement | null } | null = null
-  #stop: () => void
+  private pendingSeek: number | null = null
+  private proxyPending: number | null = null
+  private previews: { v: HTMLVideoElement; pending: number | null; canvas: HTMLCanvasElement | null } | null = null
+  private stop: () => void
 
   constructor(opts: PlayerOptions) {
-    this.#opts = opts
-    const { path, name } = untrack(opts.asset)
+    this.opts = opts
+    const { path } = untrack(opts.asset)
     const v = document.createElement('video')
     v.crossOrigin = 'anonymous'
     v.playsInline = true
@@ -80,7 +83,7 @@ export class Player {
     // Loops natively when untrimmed; the playback loop below handles trimmed ranges.
     v.loop = true
     v.src = mediaUrl(path)
-    this.#el = v
+    this.el = v
     const fail = () => {
       release(v)
       this.unplayable = true
@@ -91,25 +94,25 @@ export class Player {
       () => {
         // Audio but no picture: the video track's codec isn't supported.
         if (!v.videoWidth) return fail()
-        v.currentTime = app.project.clips[name]?.start ?? 0
+        v.currentTime = untrack(opts.clip).start
         this.video = v
       },
       { once: true }
     )
-    this.#stop = $effect.root(() => this.#effects())
+    this.stop = $effect.root(() => this.effects())
   }
 
   destroy(): void {
-    this.#stop()
-    release(this.#el)
-    if (this.#previews) release(this.#previews.v)
+    this.stop()
+    release(this.el)
+    if (this.previews) release(this.previews.v)
   }
 
-  #effects() {
+  private effects() {
     // Scrub proxy: requested once a video has been open for a moment (not for every one flicked
     // past), built in the background, then loaded into a hidden muted video ready for seeking.
     $effect(() => {
-      const { path, w, h, color } = this.#opts.asset()
+      const { path, w, h, color } = this.opts.asset()
       if (!w) return
       let alive = true
       let pv: HTMLVideoElement | null = null
@@ -119,12 +122,12 @@ export class Player {
           .then((proxyPath) => {
             if (!alive) return
             const v = (pv = hiddenVideo(mediaUrl(proxyPath)))
-            v.addEventListener('loadeddata', () => alive && (this.#proxy = v), { once: true })
+            v.addEventListener('loadeddata', () => alive && (this.proxy = v), { once: true })
             v.addEventListener('seeked', () => {
-              if (this.#scrubSrc === v) this.frame++
-              if (this.#proxyPending != null) {
-                v.currentTime = this.#proxyPending
-                this.#proxyPending = null
+              if (this.scrubSrc === v) this.frame++
+              if (this.proxyPending != null) {
+                v.currentTime = this.proxyPending
+                this.proxyPending = null
               }
             })
           })
@@ -140,13 +143,14 @@ export class Player {
     // Preview audio: silent if the export is muted; otherwise the global preview volume.
     $effect(() => {
       if (!this.video) return
-      this.video.volume = app.volume
-      this.video.muted = this.#opts.muted() || app.volume === 0
+      const volume = this.opts.volume()
+      this.video.volume = volume
+      this.video.muted = this.opts.muted() || volume === 0
     })
 
     // The eyedropper samples the screen; pause so it sees the exact frame, not the browser's decode.
     $effect(() => {
-      if (app.picking && this.video && !this.video.paused) this.video.pause()
+      if (this.opts.picking() && this.video && !this.video.paused) this.video.pause()
     })
 
     // Pressed before the video loaded: play now (or say why it can't).
@@ -160,7 +164,7 @@ export class Player {
     $effect(() => {
       const v = this.video
       if (!v || this.playing) return
-      const { path, color } = untrack(this.#opts.asset)
+      const { path, color } = untrack(this.opts.asset)
       let alive = true
       let timer: ReturnType<typeof setTimeout> | undefined
       const request = () => {
@@ -190,7 +194,7 @@ export class Player {
       if (!v) return
       let raf = 0
       const tick = () => {
-        const { start, end } = this.#opts.clip()
+        const { start, end } = this.opts.clip()
         if (v.currentTime >= end - 0.01 || v.currentTime < start - 0.05) v.currentTime = start
         this.time = v.currentTime
         this.frame++
@@ -203,14 +207,14 @@ export class Player {
       const onPause = () => (this.playing = false)
       const onSeeked = () => {
         // Show each frame as it arrives, then chase the newest target if the pointer has moved on.
-        if (this.#pendingSeek != null) {
+        if (this.pendingSeek != null) {
           this.frame++
-          v.currentTime = this.#pendingSeek
-          this.#pendingSeek = null
+          v.currentTime = this.pendingSeek
+          this.pendingSeek = null
           return
         }
         // The real frame has landed: stop standing in with the proxy.
-        if (!this.#scrubbing) this.#scrubSrc = null
+        if (!this.scrubbing) this.scrubSrc = null
         this.time = v.currentTime
         this.frame++
       }
@@ -237,8 +241,8 @@ export class Player {
   source(exactBitmap: ImageBitmap | null): { source: CanvasImageSource | null; hold: boolean } {
     const v = this.video
     const useExact = !!(this.exact && exactBitmap && v?.paused && Math.abs(this.exact.t - v.currentTime) < 0.001)
-    const want = this.#scrubSrc ?? (useExact ? null : v)
-    const scrub = this.#scrubSrc && this.#scrubSrc.readyState >= 2 ? this.#scrubSrc : null
+    const want = this.scrubSrc ?? (useExact ? null : v)
+    const scrub = this.scrubSrc && this.scrubSrc.readyState >= 2 ? this.scrubSrc : null
     return {
       source: scrub ?? (useExact ? exactBitmap : v && v.readyState >= 2 ? v : null),
       hold: !!want && want.seeking && want.readyState < 2
@@ -255,7 +259,7 @@ export class Player {
   seek(t: number): void {
     const v = this.video
     if (!v) return
-    if (v.seeking) this.#pendingSeek = t
+    if (v.seeking) this.pendingSeek = t
     else v.currentTime = t
   }
 
@@ -263,22 +267,22 @@ export class Player {
   // seeks the proxy (newest target wins) and its frames are drawn; the real video seeks once, to
   // where the drag ends, and takes over when that frame is ready.
   scrubStart(): void {
-    this.#scrubbing = { resume: !!this.video && !this.video.paused }
+    this.scrubbing = { resume: !!this.video && !this.video.paused }
     this.video?.pause()
   }
 
   scrubTo(t: number): void {
     this.scrubTime = t
-    const pv = this.#proxy
+    const pv = this.proxy
     if (!pv) return this.seek(t)
-    this.#scrubSrc = pv
-    if (pv.seeking) this.#proxyPending = t
+    this.scrubSrc = pv
+    if (pv.seeking) this.proxyPending = t
     else pv.currentTime = t
   }
 
   scrubEnd(t: number): void {
-    const resume = this.#scrubbing?.resume
-    this.#scrubbing = null
+    const resume = this.scrubbing?.resume
+    this.scrubbing = null
     this.scrubTime = null
     this.time = t
     this.seek(t)
@@ -287,16 +291,16 @@ export class Player {
 
   /** Draws the frame at `t` into `canvas`, from a second muted video, so the view never has to seek mid-drag. */
   preview(canvas: HTMLCanvasElement, t: number): void {
-    let s = this.#previews
+    let s = this.previews
     if (!s) {
-      const v = hiddenVideo(this.#proxy?.src ?? mediaUrl(this.#opts.asset().path))
+      const v = hiddenVideo(this.proxy?.src ?? mediaUrl(this.opts.asset().path))
       const state = { v, pending: null as number | null, canvas: null as HTMLCanvasElement | null }
       const paint = () => {
         const c = state.canvas
-        const a = this.#opts.asset()
-        const b = this.#opts.board()
+        const a = this.opts.asset()
+        const b = this.opts.board()
         if (!c || !a.w || v.readyState < 2) return
-        drawFrame(c.getContext('2d')!, v, a.w, a.h, b.width, b.height, this.#opts.settings(), c.width / b.width)
+        drawFrame(c.getContext('2d')!, v, a.w, a.h, b.width, b.height, this.opts.settings(), c.width / b.width)
       }
       const next = () => {
         paint()
@@ -307,7 +311,7 @@ export class Player {
       }
       v.addEventListener('seeked', next)
       v.addEventListener('loadeddata', next)
-      s = this.#previews = state
+      s = this.previews = state
     }
     s.canvas = canvas
     if (s.v.readyState < 2 || s.v.seeking) s.pending = t

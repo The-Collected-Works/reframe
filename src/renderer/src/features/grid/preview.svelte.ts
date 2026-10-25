@@ -4,8 +4,8 @@ import { Tween } from 'svelte/motion'
 import { posterTime } from '@shared/media'
 import type { Clip } from '@shared/types'
 import { mediaUrl } from '../../lib/bridge'
-import type { Asset } from '../../state/app.svelte'
-import { scroll } from './shared'
+import type { Asset } from '../../state/library.svelte'
+import { scroll } from './context'
 
 const SCROLL_SETTLE = 250
 const DWELL = 150
@@ -28,19 +28,19 @@ export class HoverPreview {
   /** The playing video (also while fading out), drawn over the thumbnail at `fade`. */
   video: HTMLVideoElement | null = null
   readonly fade = new Tween(0, { duration: 180, easing: cubicOut })
-  #ready = $state(false)
+  private ready = $state(false)
 
   /** `enabled`: the grid is showing and the eyedropper isn't (it needs the exact thumbnail). */
   constructor(asset: () => Asset, clip: () => Clip | undefined, enabled: () => boolean, redraw: () => void) {
     $effect(() => {
-      if (!this.hovering) return void (this.#ready = false)
+      if (!this.hovering) return void (this.ready = false)
       const since = performance.now()
       let t: ReturnType<typeof setTimeout> | undefined
       const check = () => {
         const now = performance.now()
         const wait = Math.max(since + DWELL - now, scroll.last + SCROLL_SETTLE - now)
         if (wait > 0) t = setTimeout(check, wait)
-        else this.#ready = true
+        else this.ready = true
       }
       check()
       return () => clearTimeout(t)
@@ -53,7 +53,7 @@ export class HoverPreview {
 
     $effect(() => {
       const a = asset()
-      if (!this.#ready || !enabled() || a.kind !== 'video' || !a.w) return
+      if (!this.ready || !enabled() || a.kind !== 'video' || !a.w) return
       const v = document.createElement('video')
       v.crossOrigin = 'anonymous'
       v.muted = true

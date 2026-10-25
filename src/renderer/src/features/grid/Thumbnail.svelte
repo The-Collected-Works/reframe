@@ -1,40 +1,30 @@
+<!--
+  One asset in the grid: the artboard as it will export, with its name below (and an adjusted dot,
+  and a video's length). Videos play in place on hover. Drag the picture to move it within the
+  artboard; click to select (shift for a range, ⌘/Ctrl to add); double-click to open it.
+-->
 <script lang="ts">
   import { drawFrame, resolveSettings } from '@shared/layout'
-  import type { Artboard, AssetEntry } from '@shared/types'
+  import type { AssetEntry } from '@shared/types'
   import { visibility } from '../../lib/attach'
   import { scheduleDraw } from '../../lib/draw-queue'
   import { fmtTime } from '../../lib/format'
-  import { app, withMeta } from '../../state/app.svelte'
-  import { baseName, folderOf } from '../../state/library'
-  import { prioritize } from '../../state/loading'
-  import { hasOverrides } from '../../state/project'
-  import { assetMenu } from '../menus'
+  import { hasOverrides } from '../../state/model/project'
+  import { baseName, folderOf } from '../../state/model/tree'
+  import { Dot } from '../../ui'
   import { dragOffset, NO_GUIDES, type Guides } from '../snapping'
+  import { useGrid } from './context'
   import { HoverPreview } from './preview.svelte'
 
-  let {
-    entry,
-    board,
-    width,
-    active,
-    names,
-    withFolder
-  }: {
-    entry: AssetEntry
-    board: Artboard
-    width: number
-    active: boolean
-    /** Show the caption row (name, adjusted dot, duration). */
-    names: boolean
-    /** Prefix the name with its folder (when the grid isn't grouped by folder). */
-    withFolder: boolean
-  } = $props()
+  let { entry, width }: { entry: AssetEntry; width: number } = $props()
+  const g = useGrid()
 
-  // Only this cell's own loaded details: another thumbnail arriving doesn't touch it.
-  const asset = $derived(withMeta(entry, app.meta.get(entry.name)))
-  const selected = $derived(app.selected.has(entry.name))
-  const focused = $derived(app.focus === entry.name)
-  const clip = $derived(app.project.clips[entry.name])
+  // Only this thumbnail's own loaded details: another one arriving doesn't touch it.
+  const asset = $derived(g.asset(entry))
+  const board = $derived(g.board)
+  const selected = $derived(g.selected(entry.name))
+  const focused = $derived(g.focused(entry.name))
+  const clip = $derived(g.clip(entry.name))
   const settings = $derived(resolveSettings(board, entry.name))
   const height = $derived(Math.round((width * board.height) / board.width))
   const overridden = $derived(hasOverrides(board, entry.name))
@@ -46,7 +36,7 @@
   const preview = new HoverPreview(
     () => asset,
     () => clip,
-    () => active && !app.picking,
+    () => g.previews,
     () => draw()
   )
   let layer: OffscreenCanvas | null = null
@@ -107,20 +97,18 @@
   // Drawn (in the shared per-frame budget) whenever what it shows changes while it's on screen.
   const task = () => draw()
   $effect(() => {
-    if (active && visible && drawn !== key) scheduleDraw(task)
+    if (g.active && visible && drawn !== key) scheduleDraw(task)
   })
   const onVisible = (v: boolean) => {
     visible = v
-    if (v && !asset.thumb) prioritize(asset.path)
+    if (v && !asset.thumb) g.seen(asset)
   }
 
   function onpointerdown(e: PointerEvent) {
     if (e.button !== 0) return
     const mode = e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : 'replace'
-    if (mode !== 'replace') return app.select(asset.name, mode)
-    if (selected) app.focus = asset.name
-    else app.select(asset.name)
-    if (!asset.w) return
+    g.press(asset.name, mode)
+    if (mode !== 'replace' || !asset.w) return
 
     const el = e.currentTarget as HTMLElement
     el.setPointerCapture(e.pointerId)
@@ -137,7 +125,7 @@
       dragging = true
       const r = dragOffset(start, board.width, board.height, w, h, dx, dy, 5 / kk, { shift: ev.shiftKey, alt: ev.altKey })
       guides = r.guides
-      app.editAsset(name, r.patch)
+      g.move(name, r.patch)
     }
     const up = () => {
       guides = NO_GUIDES
@@ -145,7 +133,7 @@
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)
       el.removeEventListener('pointercancel', up)
-      if (!dragging) app.select(name)
+      if (!dragging) g.click(name)
     }
     el.addEventListener('pointermove', move)
     el.addEventListener('pointerup', up)
@@ -158,7 +146,7 @@
   role="presentation"
   oncontextmenu={(e) => {
     e.preventDefault()
-    assetMenu(asset.name, asset.path, { x: e.clientX, y: e.clientY })
+    g.menu(asset, { x: e.clientX, y: e.clientY })
   }}
   class={['cell', { selected, focused, skipped: settings.skip }]}
 >
@@ -168,7 +156,7 @@
     role="presentation"
     style:height={`${height}px`}
     {onpointerdown}
-    ondblclick={() => app.setView('single')}
+    ondblclick={g.open}
     onpointerenter={asset.kind === 'video' ? () => (preview.hovering = true) : undefined}
     onpointerleave={asset.kind === 'video' ? () => (preview.hovering = false) : undefined}
   >
@@ -176,11 +164,11 @@
     {#if !asset.thumb && !asset.error}<div class="cell-loading"></div>{/if}
     {#if asset.error}<div class="cell-error">Can’t read file</div>{/if}
   </div>
-  {#if names}
+  {#if g.names}
     <div class="cell-meta">
-      {#if overridden}<span class="dot" title="Adjusted"></span>{/if}
+      {#if overridden}<Dot title="Adjusted" />{/if}
       <span class="cell-name" title={asset.name}>
-        {#if withFolder && folderOf(asset.name)}<span class="cell-folder">{folderOf(asset.name)}/</span>{/if}{baseName(asset.name)}
+        {#if g.withFolder && folderOf(asset.name)}<span class="cell-folder">{folderOf(asset.name)}/</span>{/if}{baseName(asset.name)}
       </span>
       {#if asset.kind === 'video' && asset.duration > 0}
         <span class="cell-dur">{fmtTime((clip?.end ?? asset.duration) - (clip?.start ?? 0))}</span>

@@ -1,23 +1,17 @@
+/** Text for numbers the app shows: times, file sizes, counts. */
+
 export const fmtTime = (t: number): string => {
   const m = Math.floor(t / 60)
   const s = t - m * 60
   return `${m}:${s.toFixed(1).padStart(4, '0')}`
 }
 
-/**
- * Middle-click resets a value field. Handled on press so the browser's autoscroll (and, on Linux,
- * primary-selection paste) never starts. Spread onto the element.
- */
-export function middleReset(onReset?: () => void): Record<string, (e: MouseEvent) => void> {
-  if (!onReset) return {}
-  return {
-    onmousedown: (e) => {
-      if (e.button !== 1) return
-      e.preventDefault()
-      onReset()
-    },
-    onauxclick: (e) => {
-      if (e.button === 1) e.preventDefault()
-    }
-  }
-}
+export const fmtSize = (bytes: number): string =>
+  bytes >= 1e9
+    ? `${(bytes / 1e9).toFixed(1)} GB`
+    : bytes >= 1e6
+      ? `${(bytes / 1e6).toFixed(bytes >= 1e8 ? 0 : 1)} MB`
+      : `${Math.max(1, Math.round(bytes / 1e3))} KB`
+
+/** "1 asset", "3 assets". */
+export const plural = (n: number, one: string, many = one + 's'): string => `${n} ${n === 1 ? one : many}`

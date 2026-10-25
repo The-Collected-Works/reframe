@@ -1,18 +1,21 @@
+<!--
+  The settings of the selection, or with nothing selected, the artboard's defaults that every asset
+  follows. A dot beside a setting marks it as changed from the defaults (click to reset it; "Make
+  default" turns it into the default). The inspector's connection to app state.
+-->
 <script lang="ts">
   import { DEFAULT_SETTINGS, normDeg, resolveSettings } from '@shared/layout'
   import type { CropSettings, FitMode, SettingKey } from '@shared/types'
-  import { fmtTime } from '../../lib/format'
+  import { fmtSize, fmtTime, plural } from '../../lib/format'
   import { combo, MOD, SHIFT } from '../../lib/keys'
-  import { resetSelection } from '../../state/actions'
-  import { app, type Asset } from '../../state/app.svelte'
-  import { baseName } from '../../state/library'
-  import { hasOverrides } from '../../state/project'
-  import ColorField from '../../ui/ColorField.svelte'
-  import Icon from '../../ui/Icon.svelte'
-  import NumberField from '../../ui/NumberField.svelte'
-  import Segmented from '../../ui/Segmented.svelte'
-  import Slider from '../../ui/Slider.svelte'
-  import Toggle from '../../ui/Toggle.svelte'
+  import { clearSelection, copy, edit, editEach, makeDefault, paste, resetKeys, resetSelection } from '../../state/actions'
+  import { library, type Asset } from '../../state/library.svelte'
+  import { hasOverrides } from '../../state/model/project'
+  import { baseName } from '../../state/model/tree'
+  import { project } from '../../state/project.svelte'
+  import { selection } from '../../state/selection.svelte'
+  import { shell } from '../../state/shell.svelte'
+  import { Button, ColorField, Icon, NumberField, Segmented, Slider, Tag, Toggle } from '../../ui'
   import { ZOOM_MAX, ZOOM_MIN } from '../snapping'
   import AnchorGrid from './AnchorGrid.svelte'
   import { pickBackground } from './eyedropper'
@@ -26,28 +29,29 @@
     { value: 'stretch', label: 'Stretch', title: 'Stretch to fill' }
   ]
 
-  const board = $derived(app.board)
-  const selection = $derived(app.selection)
-  const editing = $derived(selection.length > 0)
-  const primary = $derived(editing ? (app.focus && app.selected.has(app.focus) ? app.focus : selection[0]) : null)
-  const primaryAsset = $derived(selection.length === 1 ? app.asset(primary) : undefined)
+  const board = $derived(project.board)
+  const names = $derived(selection.names)
+  const editing = $derived(names.length > 0)
+  /** The asset whose values are shown: the focused one if it's selected, else the first. */
+  const primary = $derived(editing ? (selection.focus && selection.has(selection.focus) ? selection.focus : names[0]) : null)
+  const primaryAsset = $derived(names.length === 1 ? library.asset(primary) : undefined)
   // The selected assets, found in one pass (selections can be the whole folder).
-  const chosen = $derived(app.assets.filter((a) => app.selected.has(a.name)))
+  const chosen = $derived(library.assets.filter((a) => selection.has(a.name)))
   const s: CropSettings = $derived(primary ? resolveSettings(board, primary) : board.defaults)
   const W = $derived(board.width)
   const H = $derived(board.height)
 
-  const overridden = (keys: SettingKey[]) => editing && selection.some((n) => keys.some((k) => board.overrides[n]?.[k] !== undefined))
-  const hasVideo = $derived((editing ? chosen : app.assets).some((a) => a.kind === 'video'))
-  const anyOverride = $derived(editing && selection.some((n) => hasOverrides(board, n)))
+  const overridden = (keys: SettingKey[]) => editing && names.some((n) => keys.some((k) => board.overrides[n]?.[k] !== undefined))
+  const hasVideo = $derived((editing ? chosen : library.assets).some((a) => a.kind === 'video'))
+  const anyOverride = $derived(editing && names.some((n) => hasOverrides(board, n)))
   // Whether the selection goes into this artboard's export: all of it, none, or some.
-  const exported = $derived(selection.filter((n) => !resolveSettings(board, n).skip).length)
-  const mixedExport = $derived(exported > 0 && exported < selection.length)
+  const exported = $derived(names.filter((n) => !resolveSettings(board, n).skip).length)
+  const mixedExport = $derived(exported > 0 && exported < names.length)
 
   const rp = (keys: SettingKey[]) => ({
     overridden: overridden(keys),
-    onReset: () => app.resetKeys(keys),
-    onMakeDefault: () => app.makeDefault(keys)
+    onReset: () => resetKeys(keys),
+    onMakeDefault: () => makeDefault(keys)
   })
 
   // Middle-click on a field: an asset drops that override and follows the artboard again; the
@@ -55,15 +59,7 @@
   const back =
     (...keys: SettingKey[]) =>
     () =>
-      editing ? app.resetKeys(keys) : app.edit(Object.fromEntries(keys.map((k) => [k, DEFAULT_SETTINGS[k]])) as Partial<CropSettings>)
-
-  const fmtSize = (bytes: number) =>
-    bytes >= 1e9
-      ? `${(bytes / 1e9).toFixed(1)} GB`
-      : bytes >= 1e6
-        ? `${(bytes / 1e6).toFixed(bytes >= 1e8 ? 0 : 1)} MB`
-        : `${Math.max(1, Math.round(bytes / 1e3))} KB`
-  const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`
+      editing ? resetKeys(keys) : edit(Object.fromEntries(keys.map((k) => [k, DEFAULT_SETTINGS[k]])) as Partial<CropSettings>)
 
   /** ["1920×1080", "0:04.0", "29.97 fps", "3.2 MB"]. The name above already shows the type. */
   function describe(a: Asset): string[] {
@@ -76,15 +72,15 @@
     return parts.filter(Boolean)
   }
 
-  const title = $derived(selection.length === 1 ? baseName(primary!) : `${selection.length} assets`)
+  const title = $derived(names.length === 1 ? baseName(primary!) : `${names.length} assets`)
   const tags = $derived(
     !editing
       ? [
           `${board.width}×${board.height}`,
-          plural(app.assets.length, 'asset'),
-          plural(app.assets.filter((a) => hasOverrides(board, a.name)).length, 'adjusted', 'adjusted')
+          plural(library.assets.length, 'asset'),
+          plural(library.assets.filter((a) => hasOverrides(board, a.name)).length, 'adjusted', 'adjusted')
         ]
-      : selection.length === 1 && primaryAsset
+      : names.length === 1 && primaryAsset
         ? describe(primaryAsset)
         : [
             ...(chosen.some((a) => a.kind === 'video') ? [plural(chosen.filter((a) => a.kind === 'video').length, 'video')] : []),
@@ -99,29 +95,29 @@
     <!-- Breadcrumb: the artboard's defaults are the parent of whatever is selected. -->
     <nav class="crumbs">
       {#if editing}
-        <button class="crumb" title="Edit the defaults every asset follows (Esc)" onclick={() => app.clearSelection()}>{board.name}</button>
+        <button class="crumb" title="Edit the defaults every asset follows (Esc)" onclick={() => clearSelection()}>{board.name}</button>
         <span class="crumb-sep"><Icon name="next" size={12} /></span>
-        <span class="crumb current" title={selection.length === 1 ? primary! : title}>{title}</span>
+        <span class="crumb current" title={names.length === 1 ? primary! : title}>{title}</span>
       {:else}
         <span class="crumb current">{board.name}</span>
       {/if}
     </nav>
     <div class="tags">
-      {#each tags as t (t)}<span class="tag">{t}</span>{/each}
+      {#each tags as t (t)}<Tag>{t}</Tag>{/each}
     </div>
   </header>
 
   <div class="insp-body">
     <Row label="Fit" {...rp(['fit'])}>
-      <Segmented value={s.fit} options={FITS} onChange={(fit) => app.edit({ fit })} />
+      <Segmented value={s.fit} options={FITS} onChange={(fit) => edit({ fit })} />
     </Row>
 
     <Row label="Position" {...rp(['anchorX', 'anchorY', 'offsetX', 'offsetY'])}>
       <div class="position">
-        <AnchorGrid x={s.anchorX} y={s.anchorY} onChange={(anchorX, anchorY) => app.edit({ anchorX, anchorY, offsetX: 0, offsetY: 0 })} />
+        <AnchorGrid x={s.anchorX} y={s.anchorY} onChange={(anchorX, anchorY) => edit({ anchorX, anchorY, offsetX: 0, offsetY: 0 })} />
         <div class="xy">
-          <NumberField label="X" value={s.offsetX * W} step={1} onChange={(v) => app.edit({ offsetX: v / W })} onReset={back('offsetX')} />
-          <NumberField label="Y" value={s.offsetY * H} step={1} onChange={(v) => app.edit({ offsetY: v / H })} onReset={back('offsetY')} />
+          <NumberField label="X" value={s.offsetX * W} step={1} onChange={(v) => edit({ offsetX: v / W })} onReset={back('offsetX')} />
+          <NumberField label="Y" value={s.offsetY * H} step={1} onChange={(v) => edit({ offsetY: v / H })} onReset={back('offsetY')} />
         </div>
       </div>
     </Row>
@@ -135,7 +131,7 @@
           min={ZOOM_MIN * 100}
           max={ZOOM_MAX * 100}
           suffix="%"
-          onChange={(v) => app.edit({ zoom: v / 100 })}
+          onChange={(v) => edit({ zoom: v / 100 })}
           onReset={back('zoom')}
         />
         <NumberField
@@ -145,7 +141,7 @@
           min={-180}
           max={180}
           suffix="°"
-          onChange={(v) => app.edit({ rotation: normDeg(v) })}
+          onChange={(v) => edit({ rotation: normDeg(v) })}
           onReset={back('rotation')}
         />
       </div>
@@ -159,7 +155,7 @@
             min={2}
             max={1000}
             suffix="%"
-            onChange={(v) => app.edit({ scaleX: v / 100 })}
+            onChange={(v) => edit({ scaleX: v / 100 })}
             onReset={back('scaleX')}
           />
           <NumberField
@@ -169,24 +165,16 @@
             min={2}
             max={1000}
             suffix="%"
-            onChange={(v) => app.edit({ scaleY: v / 100 })}
+            onChange={(v) => edit({ scaleY: v / 100 })}
             onReset={back('scaleY')}
           />
         </div>
       {/if}
       <div class="tool-grid">
-        <button class={['tool', { on: s.flipX }]} title="Flip horizontal" onclick={() => app.editEach((x) => ({ flipX: !x.flipX }))}>
-          <Icon name="flipH" />
-        </button>
-        <button class={['tool', { on: s.flipY }]} title="Flip vertical" onclick={() => app.editEach((x) => ({ flipY: !x.flipY }))}>
-          <Icon name="flipV" />
-        </button>
-        <button class="tool" title="Rotate left" onclick={() => app.editEach((x) => ({ rotation: normDeg(x.rotation - 90) }))}>
-          <Icon name="rotateL" />
-        </button>
-        <button class="tool" title="Rotate right" onclick={() => app.editEach((x) => ({ rotation: normDeg(x.rotation + 90) }))}>
-          <Icon name="rotateR" />
-        </button>
+        <Button variant="tool" icon="flipH" pressed={s.flipX} title="Flip horizontal" onclick={() => editEach((x) => ({ flipX: !x.flipX }))} />
+        <Button variant="tool" icon="flipV" pressed={s.flipY} title="Flip vertical" onclick={() => editEach((x) => ({ flipY: !x.flipY }))} />
+        <Button variant="tool" icon="rotateL" title="Rotate left" onclick={() => editEach((x) => ({ rotation: normDeg(x.rotation - 90) }))} />
+        <Button variant="tool" icon="rotateR" title="Rotate right" onclick={() => editEach((x) => ({ rotation: normDeg(x.rotation + 90) }))} />
       </div>
     </Row>
 
@@ -197,48 +185,40 @@
           { value: 'color', label: 'Color' },
           { value: 'blur', label: 'Blur', title: 'Blurred copy of the media' }
         ]}
-        onChange={(bg) => app.edit({ bg })}
+        onChange={(bg) => edit({ bg })}
       />
       {#if s.bg === 'color'}
         <div class="color-row">
-          <ColorField value={s.bgColor} onChange={(bgColor) => app.edit({ bgColor })} onReset={back('bgColor')} />
-          <button class={['icon-btn', { armed: app.picking }]} title="Pick from media (I)" onclick={pickBackground}>
-            <Icon name="pipette" />
-          </button>
+          <ColorField value={s.bgColor} onChange={(bgColor) => edit({ bgColor })} onReset={back('bgColor')} />
+          <Button variant="icon" icon="pipette" tone={shell.picking ? 'accent' : undefined} title="Pick from media (I)" onclick={pickBackground} />
         </div>
       {:else}
         <div class="slider-row">
-          <Slider value={s.blur} min={0} max={200} step={1} curve={1.6} onChange={(blur) => app.edit({ blur })} onReset={back('blur')} />
-          <NumberField value={s.blur} step={1} min={0} max={400} width={64} onChange={(blur) => app.edit({ blur })} onReset={back('blur')} />
+          <Slider value={s.blur} min={0} max={200} step={1} curve={1.6} onChange={(blur) => edit({ blur })} onReset={back('blur')} />
+          <NumberField value={s.blur} step={1} min={0} max={400} width={64} onChange={(blur) => edit({ blur })} onReset={back('blur')} />
         </div>
       {/if}
     </Row>
 
     {#if hasVideo}
       <Row label="Mute audio" {...rp(['mute'])}>
-        <Toggle value={s.mute} onChange={(mute) => app.edit({ mute })} />
+        <Toggle value={s.mute} onChange={(mute) => edit({ mute })} />
       </Row>
     {/if}
   </div>
 
   {#if editing}
     <footer class="insp-foot">
-      <button class="ghost" disabled={!anyOverride} title={`Reset to defaults (${combo(MOD, SHIFT, 'R')})`} onclick={resetSelection}>
-        <Icon name="reset" size={14} /> Reset
-      </button>
+      <Button icon="reset" iconSize={14} disabled={!anyOverride} title={`Reset to defaults (${combo(MOD, SHIFT, 'R')})`} onclick={resetSelection}>Reset</Button>
       <div class="spacer"></div>
       <!-- Whether the selection is exported (for this artboard). Not a framing setting, so it
            sits apart from them; Reset leaves it alone. -->
       <label class="foot-toggle" title={`Include in the ${board.name} export`}>
         Export
-        <Toggle value={exported === selection.length} mixed={mixedExport} onChange={(v) => app.edit({ skip: !v })} />
+        <Toggle value={exported === names.length} mixed={mixedExport} onChange={(v) => edit({ skip: !v })} />
       </label>
-      <button class="icon-btn" title={`Copy settings (${combo(MOD, 'C')})`} onclick={() => app.copy()} disabled={!app.focus}>
-        <Icon name="copy" size={14} />
-      </button>
-      <button class="icon-btn" title={`Paste settings (${combo(MOD, 'V')})`} onclick={() => app.paste()} disabled={!app.clipboard}>
-        <Icon name="paste" size={14} />
-      </button>
+      <Button variant="icon" icon="copy" iconSize={14} title={`Copy settings (${combo(MOD, 'C')})`} onclick={copy} disabled={!selection.focus} />
+      <Button variant="icon" icon="paste" iconSize={14} title={`Paste settings (${combo(MOD, 'V')})`} onclick={paste} disabled={!project.clipboard} />
     </footer>
   {/if}
 </aside>
@@ -309,19 +289,6 @@
     gap: 4px;
   }
 
-  .tag {
-    display: inline-flex;
-    align-items: center;
-    height: 20px;
-    padding: 0 6px;
-    border-radius: 5px;
-    background: var(--tint-1);
-    color: var(--muted);
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-
   .insp-body {
     flex: 1;
     overflow-y: auto;
@@ -353,43 +320,11 @@
     gap: 8px;
   }
 
-  .tool {
-    display: grid;
-    place-items: center;
-    height: var(--control);
-    border-radius: var(--radius);
-    background: var(--tint-1);
-    color: var(--muted);
-    transition:
-      background-color var(--t-fast) var(--ease),
-      color var(--t-fast) var(--ease),
-      transform var(--t-fast) var(--ease);
-  }
-
-  .tool:hover {
-    color: var(--text);
-    background: var(--tint-2);
-  }
-
-  .tool:active {
-    transform: scale(0.95);
-  }
-
-  .tool.on {
-    color: var(--text);
-    background: var(--tint-3);
-  }
-
   .color-row,
   .slider-row {
     display: flex;
     align-items: center;
     gap: 8px;
-  }
-
-  /* The eyedropper while it's picking. */
-  .armed {
-    color: var(--accent);
   }
 
   .insp-foot {

@@ -1,14 +1,29 @@
 <!--
   Grid view options: what to show, how to sort it, grouping by folder, captions, and folding every
   folder at once. It stays open while things are changed; a dot on the button says a filter is
-  hiding something.
+  hiding something. Right-click the button to reset.
 -->
 <script lang="ts">
-  import { app } from '../../state/app.svelte'
-  import { type FilterKey, type SortKey, VIEW_DEFAULTS, type ViewPrefs } from '../../state/prefs'
-  import Icon from '../../ui/Icon.svelte'
-  import { showMenu } from '../../ui/menu.svelte'
-  import Popover from '../../ui/Popover.svelte'
+  import type { FilterKey, SortKey, ViewPrefs } from '../../state/prefs'
+  import { Button, MenuItem, MenuLabel, MenuSeparator, Popover, showMenu } from '../../ui'
+
+  let {
+    prefs,
+    hasFolders,
+    changed,
+    onChange,
+    onCollapseAll,
+    onReset
+  }: {
+    prefs: ViewPrefs
+    /** There are subfolders (so folding them means something). */
+    hasFolders: boolean
+    /** Anything differs from the defaults. */
+    changed: boolean
+    onChange: (patch: Partial<ViewPrefs>) => void
+    onCollapseAll: (collapse: boolean) => void
+    onReset: () => void
+  } = $props()
 
   const FILTERS: { value: FilterKey; label: string }[] = [
     { value: 'all', label: 'All' },
@@ -24,51 +39,45 @@
   ]
 
   let open = $state(false)
-  const prefs = $derived(app.viewPrefs)
-  const hasFolders = $derived(app.assets.some((a) => a.name.includes('/')))
-  const changed = $derived(app.collapsed.length > 0 || (Object.keys(VIEW_DEFAULTS) as (keyof ViewPrefs)[]).some((k) => prefs[k] !== VIEW_DEFAULTS[k]))
   const filter = $derived(FILTERS.find((f) => f.value === prefs.filter)!)
 </script>
 
-{#snippet option(on: boolean, label: string, onclick: () => void)}
-  <button class="menu-item" {onclick}>
-    <span>{label}</span>
-    {#if on}<Icon name="check" size={14} />{/if}
-  </button>
-{/snippet}
-
 <div class="anchor">
-  <button
-    class={['icon-btn view-btn', { on: open, filtered: prefs.filter !== 'all' }]}
+  <Button
+    variant="icon"
+    icon="viewOptions"
+    iconSize={15}
+    pressed={open}
+    dot={prefs.filter !== 'all'}
     title={prefs.filter !== 'all' ? `View options (showing ${filter.label.toLowerCase()})` : 'View options'}
     onclick={() => (open = !open)}
     oncontextmenu={async (e) => {
       e.preventDefault()
       const id = await showMenu(e.clientX, e.clientY, [{ id: 'reset', label: 'Reset View', icon: 'reset', enabled: changed }])
-      if (id === 'reset') app.resetView()
+      if (id === 'reset') onReset()
     }}
-  >
-    <Icon name="viewOptions" size={15} />
-  </button>
+  />
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
-      <div class="menu-label">Show</div>
-      {#each FILTERS as f (f.value)}{@render option(prefs.filter === f.value, f.label, () => app.setViewPrefs({ filter: f.value }))}{/each}
-      <div class="menu-sep"></div>
-      <div class="menu-label">Sort by</div>
-      {#each SORTS as o (o.value)}{@render option(prefs.sort === o.value, o.label, () => app.setViewPrefs({ sort: o.value }))}{/each}
-      <div class="menu-sep"></div>
-      {@render option(prefs.group, 'Group by folder', () => app.setViewPrefs({ group: !prefs.group }))}
-      {@render option(prefs.names, 'Show file names', () => app.setViewPrefs({ names: !prefs.names }))}
+      <MenuLabel>Show</MenuLabel>
+      {#each FILTERS as f (f.value)}
+        <MenuItem checked={prefs.filter === f.value} onclick={() => onChange({ filter: f.value })}>{f.label}</MenuItem>
+      {/each}
+      <MenuSeparator />
+      <MenuLabel>Sort by</MenuLabel>
+      {#each SORTS as o (o.value)}
+        <MenuItem checked={prefs.sort === o.value} onclick={() => onChange({ sort: o.value })}>{o.label}</MenuItem>
+      {/each}
+      <MenuSeparator />
+      <MenuItem checked={prefs.group} onclick={() => onChange({ group: !prefs.group })}>Group by folder</MenuItem>
+      <MenuItem checked={prefs.names} onclick={() => onChange({ names: !prefs.names })}>Show file names</MenuItem>
       {#if hasFolders && prefs.group}
-        <div class="menu-sep"></div>
-        {@render option(false, 'Collapse all folders', () => app.setAllCollapsed(true))}
-        {@render option(false, 'Expand all folders', () => app.setAllCollapsed(false))}
+        <MenuSeparator />
+        <MenuItem onclick={() => onCollapseAll(true)}>Collapse all folders</MenuItem>
+        <MenuItem onclick={() => onCollapseAll(false)}>Expand all folders</MenuItem>
       {/if}
-      <div class="menu-sep"></div>
-      <button class="menu-item" disabled={!changed} onclick={() => app.resetView()}>
-        <span>Reset View</span>
-      </button>
+      <MenuSeparator />
+      <MenuItem disabled={!changed} onclick={onReset}>Reset View</MenuItem>
     </div>
   </Popover>
 </div>
@@ -78,27 +87,7 @@
     position: relative;
   }
 
-  .icon-btn {
-    position: relative;
-  }
-
-  /* A dot on the button while a filter is hiding something. */
-  .filtered::after {
-    content: '';
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
-  }
-
   .menu {
     width: 208px;
-  }
-
-  .menu :global(svg) {
-    color: var(--accent);
   }
 </style>

@@ -5,14 +5,37 @@
 -->
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'
+  import type { Artboard } from '@shared/types'
   import { combo, MOD } from '../../lib/keys'
   import { reducedMotion } from '../../lib/motion'
-  import { app } from '../../state/app.svelte'
-  import Icon from '../../ui/Icon.svelte'
-  import { boardMenu } from '../menus'
+  import { Icon } from '../../ui'
   import ArtboardEditor from './ArtboardEditor.svelte'
 
-  const boards = $derived(app.project.artboards)
+  type Patch = Partial<Pick<Artboard, 'name' | 'width' | 'height'>>
+  let {
+    boards,
+    current,
+    editing,
+    onSelect,
+    onEdit,
+    onMenu,
+    onChange,
+    onDuplicate,
+    onDelete
+  }: {
+    boards: Artboard[]
+    /** The current artboard's id. */
+    current: string
+    /** The artboard whose editor is open, if any. */
+    editing: string | null
+    onSelect: (id: string) => void
+    onEdit: (id: string | null) => void
+    onMenu: (id: string, at: { x: number; y: number }) => void
+    onChange: (id: string, patch: Patch) => void
+    onDuplicate: (id: string) => void
+    onDelete: (id: string) => void
+  } = $props()
+
   let el: HTMLElement
   let dragging = $state(false)
   let fade = $state({ left: false, right: false })
@@ -47,7 +70,7 @@
   const intoView = (tab: Element | null | undefined) =>
     tab?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' })
   $effect(() => {
-    void app.boardId
+    void current
     void count
     intoView(el.querySelector('.tab.on'))
   })
@@ -100,12 +123,12 @@
   {#each boards as b, i (b.id)}
     <div class="tab-anchor">
       <button
-        class={['tab', { on: b.id === app.boardId, editing: app.boardEditor === b.id }]}
-        title={b.id === app.boardId ? 'Edit artboard' : i < 9 ? combo(MOD, String(i + 1)) : undefined}
-        onclick={() => (b.id === app.boardId ? app.setBoardEditor(app.boardEditor === b.id ? null : b.id) : app.setBoard(b.id))}
+        class={['tab', { on: b.id === current, editing: editing === b.id }]}
+        title={b.id === current ? 'Edit artboard' : i < 9 ? combo(MOD, String(i + 1)) : undefined}
+        onclick={() => (b.id === current ? onEdit(editing === b.id ? null : b.id) : onSelect(b.id))}
         oncontextmenu={(e) => {
           e.preventDefault()
-          boardMenu(b.id, { x: e.clientX, y: e.clientY })
+          onMenu(b.id, { x: e.clientX, y: e.clientY })
         }}
       >
         <span>{b.name}</span>
@@ -114,7 +137,15 @@
              switching tabs doesn't change any widths. -->
         <span class="chevron" aria-hidden="true"><Icon name="chevronDown" size={12} /></span>
       </button>
-      <ArtboardEditor board={b} open={app.boardEditor === b.id} canDelete={boards.length > 1} />
+      <ArtboardEditor
+        board={b}
+        open={editing === b.id}
+        canDelete={boards.length > 1}
+        onClose={() => onEdit(null)}
+        onChange={(patch) => onChange(b.id, patch)}
+        onDuplicate={() => onDuplicate(b.id)}
+        onDelete={() => onDelete(b.id)}
+      />
     </div>
   {/each}
 </nav>

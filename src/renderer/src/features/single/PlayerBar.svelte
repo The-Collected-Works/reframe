@@ -1,8 +1,8 @@
 <!-- Play / pause, the time, the timeline with its trim handles, the trimmed length and the volume. -->
 <script lang="ts">
   import { fmtTime } from '../../lib/format'
-  import type { Asset } from '../../state/app.svelte'
-  import Icon from '../../ui/Icon.svelte'
+  import type { Asset } from '../../state/library.svelte'
+  import { Icon } from '../../ui'
   import type { Player } from './player.svelte'
   import Timeline from './Timeline.svelte'
   import Volume from './Volume.svelte'
@@ -13,6 +13,9 @@
     clip,
     aspect,
     muted,
+    volume,
+    onVolume,
+    onToggleMute,
     onTrim,
     onTrimEnd
   }: {
@@ -23,6 +26,10 @@
     aspect: number
     /** Exported without sound. */
     muted: boolean
+    /** The preview volume (0..1). */
+    volume: number
+    onVolume: (v: number) => void
+    onToggleMute: () => void
     onTrim: (start: number, end: number) => void
     onTrimEnd: (start: number, end: number) => void
   } = $props()
@@ -56,9 +63,9 @@
   />
   <span class="time muted">{fmtTime(clip.end - clip.start)}</span>
   {#if asset.audio === false || muted}
-    <span class="icon-btn static" title={asset.audio === false ? 'No audio track' : 'Audio is muted for export'}><Icon name="volumeOff" /></span>
+    <span class="silent" title={asset.audio === false ? 'No audio track' : 'Audio is muted for export'}><Icon name="volumeOff" /></span>
   {:else}
-    <Volume />
+    <Volume {volume} onChange={onVolume} {onToggleMute} />
   {/if}
 </div>
 
@@ -153,15 +160,13 @@
     color: var(--muted);
   }
 
-  /* Round icon buttons here (the volume's too), bright over the media. */
-  .player :global(.icon-btn) {
+  /* No sound to control: just the muted speaker, where the volume would be. */
+  .silent {
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
     width: 32px;
     height: 32px;
-    border-radius: 50%;
-    color: var(--text);
-  }
-
-  .player .static {
     color: var(--faint);
   }
 </style>

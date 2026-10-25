@@ -5,9 +5,9 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import type { Attachment } from 'svelte/attachments'
-  import { portal } from '../lib/attach'
-  import { api } from '../lib/bridge'
-  import { closing } from '../lib/motion'
+  import { portal } from '../../lib/attach'
+  import { api } from '../../lib/bridge'
+  import { closing } from '../../lib/motion'
 
   /** The content sizes itself; `padding` is the surface's inset around it. */
   let { open = true, onClose, children, padding = 6 }: { open?: boolean; onClose: () => void; children: Snippet; padding?: number } = $props()

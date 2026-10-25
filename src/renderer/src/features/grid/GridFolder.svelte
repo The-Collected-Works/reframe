@@ -4,16 +4,15 @@
   rounded card), which contains its subfolders, so the tint covers exactly what a click would fold.
 -->
 <script lang="ts">
-  import { app } from '../../state/app.svelte'
-  import { type FolderNode } from '../../state/library'
-  import Icon from '../../ui/Icon.svelte'
-  import { excludedFolderMenu, folderMenu } from '../menus'
+  import type { FolderNode } from '../../state/model/tree'
+  import { Icon, Tag } from '../../ui'
   import Collapsible from './Collapsible.svelte'
+  import { GAP, PAD, useGrid } from './context'
   import GridFolder from './GridFolder.svelte'
-  import { GAP, PAD, type GridLayout } from './shared'
   import Thumbnail from './Thumbnail.svelte'
 
-  let { node, g }: { node: FolderNode; g: GridLayout } = $props()
+  let { node }: { node: FolderNode } = $props()
+  const g = useGrid()
   const excluded = $derived(node.excluded)
 </script>
 
@@ -33,7 +32,7 @@
   {#if node.assets.length > 0}
     <div class="grid" style:grid-template-columns={`repeat(${g.cols}, ${g.cellW}px)`} style:gap={`${GAP}px`}>
       {#each node.assets as a (a.name)}
-        <Thumbnail entry={a} board={g.board} width={g.cellW - PAD * 2} active={g.active} names={g.names} withFolder={g.withFolder} />
+        <Thumbnail entry={a} width={g.cellW - PAD * 2} />
       {/each}
     </div>
   {/if}
@@ -56,11 +55,11 @@
       onpointerdown={(e) => e.stopPropagation()}
       oncontextmenu={(e) => {
         e.preventDefault()
-        excludedFolderMenu(excluded.path, { x: e.clientX, y: e.clientY })
+        g.excludedMenu(excluded.path, { x: e.clientX, y: e.clientY })
       }}
     >
       {@render folderName(excluded.path)}
-      <span class="excluded-tag">{excluded.reason === 'export' ? 'Exports' : 'Excluded'}</span>
+      <Tag variant="note">{excluded.reason === 'export' ? 'Exports' : 'Excluded'}</Tag>
     </div>
   </div>
 {:else}
@@ -77,21 +76,21 @@
       title={`${node.folder ? `${g.rootName}/${node.folder}` : g.rootName}. Click to ${node.collapsed ? 'expand' : 'collapse'}`}
       aria-expanded={!node.collapsed}
       onpointerdown={(e) => e.stopPropagation()}
-      onclick={() => app.toggleCollapsed(node.folder)}
+      onclick={() => g.toggleFolder(node.folder)}
       oncontextmenu={(e) => {
         e.preventDefault()
-        folderMenu(node.folder, { x: e.clientX, y: e.clientY })
+        g.folderMenu(node.folder, { x: e.clientX, y: e.clientY })
       }}
     >
       {@render folderName(node.folder)}
-      <span class="section-count">{node.count}</span>
+      <Tag variant="count">{node.count}</Tag>
       <span class="section-chevron" aria-hidden="true"><Icon name="chevronDown" size={14} /></span>
     </button>
     <Collapsible open={!node.collapsed}>
       <div class="folder-body">
         {@render grid()}
         {#each node.children as c (c.folder)}
-          <GridFolder node={c} {g} />
+          <GridFolder node={c} />
         {/each}
       </div>
     </Collapsible>
@@ -227,17 +226,6 @@
     color: var(--faint);
   }
 
-  .section-count {
-    height: 18px;
-    padding: 0 6px;
-    display: inline-grid;
-    place-items: center;
-    border-radius: 5px;
-    background: var(--tint-1);
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-  }
-
   .section-chevron {
     display: grid;
     place-items: center;
@@ -265,16 +253,5 @@
   .excluded .section-icon,
   .excluded .section-path {
     opacity: 0.45;
-  }
-
-  .excluded-tag {
-    height: 18px;
-    padding: 0 6px;
-    display: inline-grid;
-    place-items: center;
-    border-radius: 5px;
-    background: var(--tint-1);
-    color: var(--faint);
-    font-size: 11px;
   }
 </style>

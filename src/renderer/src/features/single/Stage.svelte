@@ -6,11 +6,11 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { bounds, computeLayout, type Point } from '@shared/layout'
+  import type { Artboard, CropSettings, SettingKey } from '@shared/types'
   import { combo, MOD } from '../../lib/keys'
+  import { loadStill } from '../../lib/media'
   import { crossfade, fly, settledRect, snapshot } from '../../lib/motion'
-  import { app, type Asset } from '../../state/app.svelte'
-  import { loadStill } from '../../state/loading'
-  import { assetMenu } from '../menus'
+  import type { Asset } from '../../state/library.svelte'
   import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
   import { camera, type View } from './camera.svelte'
   import { dragTo, hitTest, type DragStart } from './gizmo'
@@ -18,7 +18,34 @@
   import { bitmapProxy } from './proxy.svelte'
   import { drawStage } from './render'
 
-  let { asset, player }: { asset: Asset | undefined; player: Player | null } = $props()
+  let {
+    asset,
+    board,
+    settings,
+    player,
+    picking,
+    onEdit,
+    onSelect,
+    onReset,
+    onExit,
+    onMenu
+  }: {
+    /** What's shown; none when nothing is in focus. */
+    asset: Asset | undefined
+    board: Artboard
+    /** The asset's settings on `board`. */
+    settings: CropSettings
+    player: Player | null
+    /** The eyedropper is open: no editing chrome, it needs the exact picture. */
+    picking: boolean
+    onEdit: (patch: Partial<CropSettings>) => void
+    /** The media was pressed while it wasn't the selection (the inspector was on the defaults). */
+    onSelect: () => void
+    onReset: (keys: SettingKey[]) => void
+    /** Double-click on empty space: back to the grid. */
+    onExit: () => void
+    onMenu: (at: { x: number; y: number }) => void
+  } = $props()
 
   // Board placement inside the stage. The player and filmstrip float over the bottom of the stage,
   // in a reserved band that's the same for images and videos, so the board never jumps.
@@ -28,8 +55,6 @@
   const RESERVED = 12 + 64 + 12 + 44 + 12 * 2
   const dpr = window.devicePixelRatio || 1
 
-  const board = $derived(app.board)
-  const settings = $derived(asset ? app.settingsOf(asset.name) : board.defaults)
   const placement = $derived(asset?.w ? computeLayout(board.width, board.height, asset.w, asset.h, settings) : null)
 
   let stage: HTMLDivElement
@@ -40,7 +65,7 @@
   let readout = $state<{ x: number; y: number; text: string } | null>(null)
   // Another asset starts deselected.
   let selected = $derived.by(() => {
-    void app.focus
+    void asset?.name
     return false
   })
   let hovering = false
@@ -75,7 +100,7 @@
   // Camera: Fit (the framing above, eased) or Manual, wherever you've scrolled, pinched or panned
   // to. A new asset goes back to Fit; in Manual, selecting no longer moves the view.
   let manual = $derived.by((): View | null => {
-    void app.focus
+    void asset?.name
     return null
   })
   // Resizing in Manual keeps the same point centred.
@@ -91,12 +116,12 @@
   const tk = $derived(target.k)
   const tbx = $derived(target.bx)
   const tby = $derived(target.by)
-  const view = camera(
+  const cam = camera(
     () => ({ k: tk, bx: tbx, by: tby }),
     () => `${width}x${height}/${asset?.name}/${board.id}`,
     () => manual
   )
-  const k = $derived(view.current.k)
+  const k = $derived(cam.current.k)
 
   // Never draw the full-resolution source interactively (a 24MP photo stalls every frame). Draw a
   // copy sized to what's on screen instead, sharpened only when zooming in past it.
@@ -138,14 +163,14 @@
     asset,
     width,
     height,
-    view: view.current,
+    view: cam.current,
     board,
     settings,
     still: stillBitmap.bitmap,
     exact: exactBitmap.bitmap,
     video: player?.video,
     playerFrame: player?.frame,
-    picking: app.picking,
+    picking,
     selected
   })
   $effect(() => draw(scene))
@@ -211,7 +236,7 @@
     return () => {
       // Leaving: capture the board as drawn, then land it on its grid cell once the grid is back.
       const leaving = asset?.name
-      const { k, bx, by } = view.current
+      const { k, bx, by } = cam.current
       if (!leaving || !c.width || !host) return
       const w = board.width * k
       const h = board.height * k
@@ -219,8 +244,8 @@
       const shot = snapshot(c, bx * dpr, by * dpr, w * dpr, h * dpr)
       requestAnimationFrame(() =>
         requestAnimationFrame(async () => {
-          if (app.view !== 'grid') return
-          const cell = document.querySelector<HTMLCanvasElement>(`.cell[data-name="${CSS.escape(leaving)}"] canvas`)
+          // Only if the grid is what's showing now.
+          const cell = document.querySelector<HTMLCanvasElement>(`.grid-scroll:not(.inactive) .cell[data-name="${CSS.escape(leaving)}"] canvas`)
           if (!cell) return
           cell.style.opacity = '0'
           // The grid is still growing back from its receded scale; aim for where the cell settles.
@@ -246,13 +271,13 @@
   /** Client coordinates → artboard pixels. */
   function toBoard(clientX: number, clientY: number): Point {
     const r = stage.getBoundingClientRect()
-    const v = view.current
+    const v = cam.current
     return { x: (clientX - r.left - v.bx) / v.k, y: (clientY - r.top - v.by) / v.k }
   }
   const hit = (pt: Point) => (placement ? hitTest(placement, board, pt, k, selected) : { mode: { kind: 'none' as const }, cursor: 'default' })
 
   // Camera moves, in stage pixels.
-  const current = (): View => manual ?? view.current
+  const current = (): View => manual ?? cam.current
   function zoomView(factor: number, sx: number, sy: number) {
     const v = current()
     const k1 = Math.min(40, Math.max(0.02, v.k * factor))
@@ -287,7 +312,7 @@
       clearTimeout(wheelIdle)
       wheelIdle = setTimeout(endInteraction, 500)
       const zoom = snapZoom(settings.zoom * Math.exp(-dy * 0.0015), true)
-      app.editAsset(asset.name, zoomAbout(settings, board.width, board.height, asset.w, asset.h, zoom, toBoard(e.clientX, e.clientY)))
+      onEdit(zoomAbout(settings, board.width, board.height, asset.w, asset.h, zoom, toBoard(e.clientX, e.clientY)))
       return
     }
     const legacy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY ?? 0
@@ -311,7 +336,7 @@
   }
   // Esc deselects first (in the capture phase, before the app-wide Esc goes back to the grid).
   function onkeydowncapture(e: KeyboardEvent) {
-    if (!selected || e.key !== 'Escape' || app.picking || (e.target as HTMLElement).closest?.('input, textarea')) return
+    if (!selected || e.key !== 'Escape' || picking || (e.target as HTMLElement).closest?.('input, textarea')) return
     e.preventDefault()
     e.stopImmediatePropagation()
     selected = false
@@ -366,7 +391,7 @@
     // Empty space: drag to pan, click to deselect.
     if (mode.kind === 'none') return startPan(e, () => (selected = false))
     // Editing defaults (the asset is on screen but not selected): clicking it selects it again.
-    if (!app.selected.has(a.name)) app.setSelection([a.name])
+    onSelect()
     const el = e.currentTarget as HTMLElement
     el.setPointerCapture(e.pointerId)
     selected = true
@@ -381,7 +406,7 @@
       const r = dragTo(start, toBoard(clientX, clientY), { shift: mods.shiftKey, alt: mods.altKey, mod: mods.metaKey || mods.ctrlKey })
       guides = r.guides
       readout = r.readout ? { x: clientX - stageRect.left + 16, y: clientY - stageRect.top + 16, text: r.readout } : null
-      app.editAsset(a.name, r.patch)
+      onEdit(r.patch)
     }
     const move = (ev: PointerEvent) => apply(ev.clientX, ev.clientY, ev)
     // Pressing or releasing a modifier re-applies the whole drag at once, without waiting for the
@@ -416,8 +441,8 @@
 
   // Double-click the media to reset its transform; double-click empty space to go back to the grid.
   function ondblclick(e: MouseEvent) {
-    if (hit(toBoard(e.clientX, e.clientY)).mode.kind === 'none') app.setView('grid')
-    else if (asset) app.resetKeys(['zoom', 'scaleX', 'scaleY', 'offsetX', 'offsetY', 'rotation'], [asset.name])
+    if (hit(toBoard(e.clientX, e.clientY)).mode.kind === 'none') onExit()
+    else if (asset) onReset(['zoom', 'scaleX', 'scaleY', 'offsetX', 'offsetY', 'rotation'])
   }
 </script>
 
@@ -440,7 +465,7 @@
   {ondblclick}
   oncontextmenu={(e) => {
     e.preventDefault()
-    if (asset) assetMenu(asset.name, asset.path, { x: e.clientX, y: e.clientY }, true)
+    if (asset) onMenu({ x: e.clientX, y: e.clientY })
   }}
 >
   <canvas bind:this={canvas} style:width={`${width}px`} style:height={`${height}px`} style:opacity={entering ? 0 : 1}></canvas>
@@ -455,7 +480,7 @@
     </button>
   {/if}
   {#if readout}<div class="readout" style:left={`${readout.x}px`} style:top={`${readout.y}px`}>{readout.text}</div>{/if}
-  {#if !app.focus}<div class="empty-hint">Nothing selected</div>{/if}
+  {#if !asset}<div class="empty-hint">Nothing selected</div>{/if}
 </div>
 
 <style>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { middleReset } from '../lib/format'
+  import { middleReset } from './middle-reset'
 
   let { value, onChange, onReset }: { value: string; onChange: (v: string) => void; onReset?: () => void } = $props()
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import { Dot } from '../../ui'
 
   let {
     label,
@@ -14,7 +15,7 @@
   <div class="row-label">
     {label}
     {#if overridden}
-      <button class="dot" title="Reset to default" aria-label="Reset to default" onclick={onReset}></button>
+      <Dot title="Reset to default" onclick={onReset} />
       <!-- Revealed on hover: promote this value to the artboard's default. -->
       <button class="row-action" title="Use this value as the default for every asset" onclick={onMakeDefault}>Make default</button>
     {/if}
@@ -35,10 +36,6 @@
     margin-bottom: 8px;
     color: var(--muted);
     font-size: 11px;
-  }
-
-  .dot:hover {
-    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
   /* Text-only action, revealed on row hover: no chrome to crowd the 16px label row. */
