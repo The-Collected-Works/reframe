@@ -3,8 +3,8 @@
   import type { Artboard, AssetEntry } from '@shared/types'
   import { visibility } from '../../lib/attach'
   import { scheduleDraw } from '../../lib/draw-queue'
-  import { prioritize } from '../../state/loading'
   import { app, withMeta } from '../../state/app.svelte'
+  import { prioritize } from '../../state/loading'
   import { FILM_HEIGHT } from './film'
 
   let { entry, board, on }: { entry: AssetEntry; board: Artboard; on: boolean } = $props()

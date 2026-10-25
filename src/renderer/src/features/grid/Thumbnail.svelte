@@ -1,24 +1,16 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
-  import { cubicOut } from 'svelte/easing'
-  import { Tween } from 'svelte/motion'
   import { drawFrame, resolveSettings } from '@shared/layout'
-  import { posterTime } from '@shared/media'
   import type { Artboard, AssetEntry } from '@shared/types'
-  import { fmtTime } from '../../lib/format'
-  import { dragOffset, NO_GUIDES, type Guides } from '../single/snapping'
   import { visibility } from '../../lib/attach'
   import { scheduleDraw } from '../../lib/draw-queue'
-  import { mediaUrl } from '../../lib/bridge'
-  import { prioritize } from '../../state/loading'
-  import { assetMenu } from '../menus'
+  import { fmtTime } from '../../lib/format'
   import { app, withMeta } from '../../state/app.svelte'
   import { baseName, folderOf } from '../../state/library'
+  import { prioritize } from '../../state/loading'
   import { hasOverrides } from '../../state/project'
-  import { scroll } from './shared'
-
-  const SCROLL_SETTLE = 250
-  const PREVIEW_DWELL = 150
+  import { assetMenu } from '../menus'
+  import { dragOffset, NO_GUIDES, type Guides } from '../snapping'
+  import { HoverPreview } from './preview.svelte'
 
   let {
     entry,
@@ -49,13 +41,12 @@
   const k = $derived(width / board.width)
 
   let canvas: HTMLCanvasElement
-  // Hover preview: `live` is the playing video, crossfaded over the thumbnail by `fade` (0..1).
-  let live: HTMLVideoElement | null = null
-  const fade = new Tween(0, { duration: 180, easing: cubicOut })
-  $effect(() => {
-    void fade.current
-    if (live) untrack(draw)
-  })
+  const preview = new HoverPreview(
+    () => asset,
+    () => clip,
+    () => active && !app.picking,
+    () => draw()
+  )
   let layer: OffscreenCanvas | null = null
   let guides: Guides = NO_GUIDES
   let visible = $state(false)
@@ -78,8 +69,9 @@
     if (!canvas.dataset.ready && asset.thumb) canvas.dataset.ready = '1'
     const ctx = canvas.getContext('2d')!
     const kk = k * dpr
-    const video = fade.current > 0 ? live : null
-    if (video && fade.current >= 1) {
+    const fade = preview.fade.current
+    const video = fade > 0 ? preview.video : null
+    if (video && fade >= 1) {
       drawFrame(ctx, video, asset.w, asset.h, board.width, board.height, settings, kk)
     } else {
       drawFrame(ctx, asset.thumb, asset.w, asset.h, board.width, board.height, settings, kk)
@@ -88,7 +80,7 @@
         // directly would also fade in its background fill and darken the blend mid-way.
         if (!layer || layer.width !== pw || layer.height !== ph) layer = new OffscreenCanvas(pw, ph)
         drawFrame(layer.getContext('2d')!, video, asset.w, asset.h, board.width, board.height, settings, kk)
-        ctx.globalAlpha = fade.current
+        ctx.globalAlpha = fade
         ctx.drawImage(layer, 0, 0)
         ctx.globalAlpha = 1
       }
@@ -122,78 +114,6 @@
     visible = v
     if (v && !asset.thumb) prioritize(asset.path)
   }
-
-  // A hover becomes a preview only once the pointer has rested on the thumbnail and the grid has
-  // stopped scrolling: thumbnails sliding under a still pointer mid-scroll shouldn't each start
-  // loading and decoding a video.
-  let hover = $state(false)
-  let previewing = $state(false)
-  $effect(() => {
-    if (!hover) return void (previewing = false)
-    const since = performance.now()
-    let t: ReturnType<typeof setTimeout> | undefined
-    const check = () => {
-      const now = performance.now()
-      const wait = Math.max(since + PREVIEW_DWELL - now, scroll.last + SCROLL_SETTLE - now)
-      if (wait > 0) t = setTimeout(check, wait)
-      else previewing = true
-    }
-    check()
-    return () => clearTimeout(t)
-  })
-
-  function release(v: HTMLVideoElement) {
-    v.pause()
-    v.removeAttribute('src')
-    v.load()
-  }
-
-  // Hover to preview video in place. Starts on the thumbnail's own frame and only fades in once
-  // the video has actually presented a frame, so there's no jump or blank flash either way.
-  $effect(() => {
-    // Not while the eyedropper is open: the exact thumbnail is what should be on screen.
-    if (!previewing || app.picking || !active || asset.kind !== 'video' || !asset.w) return
-    const v = document.createElement('video')
-    v.crossOrigin = 'anonymous'
-    v.muted = true
-    v.playsInline = true
-    v.preload = 'auto'
-    v.src = mediaUrl(asset.path)
-    const start = clip?.start ?? 0
-    const end = clip?.end ?? asset.duration
-    v.currentTime = Math.min(Math.max(posterTime(asset.duration), start), Math.max(start, end - 0.1))
-    let alive = true
-
-    // Redraw on every presented video frame, looping within the trim.
-    const onFrame = () => {
-      if (!alive) return
-      if (v.currentTime >= end - 0.03) v.currentTime = start
-      if (live === v) draw()
-      v.requestVideoFrameCallback(onFrame)
-    }
-    const first = () => {
-      if (!alive) return
-      // A previous hover may still be fading out; this one takes over from its current opacity.
-      if (live && live !== v) release(live)
-      live = v
-      fade.target = 1
-      onFrame()
-    }
-    v.play()
-      .then(() => v.requestVideoFrameCallback(first))
-      .catch(() => {})
-
-    return () => {
-      alive = false
-      if (live !== v) return release(v)
-      // Hold the last frame and fade back to the thumbnail.
-      v.pause()
-      fade.set(0).then(() => {
-        if (live === v) live = null
-        release(v)
-      })
-    }
-  })
 
   function onpointerdown(e: PointerEvent) {
     if (e.button !== 0) return
@@ -250,8 +170,8 @@
     style:height={`${height}px`}
     {onpointerdown}
     ondblclick={() => app.setView('single')}
-    onpointerenter={asset.kind === 'video' ? () => (hover = true) : undefined}
-    onpointerleave={asset.kind === 'video' ? () => (hover = false) : undefined}
+    onpointerenter={asset.kind === 'video' ? () => (preview.hovering = true) : undefined}
+    onpointerleave={asset.kind === 'video' ? () => (preview.hovering = false) : undefined}
   >
     <canvas bind:this={canvas} style:width={`${width}px`} style:height={`${height}px`}></canvas>
     {#if !asset.thumb && !asset.error}<div class="cell-loading"></div>{/if}

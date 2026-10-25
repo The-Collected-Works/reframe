@@ -2,9 +2,7 @@
   import { DEFAULT_SETTINGS, normDeg, resolveSettings } from '@shared/layout'
   import type { CropSettings, FitMode, SettingKey } from '@shared/types'
   import { fmtTime } from '../../lib/format'
-  import { ZOOM_MAX, ZOOM_MIN } from '../single/snapping'
   import { combo, MOD, SHIFT } from '../../lib/keys'
-  import { pickBackground } from './eyedropper'
   import { resetSelection } from '../../state/actions'
   import { app, type Asset } from '../../state/app.svelte'
   import { baseName } from '../../state/library'
@@ -15,7 +13,9 @@
   import Segmented from '../../ui/Segmented.svelte'
   import Slider from '../../ui/Slider.svelte'
   import Toggle from '../../ui/Toggle.svelte'
+  import { ZOOM_MAX, ZOOM_MIN } from '../snapping'
   import AnchorGrid from './AnchorGrid.svelte'
+  import { pickBackground } from './eyedropper'
   import Row from './Row.svelte'
 
   const FITS: { value: FitMode; label: string; title: string }[] = [

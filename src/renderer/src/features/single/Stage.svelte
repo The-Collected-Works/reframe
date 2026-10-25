@@ -11,12 +11,12 @@
   import { app, type Asset } from '../../state/app.svelte'
   import { loadStill } from '../../state/loading'
   import { assetMenu } from '../menus'
+  import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
   import { camera, type View } from './camera.svelte'
   import { dragTo, hitTest, type DragStart } from './gizmo'
   import type { Player } from './player.svelte'
   import { bitmapProxy } from './proxy.svelte'
   import { drawStage } from './render'
-  import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from './snapping'
 
   let { asset, player }: { asset: Asset | undefined; player: Player | null } = $props()
 

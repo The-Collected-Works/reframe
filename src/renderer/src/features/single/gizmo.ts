@@ -1,6 +1,6 @@
 import { bounds, computeLayout, corners, fromLocal, quarterTurns, toLocal, type Placement, type Point } from '@shared/layout'
 import type { Artboard, CropSettings } from '@shared/types'
-import { dragOffset, NO_GUIDES, rotateAbout, snapAngle, snapScale, snapZoom, withPivot, ZOOM_MAX, ZOOM_MIN, type Guides } from './snapping'
+import { dragOffset, NO_GUIDES, rotateAbout, snapAngle, snapScale, snapZoom, withPivot, ZOOM_MAX, ZOOM_MIN, type Guides } from '../snapping'
 
 /**
  * The transform gizmo in the single view, as plain geometry: what's under the pointer, and what a

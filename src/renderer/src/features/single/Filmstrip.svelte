@@ -9,8 +9,8 @@
   import { Tween } from 'svelte/motion'
   import { reducedMotion } from '../../lib/motion'
   import { app } from '../../state/app.svelte'
-  import FilmstripItem from './FilmstripItem.svelte'
   import { FILM_GAP, FILM_HEIGHT, FILM_PAD } from './film'
+  import FilmstripItem from './FilmstripItem.svelte'
 
   /** Window width in items: the active one, one either side, one more each side fading out. */
   const VISIBLE = 5

@@ -3,8 +3,8 @@
   open one leads). Each recent folder can be dropped from the list.
 -->
 <script lang="ts">
-  import { combo, MOD } from '../../lib/keys'
   import { api } from '../../lib/bridge'
+  import { combo, MOD } from '../../lib/keys'
   import { basename, samePath } from '../../lib/paths'
   import Icon from '../../ui/Icon.svelte'
   import Popover from '../../ui/Popover.svelte'

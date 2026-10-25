@@ -1,7 +1,7 @@
 import { computeLayout, corners, drawFrame } from '@shared/layout'
 import type { Artboard, CropSettings } from '@shared/types'
+import type { Guides } from '../snapping'
 import type { View } from './camera.svelte'
-import type { Guides } from './snapping'
 
 const ACCENT = '#6e9bff'
 const GUIDE = '#ff4f8b'

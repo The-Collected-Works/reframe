@@ -4,15 +4,15 @@
   rounded card), which contains its subfolders, so the tint covers exactly what a click would fold.
 -->
 <script lang="ts">
-  import { excludedFolderMenu, folderMenu } from '../menus'
   import { app } from '../../state/app.svelte'
   import { type FolderNode } from '../../state/library'
   import Icon from '../../ui/Icon.svelte'
-  import Thumbnail from './Thumbnail.svelte'
+  import { excludedFolderMenu, folderMenu } from '../menus'
   import Collapsible from './Collapsible.svelte'
   import FolderName from './FolderName.svelte'
   import GridFolder from './GridFolder.svelte'
   import { GAP, PAD, type GridLayout } from './shared'
+  import Thumbnail from './Thumbnail.svelte'
 
   let { node, g }: { node: FolderNode; g: GridLayout } = $props()
   const excluded = $derived(node.excluded)
