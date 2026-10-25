@@ -1,5 +1,5 @@
 import type { AssetEntry, ColorMeta } from '@shared/types'
-import { useStore, type AssetMeta } from './store'
+import { app, type AssetMeta } from './store.svelte'
 
 export const api = window.reframe
 
@@ -73,8 +73,8 @@ function pump() {
     const a = pending.shift()!
     active++
     loadMeta(a)
-      .then((meta) => useStore.getState().setMeta(a, meta))
-      .catch(() => useStore.getState().setMeta(a, { error: true }))
+      .then((meta) => app.setMeta(a, meta))
+      .catch(() => app.setMeta(a, { error: true }))
       .finally(() => {
         active--
         queued.delete(keyOf(a))
@@ -109,7 +109,7 @@ export function hydrate(entries: AssetEntry[], fresh: boolean): void {
  */
 export async function rescanFolder(): Promise<void> {
   const scan = await api.rescanFolder().catch(() => null)
-  if (scan && scan.dir === useStore.getState().dir) useStore.getState().rescan(scan)
+  if (scan && scan.dir === app.dir) app.rescan(scan)
 }
 
 /** A video's poster as an encoded JPEG. */
@@ -151,17 +151,16 @@ export function cancelPick(): void {
  */
 export async function pickBackground(): Promise<void> {
   const EyeDropper = (window as unknown as { EyeDropper?: EyeDropperCtor }).EyeDropper
-  const st = useStore.getState()
-  if (!EyeDropper || st.picking) return
-  st.setPicking(true)
+  if (!EyeDropper || app.picking) return
+  app.setPicking(true)
   pickAbort = new AbortController()
   try {
     const { sRGBHex } = await new EyeDropper().open({ signal: pickAbort.signal })
-    if (/^#[0-9a-f]{6}$/i.test(sRGBHex)) useStore.getState().edit({ bg: 'color', bgColor: sRGBHex.toLowerCase() })
+    if (/^#[0-9a-f]{6}$/i.test(sRGBHex)) app.edit({ bg: 'color', bgColor: sRGBHex.toLowerCase() })
   } catch {
     // Cancelled.
   } finally {
     pickAbort = null
-    useStore.getState().setPicking(false)
+    app.setPicking(false)
   }
 }

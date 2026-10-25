@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react'
-
 /** Shared motion helpers. Everything here is skipped when the OS asks for reduced motion. */
 
 const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
@@ -76,19 +74,4 @@ export function crossfade(canvas: HTMLCanvasElement, duration = 180): void {
   Object.assign(still.style, { width: canvas.style.width, height: canvas.style.height })
   canvas.parentElement.insertBefore(still, canvas.nextSibling)
   still.animate([{ opacity: 1 }, { opacity: 0 }], { duration, easing: 'ease-out' }).finished.finally(() => still.remove())
-}
-
-/**
- * Keeps something mounted for `ms` after `open` goes false, so it can animate out.
- * `closing` is true during that window.
- */
-export function usePresence(open: boolean, ms = 140): { mounted: boolean; closing: boolean } {
-  const [mounted, setMounted] = useState(open)
-  useEffect(() => {
-    if (open) return setMounted(true)
-    if (!mounted) return
-    const t = setTimeout(() => setMounted(false), reducedMotion() ? 0 : ms)
-    return () => clearTimeout(t)
-  }, [open])
-  return { mounted: open || mounted, closing: !open && mounted }
 }
