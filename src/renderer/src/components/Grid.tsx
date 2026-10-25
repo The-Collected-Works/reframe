@@ -127,7 +127,7 @@ export function Grid({ active }: { active: boolean }) {
   }
 
   return (
-    <div className={'grid-scroll' + (active ? '' : ' inactive')} ref={ref} onPointerDown={onPointerDown} onScroll={() => (lastScroll = performance.now())}>
+    <div className={'grid-scroll' + (sectioned ? ' sectioned' : '') + (active ? '' : ' inactive')} ref={ref} onPointerDown={onPointerDown} onScroll={() => (lastScroll = performance.now())}>
       {/* The folders as the tree they are: each holds its header, its own thumbnails and its
           subfolders, so folding, hover tints and sticky headers all follow from the nesting. */}
       {cellW > 0 && (

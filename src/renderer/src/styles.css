@@ -551,6 +551,11 @@ input {
   overflow-x: hidden;
 }
 
+/* With folders, the cards sit 16px from the top and bottom too, as from the sides. */
+.grid-scroll.sectioned {
+  padding-block: 16px;
+}
+
 .grid-scroll.inactive {
   visibility: hidden;
   pointer-events: none;
@@ -604,8 +609,8 @@ input {
    thumbnails passing beneath still show faintly. */
 .grid-section {
   position: sticky;
-  /* Flush with the top: sticky offsets start inside the scroller's 26px top padding. */
-  top: -26px;
+  /* Flush with the top: sticky offsets start inside the scroller's top padding. */
+  top: -16px;
   z-index: 2;
   container-type: scroll-state;
   display: flex;
