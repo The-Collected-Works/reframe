@@ -50,7 +50,41 @@ A 15s capture's 960 copy takes ~2.6s to make. The limit is decoding the 4K sourc
 
 ## Improvements, most valuable first
 
-### 1. Put sound in the copies
+### 1. Split the engine into a plain TypeScript core and one Svelte adapter
+
+Do this first: items 2 and 3 add more state, and the current structure makes state easy to get wrong.
+
+**Now:** the engine's classes use Svelte runes (`$state`, `$derived`, `$effect`, `$effect.root`). That followed the single-view player it replaced. It also lets components subscribe to exactly what they read: the current time, new frames, copy progress.
+
+**Why change it:** dependency tracking in effects is implicit, and engine logic (timing, queues, I/O, cancellation) is imperative. Most of the engine's bugs so far came from that mismatch:
+- an effect that read and wrote the same state (an infinite update loop);
+- the source-picking effect subscribing to copy progress by accident, which seeked every playing video twice a second (`bbaf853`);
+- `untrack` needed all over the place.
+
+It also ties the logic to the Svelte compiler, so queue ordering, preemption, source choice and clock sync can't be plain unit tests in Node. And it bends the codebase's own rule that `lib/` holds no app state (the README was softened to fit).
+
+**Do:**
+- **Core** (`lib/playback/`, no runes): `Copies`, `Clip`, `StreamFeed`, and the clock and sync from `Playback`, as ordinary classes.
+  - Inputs through explicit methods, such as `setTracks(tracks)`, `setRange()`, `seek(t)`, `play()`, `scrub*()`.
+  - Outputs through callbacks or a small `onChange` / version counter.
+  - No implicit subscriptions anywhere.
+- **Adapter** (one `.svelte.ts`, e.g. `state/playback.svelte.ts`):
+  - mirrors the core's outputs into `$state` for the UI: time, playing, frame version, copy states, activity, how far each video is ready;
+  - pushes reactive inputs into the core from one clearly bounded `$effect` per playback: tracks, size on screen, volume, the eyedropper's hold.
+
+That leaves one place where reactivity meets the engine, instead of effects spread through it.
+
+**Tests:** with the core in plain TypeScript, add unit tests (Vitest, say) for:
+- queue priority and preemption, including the 2s idle hold after playback;
+- source choice (copy, then stream, then original);
+- `slotTime` sync;
+- `StreamFeed` reacting to 404, 416 and a full buffer.
+
+**Check against:** the numbers table above, re-measured with the harness (item 8). None should get worse, and seeks during steady playback should stay at 0.
+
+**Size:** about a day. Everything outside `lib/playback/` only touches the engine through `Playback`, `copies`, `canStream` and `Clip.frame()`, so the change stays contained.
+
+### 2. Put sound in the copies
 
 **Now:** copies are silent (`-an`). The single view plays sound from a second element reading the 136 Mbps original, and re-seeks it whenever it drifts more than 0.2s, which is audible.
 **Do:** add a small AAC track to copies (`-c:a aac -b:a 128k`, about 1% of the file), then play sound from the copy's own video element, unmuted, in the single view. Pictures and sound then share a clock, and the separate original read goes away.
@@ -61,7 +95,7 @@ A 15s capture's 960 copy takes ~2.6s to make. The limit is decoding the 4K sourc
 
 **Files:** `main/ffmpeg.ts` (`buildCopy`), `lib/playback/stream.ts`, `lib/playback/playback.svelte.ts` (the sound effect), `lib/playback/clip.svelte.ts` (videos are `silentVideo`s now).
 
-### 2. Make more than one copy at a time
+### 3. Make more than one copy at a time
 
 **Now:** one at a time, and only that one streams. A layout of four new clips plays its first cell at once, while the others show stills until their turn.
 **Do:** run N copies at once, where N comes from the core count (2 on this machine, 1 on small ones). Track `current` per running job (it's a single value now) and let each first copy stream (`live` becomes a map by file).
@@ -69,28 +103,28 @@ A 15s capture's 960 copy takes ~2.6s to make. The limit is decoding the 4K sourc
 - `lib/playback/copies.svelte.ts`: `next()`, `current`, `live`, `preempt`;
 - `main/ffmpeg.ts`: `copyChain` serialises builds; `cancelCopy` kills every `copy` process, so it needs a job id.
 
-### 3. Key the cache by content, not path
+### 4. Key the cache by content, not path
 
 **Now:** `cacheKey('copy1', path, stat)` uses path, size and mtime, so moving or renaming a folder rebuilds every copy.
 **Do:** key on size plus a hash of the first and last few MB. Renames and Dropbox reorganising then keep their copies.
 **Files:** `main/ffmpeg.ts` (`cacheKey`, `copyPath`, `copiesMade`).
 
-### 4. Scrubbing past the cache line
+### 5. Scrubbing past the cache line
 
 **Now:** while a copy streams, scrubbing ahead of the green line holds the last frame until the encoder reaches that point. That's usually a second or two, but long videos can make you wait.
 **Do (only if it's hit in practice):** when a scrub settles well past what's encoded, start a second encode from that point (`-ss`), as its own stream, and switch the clip to it. Its timestamps need offsetting (`timestampOffset` on the `SourceBuffer`, or `-output_ts_offset`).
 
-### 5. The playback buffer while streaming
+### 6. The playback buffer while streaming
 
 **Now:** `StreamFeed.append` handles `QuotaExceededError` by removing everything more than 10s behind the playhead. Scrubbing back into that removed section waits until the finished copy takes over.
 **Do:** probably nothing until videos of several minutes are common. If they are, keep a window around the playhead and re-fetch removed ranges (the stream is a file, so they can be read again).
 
-### 6. Exact frames past the sharpest copy
+### 7. Exact frames past the sharpest copy
 
 **Now:** zoomed in beyond 1920, a paused frame is decoded from the 4K original by ffmpeg on the CPU (~0.3–1s).
 **Do:** add `-hwaccel auto` to `grabFrame`, or make a full-resolution all-intra copy only when someone zooms that far.
 
-### 7. Commit the test harness
+### 8. Commit the test harness
 
 The measurements above came from scripts that drive the built app over the Chrome DevTools protocol. They lived in a scratch folder and weren't committed. Rebuilding them as `scripts/e2e/` with one command would catch regressions like the rescan bug in `4a90136`. How they worked:
 
@@ -107,6 +141,6 @@ The measurements above came from scripts that drive the built app over the Chrom
 ## Other open threads
 
 - **Finer layout control.** The user wants to define layouts more precisely than the split tree allows. The ideas discussed were a column-and-row grid where cells span tracks, typed-in sizes, and saved layout templates per artboard. Not started.
-- **Layout sound.** Layouts are silent in preview and export. It depends on #1.
+- **Layout sound.** Layouts are silent in preview and export. It depends on #2 (sound in the copies).
 - **An unreproduced bug.** The user once saw playback stop after "deleting an asset from the grid". Removing cells and deleting a variant used by a layout were both tested, and work. It may have been the rescan bug fixed in `4a90136`. If it comes back, get the exact steps.
 - **Clear Cache is global.** It clears every folder's copies, not just the open one's. Fine for now; per-folder would need copies grouped by folder.
