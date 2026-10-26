@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { promises as fs, type Stats } from 'node:fs'
-import { constants as os, setPriority } from 'node:os'
 import { join } from 'node:path'
 import { inColor, OUT_TAGS, parseColor } from '@shared/color'
 import { layoutArgs, videoArgs } from '@shared/filtergraph'
@@ -12,9 +11,8 @@ import { writeJsonAtomic } from './fsutil'
 // Runs inside the media worker (see worker.ts); the main process passes these in.
 const FFMPEG = process.env.REFRAME_FFMPEG_BIN || 'ffmpeg'
 const CACHE = process.env.REFRAME_CACHE_DIR || ''
-const SCRUB = join(CACHE, 'scrub')
 
-type Kind = 'probe' | 'poster' | 'frame' | 'proxy' | 'export'
+type Kind = 'probe' | 'poster' | 'frame' | 'copy' | 'export'
 type Result = { code: number; stdout: Buffer; stderr: string }
 
 /**
@@ -50,10 +48,11 @@ function run(kind: Kind, args: string[], onStdout?: (chunk: string) => void): { 
 
 const kill = (kind: Kind) => running.forEach((k, p) => k === kind && p.kill('SIGKILL'))
 
-/** Stops everything and removes anything left half-written. */
+/** Stops everything and removes anything left half-written, and the playback copies. */
 export async function shutdown(): Promise<void> {
   running.forEach((_, p) => p.kill('SIGKILL'))
   await Promise.all([...partFiles].map((f) => fs.rm(f, { force: true })))
+  await fs.rm(COPIES, { recursive: true, force: true })
 }
 
 // ---------- export ----------
@@ -188,7 +187,6 @@ async function prune(dir: string, maxBytes: number): Promise<void> {
 }
 
 const POSTER_BYTES = 1024 ** 3
-const SCRUB_BYTES = 2 * 1024 ** 3
 let posterPrune: NodeJS.Timeout | undefined
 
 // ---------- posters and frames ----------
@@ -205,8 +203,11 @@ function parseDuration(stderr: string): number {
   return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0
 }
 
-/** One frame as JPEG (full resolution, pixel aspect applied), decoded the way export decodes. */
-const grabFrame = (kind: Kind, path: string, time: number, color: ColorMeta | undefined, quality: number) =>
+/**
+ * One frame as JPEG (pixel aspect applied), decoded the way export decodes: full resolution, or
+ * no bigger than `edge` on its long side.
+ */
+const grabFrame = (kind: Kind, path: string, time: number, color: ColorMeta | undefined, quality: number, edge?: number) =>
   run(kind, [
     '-hide_banner',
     '-loglevel',
@@ -218,7 +219,7 @@ const grabFrame = (kind: Kind, path: string, time: number, color: ColorMeta | un
     '-frames:v',
     '1',
     '-vf',
-    `scale=iw*sar:ih:${inColor(color)},format=rgb24,setsar=1`,
+    `scale=iw*sar:ih:${inColor(color)},${edge ? `scale=${edge}:${edge}:force_original_aspect_ratio=decrease:flags=lanczos,` : ''}format=rgb24,setsar=1`,
     '-f',
     'image2pipe',
     '-c:v',
@@ -226,7 +227,7 @@ const grabFrame = (kind: Kind, path: string, time: number, color: ColorMeta | un
     '-q:v',
     String(quality),
     'pipe:1'
-  ]).done
+  ])
 
 /**
  * First meaningful frame (full resolution, rotation and pixel aspect applied), duration and
@@ -252,8 +253,8 @@ export async function poster(path: string): Promise<PosterResult> {
   const color = parseColor(probe.stderr)
   const audio = /Stream #.*Audio:/.test(probe.stderr)
   const fps = parseFps(probe.stderr)
-  let res = await grabFrame('poster', path, posterTime(duration), color, 3)
-  if (!res.stdout.length) res = await grabFrame('poster', path, 0, color, 3)
+  let res = await grabFrame('poster', path, posterTime(duration), color, 3).done
+  if (!res.stdout.length) res = await grabFrame('poster', path, 0, color, 3).done
   if (!res.stdout.length) throw new Error('Could not read video')
 
   await fs.mkdir(CACHE, { recursive: true })
@@ -263,35 +264,40 @@ export async function poster(path: string): Promise<PosterResult> {
   return { data: res.stdout, duration, color, audio, fps }
 }
 
+/** Frames being decoded, by who asked: a newer request from the same one stops the older. */
+const framing = new Map<string, ChildProcess>()
+
 /**
- * One frame as JPEG, decoded with the source's colour metadata (what export sees). Only the newest
- * request matters (it's the frame on screen), so a new one stops any still decoding.
+ * One frame as JPEG, decoded with the source's colour metadata (what export sees), no bigger than
+ * `edge` if given. Only the newest request from each `tag` matters (it's the frame on screen
+ * there), so a new one stops that tag's previous one still decoding.
  */
-export async function frame(path: string, time: number, color?: ColorMeta): Promise<Buffer> {
-  kill('frame')
-  const res = await grabFrame('frame', path, time, color, 2)
+export async function frame(path: string, time: number, color?: ColorMeta, tag = '', edge?: number): Promise<Buffer> {
+  framing.get(tag)?.kill('SIGKILL')
+  const { proc, done } = grabFrame('frame', path, time, color, 2, edge)
+  framing.set(tag, proc)
+  const res = await done.finally(() => framing.get(tag) === proc && framing.delete(tag))
   if (!res.stdout.length) throw new Error('Could not read frame')
   return res.stdout
 }
 
-// ---------- scrub proxies ----------
+// ---------- playback copies ----------
 
-// Built one at a time; a queued request that's been superseded (the user moved on to another
-// video) is dropped before it starts. Only builds in progress are remembered: a finished proxy is
-// found on disk, so a pruned one is simply built again.
-const building = new Map<string, Promise<string>>()
-let proxyChain: Promise<unknown> = Promise.resolve()
-let wantedProxy = ''
-const PROXY_EDGE = 800
+const COPIES = join(CACHE, 'copies')
+const COPY_BYTES = 8 * 1024 ** 3
+// One at a time, in the order asked: the renderer decides what's needed first.
+let copyChain: Promise<unknown> = Promise.resolve()
+const copying = new Map<string, Promise<string>>()
 
 /**
- * A small copy of a video where every frame is a keyframe, for scrubbing: any frame decodes on
- * its own, so seeking is near-instant however the source was encoded. Converted to BT.709 the way
- * export converts, so it matches the real frame it stands in for. Cached beside the posters.
+ * A copy of a video for playing and scrubbing in the app, `edge` pixels on its long side. Every
+ * frame is a keyframe, so any frame decodes on its own: seeking is instant, however the source was
+ * encoded, and several play at once where several 4K originals can't. The source's frame rate (up
+ * to 60), sharp scaling and generous quality: these are for looking at, and go when the app quits.
+ * Converted to BT.709 the way export converts, so it matches the real frame it stands in for.
  */
-export async function scrubProxy(path: string, w: number, h: number, color?: ColorMeta): Promise<string> {
-  const out = join(SCRUB, cacheKey('scrub1', path, await fs.stat(path)) + '.mp4')
-  wantedProxy = out
+export async function copy(path: string, w: number, h: number, color: ColorMeta | undefined, edge: number): Promise<string> {
+  const out = join(COPIES, `${cacheKey('copy1', path, await fs.stat(path))}-${edge}.mp4`)
   if (
     await fs.access(out).then(
       () => true,
@@ -301,23 +307,22 @@ export async function scrubProxy(path: string, w: number, h: number, color?: Col
     touch(out)
     return out
   }
-  let job = building.get(out)
+  let job = copying.get(out)
   if (!job) {
-    job = proxyChain
+    job = copyChain
       .catch(() => {})
-      .then(() => buildProxy(path, out, w, h, color))
+      .then(() => buildCopy(path, out, w, h, color, edge))
       .then(() => out)
-    proxyChain = job
-    building.set(out, job)
-    job.finally(() => building.delete(out)).catch(() => {})
+    copyChain = job
+    copying.set(out, job)
+    job.finally(() => copying.delete(out)).catch(() => {})
   }
   return job
 }
 
-async function buildProxy(path: string, out: string, w: number, h: number, color?: ColorMeta): Promise<void> {
-  if (wantedProxy !== out) throw new Error('superseded')
-  await fs.mkdir(SCRUB, { recursive: true })
-  const s = Math.min(1, PROXY_EDGE / Math.max(w, h, 1))
+async function buildCopy(path: string, out: string, w: number, h: number, color: ColorMeta | undefined, edge: number): Promise<void> {
+  await fs.mkdir(COPIES, { recursive: true })
+  const s = Math.min(1, edge / Math.max(w, h, 1))
   const even = (n: number) => Math.max(2, Math.round((n * s) / 2) * 2)
   const part = out.replace(/\.mp4$/, '.part.mp4')
   const args = (hw: boolean) => [
@@ -332,17 +337,15 @@ async function buildProxy(path: string, out: string, w: number, h: number, color
     '-sn',
     '-dn',
     '-fpsmax',
-    '30',
+    '60',
     '-vf',
-    `scale=${even(w)}:${even(h)}:${inColor(color)}:out_color_matrix=bt709:out_range=tv,setsar=1,format=yuv420p`,
+    `scale=${even(w)}:${even(h)}:flags=lanczos:${inColor(color)}:out_color_matrix=bt709:out_range=tv,setsar=1,format=yuv420p`,
     '-c:v',
     'libx264',
     '-preset',
-    'ultrafast',
-    '-tune',
-    'fastdecode',
+    'veryfast',
     '-crf',
-    '30',
+    '20',
     '-g',
     '1',
     ...OUT_TAGS,
@@ -350,24 +353,15 @@ async function buildProxy(path: string, out: string, w: number, h: number, color
     '+faststart',
     part
   ]
-  const attempt = async (hw: boolean) => {
-    const { proc, done } = run('proxy', args(hw))
-    // Background work: keep it out of the way of the UI and of exports.
-    try {
-      if (proc.pid) setPriority(proc.pid, os.priority.PRIORITY_BELOW_NORMAL)
-    } catch {
-      // Not permitted here; run at normal priority.
-    }
-    return (await done).code === 0
-  }
+  const attempt = async (hw: boolean) => (await run('copy', args(hw)).done).code === 0
   partFiles.add(part)
   try {
     // Hardware decoding where it works, else software.
-    if (!(await attempt(true)) && !(await attempt(false))) throw new Error('Could not build scrub proxy')
+    if (!(await attempt(true)) && !(await attempt(false))) throw new Error('Could not make a playback copy')
     await fs.rename(part, out)
   } finally {
     partFiles.delete(part)
     await fs.rm(part, { force: true })
   }
-  await prune(SCRUB, SCRUB_BYTES)
+  await prune(COPIES, COPY_BYTES)
 }

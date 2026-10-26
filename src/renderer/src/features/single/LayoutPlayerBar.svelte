@@ -3,9 +3,9 @@
   import { trackPointer } from '../../lib/drag'
   import { fmtTime } from '../../lib/format'
   import { Icon } from '../../ui'
-  import type { LayoutPlayer } from './layoutPlayer.svelte'
+  import type { Playback } from '../../lib/playback/playback.svelte'
 
-  let { player, duration }: { player: LayoutPlayer; duration: number } = $props()
+  let { player, duration }: { player: Playback; duration: number } = $props()
 
   let track: HTMLDivElement
   const at = (clientX: number) => {
@@ -14,20 +14,18 @@
   }
   function onpointerdown(e: PointerEvent) {
     if (e.button !== 0) return
-    const resume = player.playing
-    player.playing = false
-    player.seek(at(e.clientX))
+    let t = at(e.clientX)
+    player.scrubStart()
+    player.scrubTo(t)
     trackPointer(e, {
-      move: (ev) => player.seek(at(ev.clientX)),
-      end: () => {
-        if (resume) player.playing = true
-      }
+      move: (ev) => player.scrubTo((t = at(ev.clientX))),
+      end: () => player.scrubEnd(t)
     })
   }
 </script>
 
 <div class="player">
-  <button class={['play', { playing: player.playing }]} onclick={() => player.toggle()} title="Play / Pause (Space)">
+  <button class={['play', { playing: player.playing, loading: player.waiting }]} onclick={() => player.toggle()} title="Play / Pause (Space)">
     <span class="glyph play-glyph"><Icon name="play" size={14} /></span>
     <span class="glyph pause-glyph"><Icon name="pause" size={14} /></span>
   </button>
@@ -80,6 +78,10 @@
 
   .play:active {
     transform: scale(0.92);
+  }
+
+  .loading .glyph {
+    animation: pulse 1s ease-in-out infinite;
   }
 
   .glyph {

@@ -15,7 +15,7 @@
   import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
   import { camera, type View } from './camera.svelte'
   import { dragTo, hitTest, type DragStart } from './gizmo'
-  import type { Player } from './player.svelte'
+  import type { Playback } from '../../lib/playback/playback.svelte'
   import { bitmapProxy } from './proxy.svelte'
   import { WheelNav } from './nav'
   import { drawStage } from './render'
@@ -25,8 +25,9 @@
     asset,
     board,
     settings,
-    player,
+    playback,
     picking,
+    onNeed,
     onEdit,
     onSelect,
     onReset,
@@ -38,9 +39,12 @@
     board: Artboard
     /** The asset's settings on `board`. */
     settings: CropSettings
-    player: Player | null
+    /** A video's playback (its track is the asset's name). */
+    playback: Playback | null
     /** The eyedropper is open: no editing chrome, it needs the exact picture. */
     picking: boolean
+    /** How many device pixels the media covers on screen (so how sharp a copy to play from). */
+    onNeed?: (px: number) => void
     onEdit: (patch: Partial<CropSettings>) => void
     /** The media was pressed while it wasn't the selection (the inspector was on the defaults). */
     onSelect: () => void
@@ -154,12 +158,7 @@
     () => need,
     () => (asset?.thumb ? Math.max(asset.thumb.width, asset.thumb.height) : 0)
   )
-  const exactBitmap = bitmapProxy(
-    () => player?.exact?.jpeg ?? null,
-    sourceSize,
-    () => need,
-    () => 0
-  )
+  $effect(() => onNeed?.(need))
 
   // Everything a frame is drawn from; the canvas redraws whenever it changes.
   const scene = $derived({
@@ -170,9 +169,9 @@
     board,
     settings,
     still: stillBitmap.bitmap,
-    exact: exactBitmap.bitmap,
-    video: player?.video,
-    playerFrame: player?.frame,
+    // A new frame to show, or the clock moving (paused, the exact frame is for one time only).
+    frames: playback?.version,
+    time: playback?.time,
     picking,
     selected
   })
@@ -187,8 +186,6 @@
       canvas.width = pw
       canvas.height = ph
     }
-    const frame = player?.source(s.exact) ?? { source: null, hold: false }
-    if (frame.hold && !resized) return
     drawStage(canvas.getContext('2d')!, {
       view: s.view,
       dpr,
@@ -196,7 +193,7 @@
       settings: s.settings,
       sw: s.asset.w,
       sh: s.asset.h,
-      source: frame.source ?? s.still ?? s.asset.thumb,
+      source: (s.asset.kind === 'video' ? playback?.frame(s.asset.name) : null) ?? s.still ?? s.asset.thumb,
       active: (s.selected || dragging) && !s.picking,
       dragging,
       hover: hovering && !s.picking,

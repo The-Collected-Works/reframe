@@ -5,6 +5,7 @@ import { posterTime } from '@shared/media'
 import type { Clip } from '@shared/types'
 import { mediaUrl } from '../../lib/bridge'
 import { releaseVideo, silentVideo } from '../../lib/media'
+import { copies, sizesOf } from '../../lib/playback/copies.svelte'
 import type { Asset } from '../../state/library.svelte'
 import { scroll } from './context'
 
@@ -50,7 +51,8 @@ export class HoverPreview {
     $effect(() => {
       const a = asset()
       if (!this.ready || !enabled() || a.kind !== 'video' || !a.w) return
-      const v = silentVideo(mediaUrl(a.path))
+      // A playback copy where there's one already (it starts and loops at once); else the file.
+      const v = silentVideo(untrack(() => copies.best(a, sizesOf(a)[0]))?.url ?? mediaUrl(a.path))
       const start = clip()?.start ?? 0
       const end = clip()?.end ?? a.duration
       v.currentTime = Math.min(Math.max(posterTime(a.duration), start), Math.max(start, end - 0.1))

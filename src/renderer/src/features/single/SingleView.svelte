@@ -4,8 +4,11 @@
   single view's connection to app state; the parts inside take props.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { slotKey } from '@shared/arrangement'
+  import { computeLayout, drawFrame } from '@shared/layout'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
+  import { Playback, type Track } from '../../lib/playback/playback.svelte'
   import { removeSlot, setMode, setSlot, swapSlots } from '../../state/actions'
   import { items } from '../../state/items.svelte'
   import { prioritize } from '../../state/loading'
@@ -20,11 +23,9 @@
   import { assetMenu, slotMenu } from '../menus'
   import { layoutScene } from '../scene'
   import Filmstrip from './Filmstrip.svelte'
-  import { LayoutPlayer, type LayoutVideo } from './layoutPlayer.svelte'
   import LayoutPlayerBar from './LayoutPlayerBar.svelte'
   import LayoutStage from './LayoutStage.svelte'
   import ItemPicker from './ItemPicker.svelte'
-  import { Player } from './player.svelte'
   import PlayerBar from './PlayerBar.svelte'
   import Stage from './Stage.svelte'
 
@@ -47,24 +48,30 @@
   })
   const clip = $derived(asset?.kind === 'video' ? (trimDraft ?? clipFor(project.file, asset.name, asset.duration)) : { start: 0, end: 0 })
 
-  // A player per video file.
-  const video = $derived(asset?.kind === 'video' ? `${asset.path}|${asset.mtime}` : null)
-  let player = $state.raw<Player | null>(null)
+  // A video's playback: one track, its trim the stretch that loops; sound from the file itself.
+  // Remade for each item, so each starts where its trim does.
+  /** Device pixels on screen, rounded so small zooms don't keep asking for another size. */
+  const quantize = (px: number) => Math.ceil(px / 128) * 128
+  let need = $state(0)
+  const playable = $derived(asset?.kind === 'video' && asset.w > 0 ? asset.name : null)
+  let playback = $state.raw<Playback | null>(null)
   $effect(() => {
-    if (!video) return
-    const p = new Player({
-      asset: () => asset!,
-      clip: () => clip,
-      muted: () => settings.mute,
-      volume: () => preview.volume,
-      picking: () => shell.picking,
-      board: () => board,
-      settings: () => settings
-    })
-    player = p
+    if (!playable) return
+    const p = untrack(
+      () =>
+        new Playback({
+          tracks: () => (asset?.kind === 'video' ? [{ id: asset.name, file: asset, start: 0, length: asset.duration, end: 'loop', need }] : []),
+          range: () => clip,
+          sound: () => (asset && asset.audio !== false ? { track: asset.name, volume: settings.mute ? 0 : preview.volume } : null),
+          hold: () => shell.picking,
+          originals: true
+        })
+    )
+    p.seek(untrack(() => clip.start))
+    playback = p
     return () => {
       p.destroy()
-      player = null
+      playback = null
     }
   })
 
@@ -73,38 +80,49 @@
     if (!asset) return
     project.setClip(asset.name, { start, end: end >= asset.duration - 0.01 ? null : end })
     // Keep the view's frame unless it's now outside the trimmed range.
-    const v = player?.video
-    if (v && (v.currentTime < start || v.currentTime > end)) player?.seek(start)
+    if (playback && (playback.time < start || playback.time > end)) playback.seek(start)
   }
 
-  // A layout's videos as it plays them, and its player.
-  const layoutVideos = $derived.by((): LayoutVideo[] => {
+  /** A trim handle's preview: the frame at `t`, framed as the artboard frames it. */
+  function onPreview(canvas: HTMLCanvasElement, t: number) {
+    const a = asset
+    if (!a || !playback) return
+    playback.preview(a.name, t, (src) => drawFrame(canvas.getContext('2d')!, src, a.w, a.h, board.width, board.height, settings, canvas.width / board.width))
+  }
+
+  // A layout's playback: a track per video cell, each the part of its file the cell plays, sized
+  // to the cell on screen. No sound yet (the export has none either).
+  let scale = $state(1)
+  const layoutTracks = $derived.by((): Track[] => {
     if (!scene) return []
-    return scene.arrangement.cells.flatMap(({ slot }) => {
-      const a = scene.cells.get(slot.id)?.asset
-      if (a?.kind !== 'video' || !a.duration) return []
+    return scene.arrangement.cells.flatMap(({ slot, rect }) => {
+      const cell = scene.cells.get(slot.id)
+      const a = cell?.asset
+      if (a?.kind !== 'video' || !a.duration || !a.w) return []
       const c = clipFor(project.file, a.name, a.duration)
-      return [{ slot: slot.id, path: a.path, mtime: a.mtime, w: a.w, h: a.h, color: a.color, start: c.start, length: c.end - c.start, end: slot.end ?? 'loop' }]
+      const p = computeLayout(rect.w, rect.h, a.w, a.h, cell!.settings)
+      return [{ id: slot.id, file: a, start: c.start, length: c.end - c.start, end: slot.end ?? 'loop', need: quantize(Math.max(p.w, p.h) * scale) }]
     })
   })
-  let layoutPlayer = $state.raw<LayoutPlayer | null>(null)
+  let layoutPlayback = $state.raw<Playback | null>(null)
   $effect(() => {
     if (!layoutKey) return
-    const p = new LayoutPlayer(
-      () => layoutVideos,
-      () => scene?.duration ?? 0
-    )
-    layoutPlayer = p
+    const p = new Playback({
+      tracks: () => layoutTracks,
+      range: () => ({ start: 0, end: scene?.duration ?? 0 }),
+      hold: () => shell.picking
+    })
+    layoutPlayback = p
     return () => {
       p.destroy()
-      layoutPlayer = null
+      layoutPlayback = null
     }
   })
   const choosing = $derived(shell.choosing && scene ? scene.arrangement.cells.find((c) => c.slot.id === shell.choosing) : undefined)
 
   // Space plays and pauses; any arrow steps through the strip. (The stage handles the rest.)
   useKeymap(SINGLE, {
-    play: () => (layoutKey ? layoutPlayer?.toggle() : player?.toggle()),
+    play: () => (layoutKey ? layoutPlayback : playback)?.toggle(),
     prev: () => selection.step(-1),
     next: () => selection.step(1)
   })
@@ -116,8 +134,9 @@
       {board}
       {scene}
       slot={selection.slot}
-      player={layoutPlayer}
+      player={layoutPlayback}
       picking={shell.picking}
+      onScale={(k) => (scale = k)}
       onSelect={(slot) => (selection.slot = slot)}
       onEdit={(slot, patch) => project.edit([slotKey(layoutKey, slot)], patch)}
       onReset={(slot, keys) => project.resetKeys([slotKey(layoutKey, slot)], keys)}
@@ -140,8 +159,9 @@
       {asset}
       {board}
       {settings}
-      {player}
+      {playback}
       picking={shell.picking}
+      onNeed={(px) => (need = quantize(px))}
       onEdit={(patch) => asset && project.edit([asset.name], patch)}
       onSelect={() => asset && !selection.has(asset.name) && selection.set([asset.name])}
       onReset={(keys) => asset && project.resetKeys([asset.name], keys)}
@@ -151,11 +171,11 @@
   {/if}
   <div class="single-fade"></div>
   <div class="single-overlay">
-    {#if layoutPlayer && scene?.duration}
-      <LayoutPlayerBar player={layoutPlayer} duration={scene.duration} />
-    {:else if asset && player && asset.duration > 0}
+    {#if layoutPlayback && scene?.duration}
+      <LayoutPlayerBar player={layoutPlayback} duration={scene.duration} />
+    {:else if asset && playback && asset.duration > 0}
       <PlayerBar
-        {player}
+        {playback}
         {asset}
         {clip}
         aspect={board.width / board.height}
@@ -163,6 +183,7 @@
         volume={preview.volume}
         onVolume={(v) => preview.setVolume(v)}
         onToggleMute={() => preview.toggleMute()}
+        {onPreview}
         onTrim={(start, end) => (trimDraft = { start, end })}
         {onTrimEnd}
       />

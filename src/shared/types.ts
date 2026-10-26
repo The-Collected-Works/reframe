@@ -251,10 +251,16 @@ export interface ReframeApi {
   exportLayout(job: LayoutExportJob): Promise<void>
   cancelExport(): Promise<void>
   poster(path: string): Promise<PosterResult>
-  /** A frame decoded the way export decodes it, as JPEG. */
-  frame(path: string, time: number, color?: ColorMeta): Promise<Uint8Array>
-  /** Path of a small all-keyframe copy for scrubbing, built in the background on first request. */
-  scrubProxy(path: string, w: number, h: number, color?: ColorMeta): Promise<string>
+  /**
+   * A frame decoded the way export decodes it, as JPEG, no bigger than `edge` if given. A newer
+   * request with the same `tag` stops the older one still decoding.
+   */
+  frame(path: string, time: number, color?: ColorMeta, tag?: string, edge?: number): Promise<Uint8Array>
+  /**
+   * Path of a playback copy `edge` pixels on its long side (every frame a keyframe), made in the
+   * background on first request, one at a time. They're removed when the app quits.
+   */
+  copy(path: string, w: number, h: number, color: ColorMeta | undefined, edge: number): Promise<string>
   reveal(path: string): Promise<void>
   /** Newer GitHub release than this build, if any. */
   checkUpdate(): Promise<{ version: string; notes: ReleaseNote[]; status: UpdateStatus } | null>

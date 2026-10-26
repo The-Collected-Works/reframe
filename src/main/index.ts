@@ -4,7 +4,7 @@ import { Readable } from 'node:stream'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import { mimeOf } from '@shared/media'
 import type { ColorMeta, FolderScan, LayoutExportJob, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
-import { cancelExport, exportLayout, exportVideo, frame, poster, scrubProxy, stopWorker } from './jobs'
+import { cancelExport, clearCopies, copy, exportLayout, exportVideo, frame, poster, stopWorker } from './jobs'
 import { markFolder, noteSkipped, saveProject, scanFolder, setSkipped, unmarkFolder, watchFolder } from './folder'
 import { installUpdate, pollAutoUpdate, updateStatus } from './autoupdate'
 import { folderArg, forget, readState, recentFolders, remember, updateSystemMenus } from './recent'
@@ -259,15 +259,15 @@ ipcMain.handle('poster', (_e, path: string) => {
   mustRead(path)
   return poster(path)
 })
-ipcMain.handle('frame', (_e, path: string, time: number, color?: ColorMeta) => {
+ipcMain.handle('frame', (_e, path: string, time: number, color?: ColorMeta, tag?: string, edge?: number) => {
   mustRead(path)
-  return frame(path, time, color)
+  return frame(path, time, color, tag, edge)
 })
-ipcMain.handle('scrub-proxy', async (_e, path: string, w: number, h: number, color?: ColorMeta) => {
+ipcMain.handle('copy', async (_e, path: string, w: number, h: number, color: ColorMeta | undefined, edge: number) => {
   mustRead(path)
-  const proxy = await scrubProxy(path, w, h, color)
-  readable.add(normalize(proxy))
-  return proxy
+  const out = await copy(path, w, h, color, edge)
+  readable.add(normalize(out))
+  return out
 })
 // Export progress on the taskbar / Dock icon (-1 clears it).
 ipcMain.handle('set-progress', (e, p: number) => BrowserWindow.fromWebContents(e.sender)?.setProgressBar(p < 0 ? -1 : p))
@@ -339,6 +339,7 @@ app.on('second-instance', (_e, argv) => {
 
 app.whenReady().then(() => {
   if (!primary) return
+  clearCopies().catch(() => {})
   protocol.handle('media', serveMedia)
   setMenu()
   createWindow()
@@ -348,7 +349,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => app.quit())
 
 // However the app quits (window closed, ⌘Q, restarting into an update), stop the media worker
-// first: it kills any running ffmpeg and removes half-written exports and proxies.
+// first: it kills any running ffmpeg and removes half-written exports and the playback copies.
 let stopped = false
 app.on('before-quit', (e) => {
   if (stopped) return

@@ -9,6 +9,7 @@
   import { bounds, computeLayout, type Placement, type Point } from '@shared/layout'
   import type { Artboard, CropSettings, Slot, SettingKey } from '@shared/types'
   import { trackPointer } from '../../lib/drag'
+  import type { Playback } from '../../lib/playback/playback.svelte'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { Icon } from '../../ui'
   import { LAYOUT_EDITOR, SINGLE } from '../keymaps'
@@ -17,7 +18,6 @@
   import { camera, type View } from './camera.svelte'
   import { dragGap, gapAt } from './gaps'
   import { dragTo, hitTest, type DragStart, type Mode } from './gizmo'
-  import type { LayoutPlayer } from './layoutPlayer.svelte'
   import { WheelNav } from './nav'
   import { drawLayoutStage } from './render'
   import { zoomTransitions } from './zoom.svelte'
@@ -28,6 +28,7 @@
     slot,
     player,
     picking,
+    onScale,
     onSelect,
     onEdit,
     onReset,
@@ -42,9 +43,12 @@
     scene: LayoutScene
     /** The cell being edited. */
     slot: string | null
-    player: LayoutPlayer | null
+    /** Its videos' playback (a track per video cell, by slot). */
+    player: Playback | null
     /** The eyedropper is open: no editing chrome, it needs the exact picture. */
     picking: boolean
+    /** Device pixels per artboard pixel on screen (so how sharp a copy each cell plays from). */
+    onScale?: (scale: number) => void
     onSelect: (slot: string | null) => void
     onEdit: (slot: string, patch: Partial<CropSettings>) => void
     onReset: (slot: string, keys: SettingKey[]) => void
@@ -131,6 +135,7 @@
     () => manual
   )
   const k = $derived(cam.current.k)
+  $effect(() => onScale?.(k * dpr))
 
   const zoom = zoomTransitions({
     stage: () => stage,
@@ -149,7 +154,7 @@
     const c = scene.cells.get(s.id)
     const a = c?.asset
     if (!a?.w) return null
-    return { src: player?.source(s.id) ?? a.thumb, sw: a.w, sh: a.h, settings: c!.settings }
+    return { src: player?.frame(s.id) ?? a.thumb, sw: a.w, sh: a.h, settings: c!.settings }
   }
 
   // Everything a frame is drawn from; the canvas redraws whenever it changes.
@@ -163,7 +168,9 @@
     hoverCell,
     hoverGap,
     dropCell,
-    playerFrame: player?.frame,
+    // A new frame to show, or the clock moving (paused, the exact frames are for one time only).
+    frames: player?.version,
+    time: player?.time,
     width,
     height
   })

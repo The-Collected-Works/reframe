@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { app, utilityProcess, type UtilityProcess } from 'electron'
 import type { ColorMeta, LayoutExportJob, PosterResult, VideoExportJob } from '@shared/types'
@@ -23,8 +23,15 @@ function ffmpegPath(): string {
   return candidates.find((p) => p && existsSync(p)) ?? 'ffmpeg'
 }
 
-/** Where posters and scrub proxies are cached (the worker writes them; media serves proxies). */
+/** Where posters and playback copies are cached (the worker writes them; media serves copies). */
 const cacheDir = (): string => join(app.getPath('userData'), 'posters')
+
+/**
+ * Playback copies only live as long as the app: removed when it quits (by the worker), and again
+ * on launch in case it didn't get to (a crash, a forced quit), along with the scrub proxies older
+ * versions kept.
+ */
+export const clearCopies = (): Promise<unknown> => Promise.all(['copies', 'scrub'].map((d) => fs.rm(join(cacheDir(), d), { recursive: true, force: true })))
 
 let worker: UtilityProcess | null = null
 let nextId = 1
@@ -64,8 +71,9 @@ function call<T>(msg: Request, progress?: (p: number) => void): Promise<T> {
 }
 
 export const poster = (path: string) => call<PosterResult>({ type: 'poster', path })
-export const frame = (path: string, time: number, color?: ColorMeta) => call<Uint8Array>({ type: 'frame', path, time, color })
-export const scrubProxy = (path: string, w: number, h: number, color?: ColorMeta) => call<string>({ type: 'proxy', path, w, h, color })
+export const frame = (path: string, time: number, color?: ColorMeta, tag?: string, edge?: number) =>
+  call<Uint8Array>({ type: 'frame', path, time, color, tag, edge })
+export const copy = (path: string, w: number, h: number, color: ColorMeta | undefined, edge: number) => call<string>({ type: 'copy', path, w, h, color, edge })
 export const exportVideo = (job: VideoExportJob, onProgress: (p: number) => void) => call<void>({ type: 'export', job }, onProgress)
 export const exportLayout = (job: LayoutExportJob, onProgress: (p: number) => void) => call<void>({ type: 'layout', job }, onProgress)
 export const cancelExport = (): void => worker?.postMessage({ type: 'cancel' } satisfies WorkerRequest)
