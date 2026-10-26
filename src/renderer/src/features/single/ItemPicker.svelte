@@ -1,5 +1,5 @@
 <!--
-  Choosing what a grid's cell shows: every asset and variant, filterable by name. Takes props.
+  Choosing what a layout's cell shows: every asset and variant, filterable by name. Takes props.
 -->
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'

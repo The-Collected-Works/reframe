@@ -1,11 +1,11 @@
-<!-- A grid's playback: play / pause, the time, a bar to scrub along, and how long it runs. -->
+<!-- A layout's playback: play / pause, the time, a bar to scrub along, and how long it runs. -->
 <script lang="ts">
   import { trackPointer } from '../../lib/drag'
   import { fmtTime } from '../../lib/format'
   import { Icon } from '../../ui'
-  import type { GridPlayer } from './gridPlayer.svelte'
+  import type { LayoutPlayer } from './layoutPlayer.svelte'
 
-  let { player, duration }: { player: GridPlayer; duration: number } = $props()
+  let { player, duration }: { player: LayoutPlayer; duration: number } = $props()
 
   let track: HTMLDivElement
   const at = (clientX: number) => {
@@ -37,7 +37,7 @@
     <div class="head" style:left={`${(player.time / duration) * 100}%`}></div>
   </div>
   <span class="time muted">{fmtTime(duration)}</span>
-  <span class="silent" title="Grids export without sound for now"><Icon name="volumeOff" /></span>
+  <span class="silent" title="Layouts export without sound for now"><Icon name="volumeOff" /></span>
 </div>
 
 <style>

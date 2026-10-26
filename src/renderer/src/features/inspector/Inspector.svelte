@@ -1,14 +1,14 @@
 <!--
   The settings of the selection, or with nothing selected, the artboard's defaults that every asset
   follows. A dot beside a setting marks it as changed from the defaults (click to reset it; "Make
-  default" turns it into the default). A grid shows its own settings, and a cell being edited in
+  default" turns it into the default). A layout shows its own settings, and a cell being edited in
   one its framing there. The inspector's connection to app state.
 -->
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'
-  import { slotsOf } from '@shared/grid'
+  import { slotsOf } from '@shared/arrangement'
   import { DEFAULT_SETTINGS, normDeg, resolveSettings } from '@shared/layout'
-  import type { CropSettings, FitMode, GridItem, SettingKey } from '@shared/types'
+  import type { CropSettings, FitMode, LayoutItem, SettingKey } from '@shared/types'
   import { fmtSize, fmtTime, plural } from '../../lib/format'
   import { hint } from '../../lib/keymap.svelte'
   import {
@@ -27,7 +27,7 @@
   } from '../../state/actions'
   import { items } from '../../state/items.svelte'
   import type { Asset } from '../../state/library.svelte'
-  import { gridOf, isVirtual } from '../../state/model/items'
+  import { layoutOf, isVirtual } from '../../state/model/items'
   import { hasOverrides } from '../../state/model/project'
   import { project } from '../../state/project.svelte'
   import { selection } from '../../state/selection.svelte'
@@ -35,11 +35,11 @@
   import { view } from '../../state/view.svelte'
   import { Button, ColorPicker, Icon, NumberField, Segmented, Slider, Tag, Toggle } from '../../ui'
   import { GLOBAL } from '../keymaps'
-  import { gridScene } from '../scene'
+  import { layoutScene } from '../scene'
   import { ZOOM_MAX, ZOOM_MIN } from '../snapping'
   import AnchorGrid from './AnchorGrid.svelte'
   import { pickBackground } from './eyedropper'
-  import GridInspector from './GridInspector.svelte'
+  import LayoutInspector from './LayoutInspector.svelte'
   import Row from './Row.svelte'
 
   const FITS: { value: FitMode; label: string; title: string }[] = [
@@ -51,27 +51,27 @@
   ]
 
   const board = $derived(project.board)
-  const isGrid = (key: string) => items.entry(key)?.kind === 'grid'
-  // In the single view on a grid: that grid, and the cell being framed in it (if one is).
-  const openGrid = $derived(view.mode === 'single' && selection.focus && isGrid(selection.focus) ? selection.focus : null)
+  const isLayout = (key: string) => items.entry(key)?.kind === 'layout'
+  // In the single view on a layout: that layout, and the cell being framed in it (if one is).
+  const openLayout = $derived(view.mode === 'single' && selection.focus && isLayout(selection.focus) ? selection.focus : null)
   const slotKey = $derived(editingSlot())
-  /** The grids whose settings show: the open one with no cell chosen, or a selection of only grids. */
-  const grids = $derived(openGrid ? (slotKey ? [] : [openGrid]) : selection.names.length && selection.names.every(isGrid) ? selection.names : [])
-  const gridKey = $derived(grids.length ? (selection.focus && grids.includes(selection.focus) ? selection.focus : grids[0]) : null)
-  const grid = $derived(gridOf(project.file, gridKey))
-  // The open grid as it sits here, for a cell's size and what it shows.
-  const scene = $derived(openGrid ? gridScene(openGrid, board) : null)
-  const slotCell = $derived(slotKey && scene ? scene.layout.cells.find((c) => c.slot.id === selection.slot) : undefined)
+  /** The layouts whose settings show: the open one with no cell chosen, or a selection of only layouts. */
+  const layouts = $derived(openLayout ? (slotKey ? [] : [openLayout]) : selection.names.length && selection.names.every(isLayout) ? selection.names : [])
+  const layoutKey = $derived(layouts.length ? (selection.focus && layouts.includes(selection.focus) ? selection.focus : layouts[0]) : null)
+  const layout = $derived(layoutOf(project.file, layoutKey))
+  // The open layout as it sits here, for a cell's size and what it shows.
+  const scene = $derived(openLayout ? layoutScene(openLayout, board) : null)
+  const slotCell = $derived(slotKey && scene ? scene.arrangement.cells.find((c) => c.slot.id === selection.slot) : undefined)
   const slotAsset = $derived(slotCell?.slot.item ? items.asset(slotCell.slot.item) : undefined)
 
-  /** What edits apply to (see `targets`): a cell, or the selected assets (not grids). */
+  /** What edits apply to (see `targets`): a cell, or the selected assets (not layouts). */
   const names = $derived(slotKey ? [slotKey] : targets())
   const editing = $derived(names.length > 0)
   /** The asset whose values are shown: the focused one if it's selected, else the first. */
   const primary = $derived(slotKey ?? (editing ? (selection.focus && names.includes(selection.focus) ? selection.focus : names[0]) : null))
   const primaryAsset = $derived(slotKey ? slotAsset : names.length === 1 ? items.asset(primary) : undefined)
   // The selected assets, found in one pass (selections can be the whole folder).
-  const chosen = $derived(slotKey ? (slotAsset ? [slotAsset] : []) : items.all.filter((a) => a.kind !== 'grid' && selection.has(a.name)))
+  const chosen = $derived(slotKey ? (slotAsset ? [slotAsset] : []) : items.all.filter((a) => a.kind !== 'layout' && selection.has(a.name)))
   const s: CropSettings = $derived(primary ? resolveSettings(board, primary) : board.defaults)
   // A cell's framing is measured in the cell, as an asset's is in the artboard.
   const W = $derived(slotCell?.rect.w ?? board.width)
@@ -117,7 +117,7 @@
       : !editing
         ? [
             `${board.width}×${board.height}`,
-            plural(items.all.filter((a) => a.kind !== 'grid').length, 'asset'),
+            plural(items.all.filter((a) => a.kind !== 'layout').length, 'asset'),
             plural(items.all.filter((a) => hasOverrides(board, a.name)).length, 'adjusted', 'adjusted')
           ]
         : names.length === 1 && primaryAsset
@@ -129,19 +129,19 @@
             ]
   )
 
-  // A grid's settings apply to every selected grid; leaving out, to them all too.
-  const gridTags = $derived(
-    grid && gridKey
+  // A layout's settings apply to every selected layout; leaving out, to them all too.
+  const layoutTags = $derived(
+    layout && layoutKey
       ? [
-          grids.length > 1 ? plural(grids.length, 'grid') : `${board.width}×${board.height}`,
-          plural(slotsOf(grid.root).length, 'cell'),
+          layouts.length > 1 ? plural(layouts.length, 'layout') : `${board.width}×${board.height}`,
+          plural(slotsOf(layout.root).length, 'cell'),
           ...(scene?.duration ? [fmtTime(scene.duration)] : [])
         ]
       : []
   )
-  /** A grid's longest video, as trimmed (0: none). */
+  /** A layout's longest video, as trimmed (0: none). */
   function longestOf(key: string): number {
-    const g = gridOf(project.file, key)
+    const g = layoutOf(project.file, key)
     if (!g) return 0
     return Math.max(
       0,
@@ -153,12 +153,12 @@
       })
     )
   }
-  const gridSkip = $derived(grids.filter((k) => resolveSettings(board, k).skip).length)
-  const editGrids = (patch: Partial<GridItem>) => grids.forEach((k) => project.editGrid(k, patch))
+  const layoutSkip = $derived(layouts.filter((k) => resolveSettings(board, k).skip).length)
+  const editLayouts = (patch: Partial<LayoutItem>) => layouts.forEach((k) => project.editLayout(k, patch))
 
-  // Renaming a variant or grid in place: click its name above. Enter or leaving it saves, Esc cancels.
+  // Renaming a variant or layout in place: click its name above. Enter or leaving it saves, Esc cancels.
   let renaming = $state(false)
-  const renameKey = $derived(grid ? gridKey : names.length === 1 && primary && isVirtual(primary) && !slotKey ? primary : null)
+  const renameKey = $derived(layout ? layoutKey : names.length === 1 && primary && isVirtual(primary) && !slotKey ? primary : null)
   $effect(() => {
     // Asked from a menu while the grid's captions aren't showing to rename in.
     if (shell.renamingItem && shell.renamingItem === renameKey && !(view.mode === 'grid' && view.prefs.names)) {
@@ -194,19 +194,19 @@
 
 <aside class="inspector">
   <header class="insp-head">
-    <!-- Breadcrumb: the artboard's defaults are the parent of whatever is selected; a grid is the
+    <!-- Breadcrumb: the artboard's defaults are the parent of whatever is selected; a layout is the
          parent of its cells. -->
     <nav class="crumbs">
-      {#if grid && gridKey}
+      {#if layout && layoutKey}
         <button class="crumb" title={`Edit the defaults every asset follows (${hint(GLOBAL.actions.back)})`} onclick={() => clearSelection()}
           >{board.name}</button
         >
         <span class="crumb-sep"><Icon name="next" size={12} /></span>
-        {@render current(grids.length > 1 ? plural(grids.length, 'grid') : grid.name, grids.length === 1)}
-      {:else if slotKey && openGrid}
+        {@render current(layouts.length > 1 ? plural(layouts.length, 'layout') : layout.name, layouts.length === 1)}
+      {:else if slotKey && openLayout}
         <span class="crumb muted-crumb">{board.name}</span>
         <span class="crumb-sep"><Icon name="next" size={12} /></span>
-        <button class="crumb" title="The grid's own settings" onclick={() => (selection.slot = null)}>{label(openGrid)}</button>
+        <button class="crumb" title="The layout's own settings" onclick={() => (selection.slot = null)}>{label(openLayout)}</button>
         <span class="crumb-sep"><Icon name="next" size={12} /></span>
         <span class="crumb current" {title}>{title}</span>
       {:else if editing}
@@ -220,7 +220,7 @@
       {/if}
     </nav>
     <div class="tags">
-      {#each grid ? gridTags : tags as t (t)}<Tag>{t}</Tag>{/each}
+      {#each layout ? layoutTags : tags as t (t)}<Tag>{t}</Tag>{/each}
     </div>
   </header>
 
@@ -234,17 +234,17 @@
     {/if}
   {/snippet}
 
-  {#if grid && gridKey}
+  {#if layout && layoutKey}
     <div class="insp-body">
-      <GridInspector
-        {grid}
+      <LayoutInspector
+        {layout}
         boardName={board.name}
-        arranged={!!board.splits?.[gridKey]}
-        longest={longestOf(gridKey)}
+        arranged={!!board.splits?.[layoutKey]}
+        longest={longestOf(layoutKey)}
         picking={shell.picking}
         pickHint={hint(GLOBAL.actions.pick)}
-        onEdit={editGrids}
-        onResetLayout={() => grids.forEach((k) => project.resetSplits(k))}
+        onEdit={editLayouts}
+        onResetArrangement={() => layouts.forEach((k) => project.resetSplits(k))}
         onPick={pickBackground}
       />
     </div>
@@ -255,9 +255,9 @@
         icon="leaveOut"
         iconSize={14}
         tone="danger"
-        pressed={gridSkip === grids.length ? true : gridSkip > 0 ? 'mixed' : false}
+        pressed={layoutSkip === layouts.length ? true : layoutSkip > 0 ? 'mixed' : false}
         title={`Leave out of the ${board.name} export`}
-        onclick={() => project.edit(grids, { skip: gridSkip < grids.length })}
+        onclick={() => project.edit(layouts, { skip: layoutSkip < layouts.length })}
       />
     </footer>
   {:else}
@@ -270,7 +270,7 @@
           </div>
         </Row>
         {#if slotAsset?.kind === 'video'}
-          <Row label="When shorter than the grid" overridden={slotCell.slot.end === 'hold'} onReset={() => setSlot(slotCell.slot.id, { end: 'loop' })}>
+          <Row label="When shorter than the layout" overridden={slotCell.slot.end === 'hold'} onReset={() => setSlot(slotCell.slot.id, { end: 'loop' })}>
             <Segmented
               value={slotCell.slot.end ?? 'loop'}
               options={[

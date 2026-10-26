@@ -56,7 +56,10 @@ export function normalizeProject(p: ProjectFile | null): ProjectFile {
     })),
     clips: p.clips ?? {},
     export: { ...base.export, ...p.export },
-    items: p.items ?? {}
+    // Layouts were saved as "grid" while they were being built.
+    items: Object.fromEntries(
+      Object.entries(p.items ?? {}).map(([k, i]) => [k, (i.kind as string) === 'grid' ? { ...i, kind: 'layout' } : i])
+    ) as ProjectFile['items']
   }
 }
 

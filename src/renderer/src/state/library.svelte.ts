@@ -21,7 +21,7 @@ export interface AssetMeta {
   error: boolean
 }
 
-/** An item (a file, a variant of one, a grid) together with what's been loaded about its file. */
+/** An item (a file, a variant of one, a layout) together with what's been loaded about its file. */
 export type Asset = Entry & AssetMeta
 
 const NO_META: AssetMeta = { w: 0, h: 0, duration: 0, thumb: null, error: false }

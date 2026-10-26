@@ -1,10 +1,10 @@
-import type { Dir } from '@shared/grid'
+import type { Dir } from '@shared/arrangement'
 import { resolveSettings } from '@shared/layout'
 import { api, mac, win } from '../lib/bridge'
 import { hint } from '../lib/keymap.svelte'
 import { inside } from '../lib/paths'
 import {
-  addToGrid,
+  addToLayout,
   combineSelection,
   copy,
   deleteBoard,
@@ -25,20 +25,20 @@ import { items } from '../state/items.svelte'
 import { library } from '../state/library.svelte'
 import { isVirtual } from '../state/model/items'
 import { hasOverrides } from '../state/model/project'
-import { folderOf, GRIDS } from '../state/model/tree'
+import { folderOf, LAYOUTS } from '../state/model/tree'
 import { project } from '../state/project.svelte'
 import { selection } from '../state/selection.svelte'
 import { shell } from '../state/shell.svelte'
 import { view } from '../state/view.svelte'
 import { showMenu, type ContextMenuItem } from '../ui'
-import { GLOBAL, GRID, GRID_EDITOR } from './keymaps'
+import { GLOBAL, GRID, LAYOUT_EDITOR } from './keymaps'
 
-/** The right-click menus: on items (grid and single view), grid cells, artboard tabs, and folder headers. */
+/** The right-click menus: on items (grid and single view), layout cells, artboard tabs, and folder headers. */
 
 const revealLabel = mac ? 'Reveal in Finder' : win ? 'Show in Explorer' : 'Show in Folder'
 
 /**
- * Right-click menu for an item (a file, a variant or a grid). Right-clicking outside the selection
+ * Right-click menu for an item (a file, a variant or a layout). Right-clicking outside the selection
  * selects it first.
  */
 export async function assetMenu(name: string, path: string, at: { x: number; y: number }, inSingle = false): Promise<void> {
@@ -46,23 +46,23 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
   const board = project.board
   const sel = selection.names
   const skip = resolveSettings(board, name).skip
-  const grid = items.entry(name)?.kind === 'grid'
-  const assets = sel.filter((n) => items.entry(n)?.kind !== 'grid')
-  const grids = items.all.filter((e) => e.kind === 'grid')
+  const layout = items.entry(name)?.kind === 'layout'
+  const assets = sel.filter((n) => items.entry(n)?.kind !== 'layout')
+  const layouts = items.all.filter((e) => e.kind === 'layout')
   const id = await showMenu(at.x, at.y, [
     ...(inSingle ? [] : [{ id: 'open', label: 'Open', icon: 'open' as const, shortcut: hint(GRID.actions.open) }, { separator: true }]),
     ...(inSingle
       ? []
       : [
           { id: 'duplicate', label: 'Duplicate', icon: 'duplicate' as const, shortcut: hint(GRID.actions.duplicate) },
-          { id: 'combine', label: 'Combine into Grid', icon: 'layout' as const, shortcut: hint(GRID.actions.combine), enabled: assets.length > 0 },
-          // One per grid, while there are few enough to list.
-          ...(assets.length && grids.length && grids.length <= 6
-            ? grids.map((g): ContextMenuItem => ({ id: `add:${g.name}`, label: `Add to “${g.label}”`, icon: 'plus' }))
+          { id: 'combine', label: 'Combine into Layout', icon: 'layout' as const, shortcut: hint(GRID.actions.combine), enabled: assets.length > 0 },
+          // One per layout, while there are few enough to list.
+          ...(assets.length && layouts.length && layouts.length <= 6
+            ? layouts.map((g): ContextMenuItem => ({ id: `add:${g.name}`, label: `Add to “${g.label}”`, icon: 'plus' }))
             : []),
           { separator: true }
         ]),
-    ...(grid
+    ...(layout
       ? []
       : [
           { id: 'copy', label: 'Copy Settings', icon: 'copy' as const, shortcut: hint(GLOBAL.actions.copy), enabled: sel.length === 1 },
@@ -85,13 +85,13 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
     { id: 'leaveOut', label: 'Leave Out of Export', icon: 'leaveOut', checked: skip },
     { separator: true },
     ...(isVirtual(name) ? [{ id: 'rename', label: 'Rename', icon: 'rename' as const }] : []),
-    ...(grid ? [] : [{ id: 'reveal', label: revealLabel, icon: 'reveal' as const }]),
+    ...(layout ? [] : [{ id: 'reveal', label: revealLabel, icon: 'reveal' as const }]),
     ...(sel.some(isVirtual) ? [{ id: 'delete', label: 'Delete', icon: 'trash' as const, shortcut: hint(GRID.actions.remove), danger: true }] : [])
   ])
   if (id === 'open') setMode('single')
   else if (id === 'duplicate') duplicateSelection()
   else if (id === 'combine') combineSelection()
-  else if (id?.startsWith('add:')) addToGrid(id.slice(4))
+  else if (id?.startsWith('add:')) addToLayout(id.slice(4))
   else if (id === 'copy') copy()
   else if (id === 'paste') paste()
   else if (id === 'reset') resetSelection()
@@ -103,7 +103,7 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
   else if (id === 'reveal') api.reveal(path)
 }
 
-/** Right-click on a grid's cell in the single view (it's selected first). */
+/** Right-click on a layout's cell in the single view (it's selected first). */
 export async function slotMenu(slot: string, filled: boolean, video: boolean, end: 'loop' | 'hold', at: { x: number; y: number }): Promise<void> {
   selection.slot = slot
   const id = await showMenu(at.x, at.y, [
@@ -113,7 +113,7 @@ export async function slotMenu(slot: string, filled: boolean, video: boolean, en
     { id: 'col', label: 'Add Cell Below', icon: 'splitCol' },
     ...(video ? [{ separator: true }, { id: 'hold', label: 'Hold Last Frame When Shorter', icon: 'pause' as const, checked: end === 'hold' }] : []),
     { separator: true },
-    { id: 'remove', label: 'Remove Cell', icon: 'trash', shortcut: hint(GRID_EDITOR.actions.remove), danger: true }
+    { id: 'remove', label: 'Remove Cell', icon: 'trash', shortcut: hint(LAYOUT_EDITOR.actions.remove), danger: true }
   ])
   if (id === 'choose') shell.choosing = slot
   else if (id === 'row' || id === 'col') splitSlot(id as Dir)
@@ -142,17 +142,17 @@ export async function boardMenu(boardId: string, at: { x: number; y: number }): 
 
 /** Right-click on a folder's section header in the grid. */
 export async function folderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
-  if (folder === GRIDS) {
-    const grids = view.visible.filter((a) => a.kind === 'grid').map((a) => a.name)
-    const id = await showMenu(at.x, at.y, [{ id: 'select', label: 'Select All Grids', icon: 'check', enabled: grids.length > 0 }])
-    if (id === 'select') selection.set(grids)
+  if (folder === LAYOUTS) {
+    const layouts = view.visible.filter((a) => a.kind === 'layout').map((a) => a.name)
+    const id = await showMenu(at.x, at.y, [{ id: 'select', label: 'Select All Layouts', icon: 'check', enabled: layouts.length > 0 }])
+    if (id === 'select') selection.set(layouts)
     return
   }
   // What's visible in the folder and the folders inside it (selecting hidden assets would let edits
   // land out of sight). A variant is in its file's folder.
   const home = (a: { name: string; source?: string }) => a.source ?? a.name
   const names = view.visible
-    .filter((a) => a.kind !== 'grid' && (folderOf(home(a)) === folder || (folder !== '' && home(a).startsWith(folder + '/'))))
+    .filter((a) => a.kind !== 'layout' && (folderOf(home(a)) === folder || (folder !== '' && home(a).startsWith(folder + '/'))))
     .map((a) => a.name)
   const id = await showMenu(at.x, at.y, [
     { id: 'select', label: 'Select All in Folder', icon: 'check', enabled: names.length > 0 },

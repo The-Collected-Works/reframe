@@ -2,7 +2,7 @@ import { getContext, setContext } from 'svelte'
 import type { Artboard, Clip, CropSettings } from '@shared/types'
 import type { Asset } from '../../state/library.svelte'
 import type { Entry } from '../../state/model/items'
-import type { GridScene } from '../scene'
+import type { LayoutScene } from '../scene'
 
 export const GAP = 8
 /** Mat around each frame; matches the thumbnail's padding. */
@@ -35,12 +35,12 @@ export interface GridModel {
   readonly previews: boolean
 
   asset(entry: Entry): Asset
-  /** A grid as it sits on the artboard. */
-  composite(name: string): GridScene | null
+  /** A layout as it sits on the artboard. */
+  composite(name: string): LayoutScene | null
   selected(name: string): boolean
   focused(name: string): boolean
   clip(name: string): Clip | undefined
-  /** A variant or grid whose name is being edited in place. */
+  /** A variant or layout whose name is being edited in place. */
   renaming(name: string): boolean
   /** The new name (null: cancelled). */
   rename(name: string, label: string | null): void

@@ -1,13 +1,13 @@
 import { resolveSettings } from '@shared/layout'
-import type { Artboard, Clip, CropSettings, ExportPrefs, GridItem, ProjectFile, SettingKey, SplitLayout } from '@shared/types'
+import type { Artboard, Clip, CropSettings, ExportPrefs, LayoutItem, ProjectFile, SettingKey, SplitArrangement } from '@shared/types'
 import { History } from './history.svelte'
-import { withGrid, withSplit } from './model/items'
+import { withLayout, withSplit } from './model/items'
 import { changes, emptyProject, FRAMING_KEYS, newBoard, normalizeProject, uid, withOverrides, withoutOverrides } from './model/project'
 
 /**
  * The project: its artboards (each with default settings and per-item overrides), video trims,
- * variants and grids, and export preferences, with undo. Saved next to the assets (see App). Edits
- * name their targets: a list of items (assets, variants, grid slots), or none for the artboard's
+ * variants and layouts, and export preferences, with undo. Saved next to the assets (see App). Edits
+ * name their targets: a list of items (assets, variants, layout slots), or none for the artboard's
  * defaults.
  */
 class Project {
@@ -114,7 +114,7 @@ class Project {
   }
 
   /**
-   * Changes reaching across the project (adding or removing variants and grids, a grid's slots),
+   * Changes reaching across the project (adding or removing variants and layouts, a layout's slots),
    * made by the functions in model/items. Returning the file unchanged changes nothing.
    */
   change(fn: (file: ProjectFile) => ProjectFile, key = ''): void {
@@ -122,21 +122,21 @@ class Project {
     if (next !== this.file) this.history.commit(next, key)
   }
 
-  /** A grid's own settings (name, spacing, background, duration). Successive changes to one merge. */
-  editGrid(key: string, patch: Partial<GridItem>): void {
-    this.change((f) => withGrid(f, key, patch), `grid:${key}:${Object.keys(patch).sort()}`)
+  /** A layout's own settings (name, spacing, background, duration). Successive changes to one merge. */
+  editLayout(key: string, patch: Partial<LayoutItem>): void {
+    this.change((f) => withLayout(f, key, patch), `layout:${key}:${Object.keys(patch).sort()}`)
   }
 
-  /** How one of a grid's splits is arranged on the current artboard (null: as the artboard's shape has it). */
-  setSplit(grid: string, split: string, set: SplitLayout | null): void {
-    this.mapBoard((b) => withSplit(b, grid, split, set), `split:${grid}:${split}`)
+  /** How one of a layout's splits is arranged on the current artboard (null: as the artboard's shape has it). */
+  setSplit(layout: string, split: string, set: SplitArrangement | null): void {
+    this.mapBoard((b) => withSplit(b, layout, split, set), `split:${layout}:${split}`)
   }
 
-  /** Every split of a grid back to following the current artboard. */
-  resetSplits(grid: string): void {
+  /** Every split of a layout back to following the current artboard. */
+  resetSplits(layout: string): void {
     this.mapBoard((b) => {
-      if (!b.splits?.[grid]) return b
-      const { [grid]: _gone, ...splits } = b.splits
+      if (!b.splits?.[layout]) return b
+      const { [layout]: _gone, ...splits } = b.splits
       return { ...b, splits }
     })
   }

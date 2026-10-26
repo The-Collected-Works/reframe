@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { drawGrid } from '@shared/grid'
+  import { drawLayout } from '@shared/arrangement'
   import { drawFrame, resolveSettings } from '@shared/layout'
   import type { Artboard } from '@shared/types'
   import { visibility } from '../../lib/attach'
   import { scheduleDraw } from '../../lib/draw-queue'
   import type { Asset } from '../../state/library.svelte'
-  import { thumbSource, type GridScene } from '../scene'
+  import { thumbSource, type LayoutScene } from '../scene'
   import { FILM_HEIGHT } from './film'
 
   let {
@@ -18,8 +18,8 @@
   }: {
     asset: Asset
     board: Artboard
-    /** A grid, as it sits on the board. */
-    scene: GridScene | null
+    /** A layout, as it sits on the board. */
+    scene: LayoutScene | null
     /** The one the single view shows. */
     on: boolean
     onclick: () => void
@@ -45,7 +45,7 @@
       canvas.height = ph
     }
     const ctx = canvas.getContext('2d')!
-    if (scene) drawGrid(ctx, scene.grid, scene.layout, board.width, board.height, pw / board.width, thumbSource(scene))
+    if (scene) drawLayout(ctx, scene.layout, scene.arrangement, board.width, board.height, pw / board.width, thumbSource(scene))
     else drawFrame(ctx, asset.thumb, asset.w, asset.h, board.width, board.height, settings, pw / board.width)
     ready = true
     drawn = key

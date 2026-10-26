@@ -36,37 +36,37 @@ export interface Artboard {
   width: number
   height: number
   defaults: CropSettings
-  /** Keyed by item: an asset's file name, a variant's key, or a grid slot's (see grid.ts). */
+  /** Keyed by item: an asset's file name, a variant's key, or a layout slot's (see arrangement.ts). */
   overrides: Record<string, Partial<CropSettings>>
-  /** How grids are arranged on this artboard: by grid key, then split id. Unset follows its shape. */
-  splits?: Record<string, Record<string, SplitLayout>>
+  /** How layouts are arranged on this artboard: by layout key, then split id. Unset follows its shape. */
+  splits?: Record<string, Record<string, SplitArrangement>>
 }
 
-/** A cell in a grid, showing an item (or nothing yet). */
-export interface GridSlot {
+/** A cell in a layout, showing an item (or nothing yet). */
+export interface Slot {
   id: string
   item: string | null
-  /** A video shorter than the grid: plays again from its start, or holds its last frame. */
+  /** A video shorter than the layout: plays again from its start, or holds its last frame. */
   end?: 'loop' | 'hold'
 }
 
 /** Its children side by side or stacked, whichever way suits the space it gets on each artboard. */
-export interface GridSplit {
+export interface Split {
   id: string
-  children: GridNode[]
+  children: LayoutNode[]
 }
 
-export type GridNode = GridSlot | GridSplit
+export type LayoutNode = Slot | Split
 
 /** How one split sits on one artboard. Either part left unset follows the artboard. */
-export interface SplitLayout {
+export interface SplitArrangement {
   dir?: 'row' | 'col'
   /** Each child's share of the space, in any unit. */
   weights?: number[]
 }
 
 /**
- * Items that aren't files: a variant (a file again, with its own framing and trim) or a grid
+ * Items that aren't files: a variant (a file again, with its own framing and trim) or a layout
  * (several items laid out together). Each is a row of its own, keyed apart from file names.
  */
 export interface VariantItem {
@@ -76,10 +76,10 @@ export interface VariantItem {
   name: string
 }
 
-export interface GridItem {
-  kind: 'grid'
+export interface LayoutItem {
+  kind: 'layout'
   name: string
-  root: GridNode
+  root: LayoutNode
   /** In artboard pixels: between cells, and around them. */
   gap: number
   padding: number
@@ -90,7 +90,7 @@ export interface GridItem {
   duration: number | null
 }
 
-export type VirtualItem = VariantItem | GridItem
+export type VirtualItem = VariantItem | LayoutItem
 
 export interface Clip {
   start: number
@@ -111,7 +111,7 @@ export interface ProjectFile {
   /** Trim is a property of the source, shared across artboards. */
   clips: Record<string, Clip>
   export: ExportPrefs
-  /** Variants and grids, by key. */
+  /** Variants and layouts, by key. */
   items?: Record<string, VirtualItem>
 }
 
@@ -159,8 +159,8 @@ export interface VideoExportJob {
   crf: number
 }
 
-/** One video cell of a grid export, framed into its rectangle like an artboard of that size. */
-export interface GridCellJob {
+/** One video cell of a layout export, framed into its rectangle like an artboard of that size. */
+export interface LayoutCellJob {
   input: string
   x: number
   y: number
@@ -177,17 +177,17 @@ export interface GridCellJob {
 }
 
 /**
- * A grid with video in it. Everything that doesn't move (background, images, rounded corners) is
+ * A layout with video in it. Everything that doesn't move (background, images, rounded corners) is
  * drawn by the renderer into `layer`, a PNG with holes where the videos show through.
  */
-export interface GridExportJob {
+export interface LayoutExportJob {
   id: string
   output: string
   width: number
   height: number
   bgColor: string
   layer: Uint8Array
-  cells: GridCellJob[]
+  cells: LayoutCellJob[]
   duration: number
   fps: number
   crf: number
@@ -248,7 +248,7 @@ export interface ReframeApi {
   chooseExportDir(defaultPath?: string): Promise<string | null>
   writeFile(path: string, data: ArrayBuffer): Promise<void>
   exportVideo(job: VideoExportJob): Promise<void>
-  exportGrid(job: GridExportJob): Promise<void>
+  exportLayout(job: LayoutExportJob): Promise<void>
   cancelExport(): Promise<void>
   poster(path: string): Promise<PosterResult>
   /** A frame decoded the way export decodes it, as JPEG. */

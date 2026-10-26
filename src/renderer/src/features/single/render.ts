@@ -1,6 +1,6 @@
-import { drawGrid, type CellSource, type GridLayout } from '@shared/grid'
+import { drawLayout, type CellSource, type Arrangement } from '@shared/arrangement'
 import { computeLayout, corners, drawFrame, type Placement, type Rect } from '@shared/layout'
-import type { Artboard, CropSettings, GridItem, GridSlot } from '@shared/types'
+import type { Artboard, CropSettings, LayoutItem, Slot } from '@shared/types'
 import { themeColor } from '../../lib/theme'
 import type { Guides } from '../snapping'
 import type { View } from './camera.svelte'
@@ -114,14 +114,14 @@ export function drawStage(ctx: CanvasRenderingContext2D, f: Frame): void {
   ctx.restore()
 }
 
-/** The grid editor's view: the grid, and whatever editing chrome is showing. */
-export interface GridFrame {
+/** The layout editor's view: the layout, and whatever editing chrome is showing. */
+export interface LayoutFrame {
   view: View
   dpr: number
   board: Artboard
-  grid: GridItem
-  layout: GridLayout
-  source: (slot: GridSlot) => CellSource | null
+  layout: LayoutItem
+  arrangement: Arrangement
+  source: (slot: Slot) => CellSource | null
   /** The cell being edited: its rectangle, and its media's placement there (in artboard pixels). */
   selected: { rect: Rect; placement: Placement | null; source: CellSource | null } | null
   /** Editing chrome shows (not while the eyedropper is open: it needs the exact picture). */
@@ -137,9 +137,9 @@ export interface GridFrame {
 /** A cell with nothing in it yet. */
 const EMPTY = 'rgba(128, 128, 128, 0.16)'
 
-/** Draws the grid editor: the grid on its board, empty cells marked, and the selected cell's gizmo. */
-export function drawGridStage(ctx: CanvasRenderingContext2D, f: GridFrame): void {
-  const { view, dpr, board, grid, layout, selected } = f
+/** Draws the layout editor: the layout on its board, empty cells marked, and the selected cell's gizmo. */
+export function drawLayoutStage(ctx: CanvasRenderingContext2D, f: LayoutFrame): void {
+  const { view, dpr, board, layout, arrangement, selected } = f
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
   const kk = view.k * dpr
   const ox = view.bx * dpr
@@ -165,7 +165,7 @@ export function drawGridStage(ctx: CanvasRenderingContext2D, f: GridFrame): void
   ctx.beginPath()
   ctx.rect(0, 0, W * kk, H * kk)
   ctx.clip()
-  drawGrid(ctx, grid, layout, W, H, kk, f.source, EMPTY)
+  drawLayout(ctx, layout, arrangement, W, H, kk, f.source, EMPTY)
   ctx.restore()
   if (!f.chrome) return
 
@@ -175,7 +175,7 @@ export function drawGridStage(ctx: CanvasRenderingContext2D, f: GridFrame): void
 
   // Empty cells: a plus, to say there's something to put there.
   ctx.strokeStyle = 'rgba(255,255,255,0.35)'
-  for (const c of layout.cells) {
+  for (const c of arrangement.cells) {
     if (c.slot.item) continue
     const cx = ox + (c.rect.x + c.rect.w / 2) * kk
     const cy = oy + (c.rect.y + c.rect.h / 2) * kk

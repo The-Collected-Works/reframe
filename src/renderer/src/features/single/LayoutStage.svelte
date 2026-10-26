@@ -1,25 +1,25 @@
 <!--
-  The grid editor's canvas: the grid on its artboard, framed by the camera. Drag a gap between
+  The layout editor's canvas: the layout on its artboard, framed by the camera. Drag a gap between
   cells to share the space differently (on this artboard); click a cell to frame what it shows,
   with the same gizmo as a single asset, clipped to its cell; drag the selected cell's tab onto
   another to swap them. Takes props; the single view connects it.
 -->
 <script lang="ts">
-  import { findNode, isSplit, type CellSource, type GridDivider } from '@shared/grid'
+  import { findNode, isSplit, type CellSource, type Gap } from '@shared/arrangement'
   import { bounds, computeLayout, type Placement, type Point } from '@shared/layout'
-  import type { Artboard, CropSettings, GridSlot, SettingKey } from '@shared/types'
+  import type { Artboard, CropSettings, Slot, SettingKey } from '@shared/types'
   import { trackPointer } from '../../lib/drag'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { Icon } from '../../ui'
-  import { GRID_EDITOR, SINGLE } from '../keymaps'
-  import type { GridScene } from '../scene'
+  import { LAYOUT_EDITOR, SINGLE } from '../keymaps'
+  import type { LayoutScene } from '../scene'
   import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
   import { camera, type View } from './camera.svelte'
   import { dragGap, gapAt } from './gaps'
   import { dragTo, hitTest, type DragStart, type Mode } from './gizmo'
-  import type { GridPlayer } from './gridPlayer.svelte'
+  import type { LayoutPlayer } from './layoutPlayer.svelte'
   import { WheelNav } from './nav'
-  import { drawGridStage } from './render'
+  import { drawLayoutStage } from './render'
   import { zoomTransitions } from './zoom.svelte'
 
   let {
@@ -39,10 +39,10 @@
     onExit
   }: {
     board: Artboard
-    scene: GridScene
+    scene: LayoutScene
     /** The cell being edited. */
     slot: string | null
-    player: GridPlayer | null
+    player: LayoutPlayer | null
     /** The eyedropper is open: no editing chrome, it needs the exact picture. */
     picking: boolean
     onSelect: (slot: string | null) => void
@@ -66,8 +66,8 @@
   const dpr = window.devicePixelRatio || 1
   const TRANSFORM: SettingKey[] = ['zoom', 'scaleX', 'scaleY', 'offsetX', 'offsetY', 'rotation']
 
-  const layout = $derived(scene.layout)
-  const cellOf = (id: string | null) => (id ? layout.cells.find((c) => c.slot.id === id) : undefined)
+  const arrangement = $derived(scene.arrangement)
+  const cellOf = (id: string | null) => (id ? arrangement.cells.find((c) => c.slot.id === id) : undefined)
   /** A cell's own artboard: the gizmo frames media in it exactly as in a whole artboard. */
   const cellBoard = (r: { w: number; h: number }): Artboard => ({ ...board, width: r.w, height: r.h })
 
@@ -88,7 +88,7 @@
   let cursor = $state('default')
   let readout = $state<{ x: number; y: number; text: string } | null>(null)
   let hoverCell = $state<string | null>(null)
-  let hoverGap = $state<GridDivider | null>(null)
+  let hoverGap = $state<Gap | null>(null)
   let dropCell = $state<string | null>(null)
   let dragging = $state(false)
   let guides: Guides = NO_GUIDES
@@ -145,7 +145,7 @@
   })
 
   /** A cell's picture now: its video frame while one is playing, else its thumbnail. */
-  const source = (s: GridSlot): CellSource | null => {
+  const source = (s: Slot): CellSource | null => {
     const c = scene.cells.get(s.id)
     const a = c?.asset
     if (!a?.w) return null
@@ -178,12 +178,12 @@
       canvas.height = ph
     }
     const sel = f.selected
-    drawGridStage(canvas.getContext('2d')!, {
+    drawLayoutStage(canvas.getContext('2d')!, {
       view: f.view,
       dpr,
       board: f.board,
-      grid: f.scene.grid,
       layout: f.scene.layout,
+      arrangement: f.scene.arrangement,
       source,
       selected: sel ? { rect: sel.cell.rect, placement: sel.placement, source: source(sel.cell.slot) } : null,
       chrome: !f.picking,
@@ -201,9 +201,10 @@
     const v = cam.current
     return { x: (clientX - r.left - v.bx) / v.k, y: (clientY - r.top - v.by) / v.k }
   }
-  const cellAt = (pt: Point) => layout.cells.find((c) => pt.x >= c.rect.x && pt.x <= c.rect.x + c.rect.w && pt.y >= c.rect.y && pt.y <= c.rect.y + c.rect.h)
+  const cellAt = (pt: Point) =>
+    arrangement.cells.find((c) => pt.x >= c.rect.x && pt.x <= c.rect.x + c.rect.w && pt.y >= c.rect.y && pt.y <= c.rect.y + c.rect.h)
 
-  type Hit = { kind: 'media'; mode: Mode; cursor: string } | { kind: 'gap'; gap: GridDivider } | { kind: 'cell'; slot: string } | { kind: 'none' }
+  type Hit = { kind: 'media'; mode: Mode; cursor: string } | { kind: 'gap'; gap: Gap } | { kind: 'cell'; slot: string } | { kind: 'none' }
   /**
    * What a press at `pt` would grab: the selected cell's handles first, then a gap, then the
    * selected cell's media (its overflow too), then any cell.
@@ -212,7 +213,7 @@
     const sel = selected
     const media = sel?.local ? hitTest(sel.local, cellBoard(sel.cell.rect), { x: pt.x - sel.cell.rect.x, y: pt.y - sel.cell.rect.y }, k, true) : null
     if (media && (media.mode.kind === 'scale' || media.mode.kind === 'rotate')) return { kind: 'media', ...media }
-    const gap = gapAt(layout, pt, k)
+    const gap = gapAt(arrangement, pt, k)
     if (gap) return { kind: 'gap', gap }
     if (media && media.mode.kind === 'move') return { kind: 'media', ...media }
     const cell = cellAt(pt)
@@ -262,7 +263,7 @@
     zoomOut: () => zoomView(0.8, width / 2, height / 2)
   })
   // Esc lets go of the cell first (before the app's Esc goes back to the grid).
-  useKeymap(GRID_EDITOR, {
+  useKeymap(LAYOUT_EDITOR, {
     deselect: { when: () => !!slot, run: () => onSelect(null) },
     remove: { when: () => !!slot, run: () => onRemove() }
   })
@@ -350,8 +351,8 @@
   }
 
   /** The content's own shape, for the cells either side of a gap (snapping so it fits uncropped). */
-  function aspectsOf(gap: GridDivider): (index: number) => number | null {
-    const split = findNode(scene.grid.root, gap.split)
+  function aspectsOf(gap: Gap): (index: number) => number | null {
+    const split = findNode(scene.layout.root, gap.split)
     return (i) => {
       const child = split && isSplit(split) ? split.children[i] : null
       if (!child || isSplit(child)) return null
@@ -361,10 +362,10 @@
     }
   }
 
-  function dragGapAt(e: PointerEvent, gap: GridDivider) {
+  function dragGapAt(e: PointerEvent, gap: Gap) {
     const aspect = aspectsOf(gap)
-    // From the layout as the drag starts: the gap's split keeps its place while its shares change.
-    const from = layout
+    // From the arrangement as the drag starts: the gap's split keeps its place while its shares change.
+    const from = arrangement
     follow(e, (x, y, m) => {
       const pt = toBoard(x, y)
       const res = dragGap(from, gap, gap.dir === 'row' ? pt.x : pt.y, k, aspect, m.altKey)

@@ -4,7 +4,7 @@
   rounded card), which contains its subfolders, so the tint covers exactly what a click would fold.
 -->
 <script lang="ts">
-  import { GRIDS, type FolderNode } from '../../state/model/tree'
+  import { LAYOUTS, type FolderNode } from '../../state/model/tree'
   import { Icon, Tag } from '../../ui'
   import Collapsible from './Collapsible.svelte'
   import { GAP, PAD, useGrid } from './context'
@@ -18,9 +18,9 @@
 
 <!-- Folder icon and the full path from a leading slash, parents muted: "/" for the top level, "/ Shoot A / Day 2". -->
 {#snippet folderName(folder: string)}
-  {#if folder === GRIDS}
+  {#if folder === LAYOUTS}
     <span class="section-icon" aria-hidden="true"><Icon name="layout" size={13} /></span>
-    <span class="section-path"><span class="section-crumb current">Grids</span></span>
+    <span class="section-path"><span class="section-crumb current">Layouts</span></span>
   {:else}
     {@render folderPath(folder)}
   {/if}
@@ -82,7 +82,7 @@
     -->
     <button
       class={['grid-section', { collapsed: node.collapsed }]}
-      title={`${node.folder === GRIDS ? 'Grids' : node.folder ? `${g.rootName}/${node.folder}` : g.rootName}. Click to ${node.collapsed ? 'expand' : 'collapse'}`}
+      title={`${node.folder === LAYOUTS ? 'Layouts' : node.folder ? `${g.rootName}/${node.folder}` : g.rootName}. Click to ${node.collapsed ? 'expand' : 'collapse'}`}
       aria-expanded={!node.collapsed}
       onpointerdown={(e) => e.stopPropagation()}
       onclick={() => g.toggleFolder(node.folder)}

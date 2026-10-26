@@ -1,9 +1,9 @@
-import type { GridDivider, GridLayout } from '@shared/grid'
+import type { Gap, Arrangement } from '@shared/arrangement'
 import type { Rect } from '@shared/layout'
 import type { Guides } from '../snapping'
 
 /**
- * Dragging the gap between two cells (or two groups of cells) in the grid editor, as plain
+ * Dragging the gap between two cells (or two groups of cells) in the layout editor, as plain
  * geometry. Points are in artboard pixels; `k` is screen pixels per artboard pixel.
  */
 
@@ -13,9 +13,9 @@ const GRAB = 5
 const MIN = 16
 
 /** The gap under `pt`, if any. */
-export function gapAt(layout: GridLayout, pt: { x: number; y: number }, k: number): GridDivider | null {
+export function gapAt(arrangement: Arrangement, pt: { x: number; y: number }, k: number): Gap | null {
   const t = GRAB / k
-  for (const d of layout.dividers) {
+  for (const d of arrangement.dividers) {
     const r = d.rect
     const hit =
       d.dir === 'row'
@@ -33,14 +33,14 @@ export function gapAt(layout: GridLayout, pt: { x: number; y: number }, k: numbe
  * content's width over height, or null), and into line with other gaps; `free` turns that off.
  */
 export function dragGap(
-  layout: GridLayout,
-  d: GridDivider,
+  arrangement: Arrangement,
+  d: Gap,
   pos: number,
   k: number,
   aspect: (index: number) => number | null,
   free: boolean
 ): { weights: number[]; guides: Guides; readout: string } {
-  const split = layout.splits.get(d.split)!
+  const split = arrangement.splits.get(d.split)!
   const row = d.dir === 'row'
   const i = d.index
   const a = split.rects[i]
@@ -64,7 +64,7 @@ export function dragGap(
   const rb = aspect(i + 1)
   if (ra) candidates.push({ len: row ? across(a) * ra : across(a) / ra, label: 'Fits' })
   if (rb) candidates.push({ len: both - (row ? across(b) * rb : across(b) / rb), label: 'Fits' })
-  for (const o of layout.dividers) {
+  for (const o of arrangement.dividers) {
     if (o === d || o.dir !== d.dir) continue
     const mid = row ? o.rect.x + o.rect.w / 2 : o.rect.y + o.rect.h / 2
     candidates.push({ len: mid - gap / 2 - start, line: mid })

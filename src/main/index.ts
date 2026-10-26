@@ -3,8 +3,8 @@ import { dirname, isAbsolute, join, normalize, relative, resolve } from 'node:pa
 import { Readable } from 'node:stream'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import { mimeOf } from '@shared/media'
-import type { ColorMeta, FolderScan, GridExportJob, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
-import { cancelExport, exportGrid, exportVideo, frame, poster, scrubProxy, stopWorker } from './jobs'
+import type { ColorMeta, FolderScan, LayoutExportJob, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
+import { cancelExport, exportLayout, exportVideo, frame, poster, scrubProxy, stopWorker } from './jobs'
 import { markFolder, noteSkipped, saveProject, scanFolder, setSkipped, unmarkFolder, watchFolder } from './folder'
 import { installUpdate, pollAutoUpdate, updateStatus } from './autoupdate'
 import { folderArg, forget, readState, recentFolders, remember, updateSystemMenus } from './recent'
@@ -248,11 +248,11 @@ ipcMain.handle('export-video', async (e, job: VideoExportJob) => {
   await fs.mkdir(dirname(job.output), { recursive: true })
   await exportVideo(job, (progress) => e.sender.send('export-progress', { id: job.id, progress }))
 })
-ipcMain.handle('export-grid', async (e, job: GridExportJob) => {
+ipcMain.handle('export-layout', async (e, job: LayoutExportJob) => {
   job.cells.forEach((c) => mustRead(c.input))
   if (!inOutput(job.output)) throw new Error('Not in the export folder')
   await fs.mkdir(dirname(job.output), { recursive: true })
-  await exportGrid(job, (progress) => e.sender.send('export-progress', { id: job.id, progress }))
+  await exportLayout(job, (progress) => e.sender.send('export-progress', { id: job.id, progress }))
 })
 ipcMain.handle('cancel-export', () => cancelExport())
 ipcMain.handle('poster', (_e, path: string) => {

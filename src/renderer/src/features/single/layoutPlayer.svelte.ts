@@ -1,10 +1,10 @@
 import { untrack } from 'svelte'
-import { slotTime } from '@shared/grid'
+import { slotTime } from '@shared/arrangement'
 import { mediaUrl } from '../../lib/bridge'
 import { releaseVideo, silentVideo } from '../../lib/media'
 
-/** A video cell: where its file is, and the part of it the grid plays. */
-export interface GridVideo {
+/** A video cell: where its file is, and the part of it the layout plays. */
+export interface LayoutVideo {
   slot: string
   path: string
   start: number
@@ -13,13 +13,13 @@ export interface GridVideo {
 }
 
 /**
- * Playing a grid in the single view: one clock for the grid, and a video per video cell that
+ * Playing a layout in the single view: one clock for the layout, and a video per video cell that
  * follows it, looping or holding exactly as the export does (see slotTime). Silent, as the export
  * is for now. `frame` changes whenever there's something new to draw. Call `destroy()` when done.
  */
-export class GridPlayer {
+export class LayoutPlayer {
   playing = $state(false)
-  /** Seconds into the grid. */
+  /** Seconds into the layout. */
   time = $state(0)
   frame = $state(0)
 
@@ -29,7 +29,7 @@ export class GridPlayer {
   private startedTime = 0
 
   constructor(
-    private cells: () => GridVideo[],
+    private cells: () => LayoutVideo[],
     private duration: () => number
   ) {
     this.stop = $effect.root(() => this.effects())
@@ -91,7 +91,7 @@ export class GridPlayer {
       })
     })
 
-    // The clock: while playing, time runs and wraps at the grid's length; each video follows it.
+    // The clock: while playing, time runs and wraps at the layout's length; each video follows it.
     $effect(() => {
       if (!this.playing) {
         untrack(() => {

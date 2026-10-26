@@ -1,10 +1,10 @@
 <!--
-  One item at a time, large: the stage (or for a grid, the grid editor), and floating over the band
-  reserved at its bottom, the player (for videos and grids with video) and the filmstrip. The
+  One item at a time, large: the stage (or for a layout, the layout editor), and floating over the band
+  reserved at its bottom, the player (for videos and layouts with video) and the filmstrip. The
   single view's connection to app state; the parts inside take props.
 -->
 <script lang="ts">
-  import { slotKey } from '@shared/grid'
+  import { slotKey } from '@shared/arrangement'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { removeSlot, setMode, setSlot, swapSlots } from '../../state/actions'
   import { items } from '../../state/items.svelte'
@@ -18,11 +18,11 @@
   import { Button } from '../../ui'
   import { SINGLE } from '../keymaps'
   import { assetMenu, slotMenu } from '../menus'
-  import { gridScene } from '../scene'
+  import { layoutScene } from '../scene'
   import Filmstrip from './Filmstrip.svelte'
-  import { GridPlayer, type GridVideo } from './gridPlayer.svelte'
-  import GridPlayerBar from './GridPlayerBar.svelte'
-  import GridStage from './GridStage.svelte'
+  import { LayoutPlayer, type LayoutVideo } from './layoutPlayer.svelte'
+  import LayoutPlayerBar from './LayoutPlayerBar.svelte'
+  import LayoutStage from './LayoutStage.svelte'
   import ItemPicker from './ItemPicker.svelte'
   import { Player } from './player.svelte'
   import PlayerBar from './PlayerBar.svelte'
@@ -30,10 +30,10 @@
 
   const focused = $derived(items.entry(selection.focus))
   const board = $derived(project.board)
-  // A grid opens in the grid editor; anything else on the stage.
-  const gridKey = $derived(focused?.kind === 'grid' ? focused.name : null)
-  const scene = $derived(gridKey ? gridScene(gridKey, board) : null)
-  const asset = $derived(gridKey ? undefined : items.asset(selection.focus))
+  // A layout opens in the layout editor; anything else on the stage.
+  const layoutKey = $derived(focused?.kind === 'layout' ? focused.name : null)
+  const scene = $derived(layoutKey ? layoutScene(layoutKey, board) : null)
+  const asset = $derived(layoutKey ? undefined : items.asset(selection.focus))
   const settings = $derived(asset ? project.settingsOf(asset.name) : board.defaults)
   // Position among what the grid shows (filtered, sorted, collapsed folders left out).
   const strip = $derived(view.visible.map((e) => items.with(e)))
@@ -77,51 +77,51 @@
     if (v && (v.currentTime < start || v.currentTime > end)) player?.seek(start)
   }
 
-  // A grid's videos as it plays them, and its player.
-  const gridVideos = $derived.by((): GridVideo[] => {
+  // A layout's videos as it plays them, and its player.
+  const layoutVideos = $derived.by((): LayoutVideo[] => {
     if (!scene) return []
-    return scene.layout.cells.flatMap(({ slot }) => {
+    return scene.arrangement.cells.flatMap(({ slot }) => {
       const a = scene.cells.get(slot.id)?.asset
       if (a?.kind !== 'video' || !a.duration) return []
       const c = clipFor(project.file, a.name, a.duration)
       return [{ slot: slot.id, path: a.path, start: c.start, length: c.end - c.start, end: slot.end ?? 'loop' }]
     })
   })
-  let gridPlayer = $state.raw<GridPlayer | null>(null)
+  let layoutPlayer = $state.raw<LayoutPlayer | null>(null)
   $effect(() => {
-    if (!gridKey) return
-    const p = new GridPlayer(
-      () => gridVideos,
+    if (!layoutKey) return
+    const p = new LayoutPlayer(
+      () => layoutVideos,
       () => scene?.duration ?? 0
     )
-    gridPlayer = p
+    layoutPlayer = p
     return () => {
       p.destroy()
-      gridPlayer = null
+      layoutPlayer = null
     }
   })
-  const choosing = $derived(shell.choosing && scene ? scene.layout.cells.find((c) => c.slot.id === shell.choosing) : undefined)
+  const choosing = $derived(shell.choosing && scene ? scene.arrangement.cells.find((c) => c.slot.id === shell.choosing) : undefined)
 
   // Space plays and pauses; any arrow steps through the strip. (The stage handles the rest.)
   useKeymap(SINGLE, {
-    play: () => (gridKey ? gridPlayer?.toggle() : player?.toggle()),
+    play: () => (layoutKey ? layoutPlayer?.toggle() : player?.toggle()),
     prev: () => selection.step(-1),
     next: () => selection.step(1)
   })
 </script>
 
 <div class="single">
-  {#if scene && gridKey}
-    <GridStage
+  {#if scene && layoutKey}
+    <LayoutStage
       {board}
       {scene}
       slot={selection.slot}
-      player={gridPlayer}
+      player={layoutPlayer}
       picking={shell.picking}
       onSelect={(slot) => (selection.slot = slot)}
-      onEdit={(slot, patch) => project.edit([slotKey(gridKey, slot)], patch)}
-      onReset={(slot, keys) => project.resetKeys([slotKey(gridKey, slot)], keys)}
-      onArrange={(split, weights) => project.setSplit(gridKey, split, { weights })}
+      onEdit={(slot, patch) => project.edit([slotKey(layoutKey, slot)], patch)}
+      onReset={(slot, keys) => project.resetKeys([slotKey(layoutKey, slot)], keys)}
+      onArrange={(split, weights) => project.setSplit(layoutKey, split, { weights })}
       onSwap={swapSlots}
       onChoose={(slot) => {
         selection.slot = slot
@@ -129,7 +129,7 @@
       }}
       onRemove={removeSlot}
       onMenu={(slot, at) => {
-        const cell = scene.layout.cells.find((c) => c.slot.id === slot)
+        const cell = scene.arrangement.cells.find((c) => c.slot.id === slot)
         const a = scene.cells.get(slot)?.asset
         slotMenu(slot, !!a, a?.kind === 'video', cell?.slot.end ?? 'loop', at)
       }}
@@ -151,8 +151,8 @@
   {/if}
   <div class="single-fade"></div>
   <div class="single-overlay">
-    {#if gridPlayer && scene?.duration}
-      <GridPlayerBar player={gridPlayer} duration={scene.duration} />
+    {#if layoutPlayer && scene?.duration}
+      <LayoutPlayerBar player={layoutPlayer} duration={scene.duration} />
     {:else if asset && player && asset.duration > 0}
       <PlayerBar
         {player}
@@ -174,7 +174,7 @@
         assets={strip}
         {board}
         focus={selection.focus}
-        composite={(name) => gridScene(name, board)}
+        composite={(name) => layoutScene(name, board)}
         onSelect={(name) => selection.select(name)}
         onSeen={(a) => prioritize(a.path)}
       />
@@ -183,9 +183,9 @@
   </div>
 </div>
 
-{#if choosing && gridKey}
+{#if choosing && layoutKey}
   <ItemPicker
-    assets={items.all.filter((e) => e.kind !== 'grid').map((e) => items.with(e))}
+    assets={items.all.filter((e) => e.kind !== 'layout').map((e) => items.with(e))}
     current={choosing.slot.item}
     onChoose={(key) => {
       setSlot(choosing.slot.id, { item: key })

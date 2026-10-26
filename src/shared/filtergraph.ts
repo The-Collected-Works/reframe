@@ -1,6 +1,6 @@
 import { inColor, OUT_COLOR, OUT_TAGS } from './color'
 import { blurLayout, bounds, computeLayout, quarterTurns, rasterPlan, rotatedPlan } from './layout'
-import type { GridExportJob, VideoExportJob } from './types'
+import type { LayoutExportJob, VideoExportJob } from './types'
 
 const hex = (c: string): string => '0x' + c.replace('#', '').slice(0, 6).padEnd(6, '0')
 const rgb = (c: string): [number, number, number] => {
@@ -89,12 +89,12 @@ export function videoArgs(job: VideoExportJob): string[] {
 }
 
 /**
- * ffmpeg arguments for putting a grid together, once each of its videos has been framed into its
- * own cell-sized file (see exportGrid): the background, each video where it goes (looping, or
+ * ffmpeg arguments for putting a layout together, once each of its videos has been framed into its
+ * own cell-sized file (see exportLayout): the background, each video where it goes (looping, or
  * holding its last frame once it ends), then the layer of everything that doesn't move on top
  * (images, gaps, rounded corners), with holes where the videos show through.
  */
-export function gridArgs(job: GridExportJob, layer: string, cells: string[], output: string): string[] {
+export function layoutArgs(job: LayoutExportJob, layer: string, cells: string[], output: string): string[] {
   const { width: W, height: H } = job
   const color = hex(job.bgColor)
   const duration = job.duration.toFixed(3)

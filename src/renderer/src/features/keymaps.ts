@@ -36,8 +36,8 @@ export const GRID = keymap({
     up: { keys: 'arrowup', label: 'Row above' },
     down: { keys: 'arrowdown', label: 'Row below' },
     duplicate: { keys: 'mod+d', label: 'Duplicate' },
-    combine: { keys: 'mod+g', label: 'Combine into a grid' },
-    remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Delete a variant or grid' }
+    combine: { keys: 'mod+g', label: 'Combine into a layout' },
+    remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Delete a variant or layout' }
   },
   notes: [
     { keys: 'shift+Click', label: 'Select a range' },
@@ -73,8 +73,8 @@ export const SINGLE = keymap({
   ]
 })
 
-export const GRID_EDITOR = keymap({
-  title: 'Grid editor',
+export const LAYOUT_EDITOR = keymap({
+  title: 'Layout editor',
   actions: {
     deselect: { keys: 'escape', label: 'Deselect the cell, then back to grid' },
     remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Remove the cell' }
@@ -89,4 +89,4 @@ export const GRID_EDITOR = keymap({
 })
 
 /** In the order the shortcuts panel lists them. */
-export const KEYMAPS = [GLOBAL, GRID, SINGLE, GRID_EDITOR]
+export const KEYMAPS = [GLOBAL, GRID, SINGLE, LAYOUT_EDITOR]
