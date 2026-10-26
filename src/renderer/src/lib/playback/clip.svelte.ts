@@ -26,6 +26,8 @@ export class Clip {
 
   /** Called for each new frame (trim previews draw from it straight away). */
   onframe: (() => void) | null = null
+  /** Called with a source that wouldn't load (so another can be found). */
+  onerror: ((url: string) => void) | null = null
 
   /** Shows `url` from now on (the same one again changes nothing). */
   setSource(url: string): void {
@@ -35,6 +37,17 @@ export class Clip {
     const v = silentVideo(url)
     v.loop = false
     this.incoming = v
+    v.addEventListener(
+      'error',
+      () => {
+        if (this.incoming !== v) return
+        this.incoming = null
+        this.src = this.el?.src ?? ''
+        releaseVideo(v)
+        this.onerror?.(url)
+      },
+      { once: true }
+    )
     v.addEventListener(
       'loadeddata',
       () => {
@@ -159,6 +172,7 @@ export class Clip {
 
   release(): void {
     this.onframe = null
+    this.onerror = null
     if (this.el) releaseVideo(this.el)
     if (this.incoming) releaseVideo(this.incoming)
     this.el = this.incoming = null

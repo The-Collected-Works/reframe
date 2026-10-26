@@ -68,7 +68,7 @@ function call<T>(msg: Request, progress?: (p: number) => void): Promise<T> {
 
 export const poster = (path: string) => call<PosterResult>({ type: 'poster', path })
 export const frame = (path: string, time: number, color?: ColorMeta, tag?: string, edge?: number) =>
-  call<Uint8Array>({ type: 'frame', path, time, color, tag, edge })
+  call<Uint8Array | null>({ type: 'frame', path, time, color, tag, edge })
 export const copy = (
   path: string,
   w: number,
@@ -78,7 +78,7 @@ export const copy = (
   duration: number,
   background: boolean,
   onProgress: (p: number) => void
-) => call<string>({ type: 'copy', path, w, h, color, edge, duration, background }, onProgress)
+) => call<string | null>({ type: 'copy', path, w, h, color, edge, duration, background }, onProgress)
 export const copiesMade = (list: { path: string; edge: number }[]) => call<(string | null)[]>({ type: 'copies-made', list })
 export const cancelCopy = (): void => worker?.postMessage({ type: 'cancel-copy' } satisfies WorkerRequest)
 export const exportVideo = (job: VideoExportJob, onProgress: (p: number) => void) => call<void>({ type: 'export', job }, onProgress)

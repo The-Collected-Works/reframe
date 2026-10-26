@@ -270,13 +270,15 @@ const framing = new Map<string, ChildProcess>()
 /**
  * One frame as JPEG, decoded with the source's colour metadata (what export sees), no bigger than
  * `edge` if given. Only the newest request from each `tag` matters (it's the frame on screen
- * there), so a new one stops that tag's previous one still decoding.
+ * there), so a new one stops that tag's previous one still decoding; the stopped one is answered
+ * with null.
  */
-export async function frame(path: string, time: number, color?: ColorMeta, tag = '', edge?: number): Promise<Buffer> {
+export async function frame(path: string, time: number, color?: ColorMeta, tag = '', edge?: number): Promise<Buffer | null> {
   framing.get(tag)?.kill('SIGKILL')
   const { proc, done } = grabFrame('frame', path, time, color, 2, edge)
   framing.set(tag, proc)
   const res = await done.finally(() => framing.get(tag) === proc && framing.delete(tag))
+  if (proc.killed) return null
   if (!res.stdout.length) throw new Error('Could not read frame')
   return res.stdout
 }
@@ -330,7 +332,7 @@ export async function copy(
   duration: number,
   background: boolean,
   onProgress: (p: number) => void
-): Promise<string> {
+): Promise<string | null> {
   const out = await copyPath(path, edge)
   if (await exists(out)) {
     touch(out)
@@ -346,7 +348,11 @@ export async function copy(
     copying.set(out, job)
     job.finally(() => copying.delete(out)).catch(() => {})
   }
-  return job
+  // Stopped for something more urgent: not an error, just not made (yet).
+  return job.catch((e) => {
+    if (String((e as Error).message) === 'cancelled') return null
+    throw e
+  })
 }
 
 /** Stops the copy being made (something more urgent needs the machine); its request fails. */

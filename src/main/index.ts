@@ -36,17 +36,21 @@ const within = (root: string, path: string) => {
 
 /**
  * The files the renderer may read: exactly the assets of the open folder's latest scan, plus the
- * scrub proxies handed out for them. Every path the renderer reads comes from one of those, and the
- * scan never follows links, so one lookup replaces any checking of where a path leads.
+ * playback copies handed out for them. Every path the renderer reads comes from one of those, and
+ * the scan never follows links, so one lookup replaces any checking of where a path leads. Copies
+ * are kept apart, since a rescan (any change in the folder) replaces the scan's set, and a copy
+ * still in use must stay readable.
  */
 let readable = new Set<string>()
+const copiesOut = new Set<string>()
 
 /** Where exports may be written: the folders the export dialog declared (see mark-output). */
 const outputRoots = new Set<string>()
 const inOutput = (path: string) => [...outputRoots].some((root) => within(root, normalize(path)))
 
 function canRead(path: string): boolean {
-  return readable.has(normalize(path))
+  const p = normalize(path)
+  return readable.has(p) || copiesOut.has(p)
 }
 
 function mustRead(path: string): void {
@@ -268,17 +272,17 @@ ipcMain.handle(
   async (e, id: number, path: string, w: number, h: number, color: ColorMeta | undefined, edge: number, duration: number, background: boolean) => {
     mustRead(path)
     const out = await copy(path, w, h, color, edge, duration, background, (progress) => e.sender.send('copy-progress', { id, progress }))
-    readable.add(normalize(out))
+    if (out) copiesOut.add(normalize(out))
     return out
   }
 )
 ipcMain.handle('copies-made', async (_e, list: { path: string; edge: number }[]) => {
-  const ok = list.map((c) => canRead(c.path))
+  const ok = list.map((c) => readable.has(normalize(c.path)))
   const found = await copiesMade(list.filter((_, i) => ok[i]))
   let i = 0
   return ok.map((yes) => {
     const out = yes ? found[i++] : null
-    if (out) readable.add(normalize(out))
+    if (out) copiesOut.add(normalize(out))
     return out
   })
 })

@@ -253,18 +253,27 @@ export interface ReframeApi {
   poster(path: string): Promise<PosterResult>
   /**
    * A frame decoded the way export decodes it, as JPEG, no bigger than `edge` if given. A newer
-   * request with the same `tag` stops the older one still decoding.
+   * request with the same `tag` stops the older one still decoding, which then gives null.
    */
-  frame(path: string, time: number, color?: ColorMeta, tag?: string, edge?: number): Promise<Uint8Array>
+  frame(path: string, time: number, color?: ColorMeta, tag?: string, edge?: number): Promise<Uint8Array | null>
   /**
    * Path of a playback copy `edge` pixels on its long side (every frame a keyframe), made on first
    * request (one at a time; `background` ones at low priority), with progress reported under `id`.
-   * Kept between sessions.
+   * Kept between sessions. Null: stopped (see cancelCopy) before it was done.
    */
-  copy(id: number, path: string, w: number, h: number, color: ColorMeta | undefined, edge: number, duration: number, background: boolean): Promise<string>
+  copy(
+    id: number,
+    path: string,
+    w: number,
+    h: number,
+    color: ColorMeta | undefined,
+    edge: number,
+    duration: number,
+    background: boolean
+  ): Promise<string | null>
   /** Which of these copies are made already (their paths, or null), making none. */
   copiesMade(list: { path: string; edge: number }[]): Promise<(string | null)[]>
-  /** Stops the copy being made; its request fails ("cancelled"). */
+  /** Stops the copy being made; its request gives null. */
   cancelCopy(): Promise<void>
   onCopyProgress(cb: (p: { id: number; progress: number }) => void): () => void
   reveal(path: string): Promise<void>

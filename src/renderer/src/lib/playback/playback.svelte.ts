@@ -40,8 +40,8 @@ export interface PlaybackOptions {
   originals?: boolean
 }
 
-/** How long the clock rests before the exact frames are fetched. */
-const SETTLE = 150
+/** How long the clock rests before exact frames are fetched (only where no copy is sharp enough). */
+const SETTLE = 300
 
 export class Playback {
   playing = $state(false)
@@ -216,6 +216,7 @@ export class Playback {
             this.clips.set(t.id, (c = new Clip()))
             this.changed++
           }
+          c.onerror = (bad) => copies.lost(t.file, bad)
           if (url) c.setSource(url)
         }
         for (const [key, withdraw] of this.wants) {
@@ -235,6 +236,11 @@ export class Playback {
         }
         this.sync(true)
       })
+    })
+
+    // Playing or scrubbing: making copies for anything not on screen waits.
+    $effect(() => {
+      if (this.playing || this.scrubbing) return untrack(() => copies.busy())
     })
 
     // The eyedropper reads the screen: stop on the exact frame.
@@ -300,7 +306,9 @@ export class Playback {
       })
     })
 
-    // At rest, each track's exact frame, at the size it's shown.
+    // At rest, the exact frame (decoded from the original by ffmpeg) for each track no copy is sharp
+    // enough for: none made yet, or zoomed in past them all. Otherwise the copy's own frame is exact
+    // already (copies are converted as export converts), and costs nothing.
     $effect(() => {
       if (this.playing || this.scrubbing) return
       void this.time
@@ -308,6 +316,7 @@ export class Playback {
       let alive = true
       const timer = setTimeout(() => {
         for (const t of tracks) {
+          if (untrack(() => copies.sharp(t.file, t.need))) continue
           const at = slotTime(
             untrack(() => this.time),
             t.start,
@@ -320,8 +329,10 @@ export class Playback {
           if (have && Math.abs(have.at - at) < 0.001 && have.edge >= edge) continue
           api
             .frame(t.file.path, at, t.file.color, `${this.tag}:${t.id}`, edge)
-            .then((jpeg) => createImageBitmap(new Blob([jpeg as BlobPart], { type: 'image/jpeg' })))
+            .then((jpeg) => (jpeg ? createImageBitmap(new Blob([jpeg as BlobPart], { type: 'image/jpeg' })) : null))
             .then((bitmap) => {
+              // Superseded by a newer request.
+              if (!bitmap) return
               if (!alive || this.playing || this.scrubbing) return bitmap.close()
               this.exact.get(t.id)?.bitmap.close()
               this.exact.set(t.id, { at, edge, bitmap })

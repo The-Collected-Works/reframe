@@ -27,6 +27,8 @@ export const LATER = 2
  * full resolution anyway), but before the rest.
  */
 const SHARPER = 1.5
+/** How long things stay still before copies for what isn't on screen are made again. */
+const IDLE = 2000
 
 /** The copy sizes a file can have, smallest first. */
 export const sizesOf = (f: MediaFile): number[] => [...new Set(SIZES.map((s) => Math.min(s, Math.max(f.w, f.h))))]
@@ -81,6 +83,13 @@ class Copies {
   private running = false
   /** Copies made since there was last nothing to do, for overall progress. */
   private finished = new SvelteSet<string>()
+  /** Something is playing or being scrubbed: only what's on screen is made meanwhile. */
+  private playing = $state(0)
+  /** And for a moment after (pausing, stepping to another video), so it isn't started only to be stopped. */
+  private settling = $state(false)
+  private settle: ReturnType<typeof setTimeout> | undefined
+  /** Copies that failed to load, by file and size, and how often. */
+  private losses = new Map<string, number>()
 
   constructor() {
     api.onCopyProgress(({ id, progress }) => {
@@ -155,6 +164,59 @@ class Copies {
     return sizesOf(file).some((s) => s >= size && !!this.made.get(copyKey(file, s)))
   }
 
+  /** Whether a copy made already looks sharp covering `need` device pixels (zoomed in past them all, none does). */
+  sharp(file: MediaFile, need: number): boolean {
+    return sizesOf(file).some((s) => s >= need * SLACK && !!this.made.get(copyKey(file, s)))
+  }
+
+  /**
+   * A copy didn't load (gone from disk, say): it's looked for again, and made again if it's gone.
+   * One that keeps failing is given up on, so the original plays instead.
+   */
+  lost(file: MediaFile, url: string): void {
+    for (const s of sizesOf(file)) {
+      const key = copyKey(file, s)
+      const path = this.made.get(key)
+      if (!path || mediaUrl(path) !== url) continue
+      const n = (this.losses.get(key) ?? 0) + 1
+      this.losses.set(key, n)
+      if (n > 2) this.made.set(key, null)
+      else {
+        this.made.delete(key)
+        this.checked.delete(fileKey(file))
+        this.check([file])
+      }
+    }
+  }
+
+  /**
+   * While something plays or is scrubbed, copies are made only for what's on screen (the rest would
+   * compete with it for the machine), and one being made for anything else stops until it's done.
+   * Returns a function to call when it stops.
+   */
+  busy(): () => void {
+    this.playing++
+    clearTimeout(this.settle)
+    this.settling = true
+    this.preempt()
+    let done = false
+    return () => {
+      if (done) return
+      done = true
+      this.playing--
+      clearTimeout(this.settle)
+      this.settle = setTimeout(() => {
+        this.settling = false
+        this.next()
+      }, IDLE)
+    }
+  }
+
+  /** Whether a copy may be made now. */
+  private allowed(job: Job): boolean {
+    return (!this.playing && !this.settling) || job.priority === NOW
+  }
+
   /**
    * What's happening to a file's first copy (the one that makes it play smoothly): being made (and
    * how far along), waiting, or nothing (made, or not wanted). Sharper copies aren't counted: by
@@ -216,6 +278,11 @@ class Copies {
     return q?.priority ?? LATER + 1
   }
 
+  /** The next copy to make, if any may be made now. */
+  private pick(): Job | undefined {
+    return this.queue().find((j) => this.allowed(j))
+  }
+
   /** Looks up which copies of these files are made already, in one go. */
   private check(files: MediaFile[]) {
     const fresh = files.filter((f) => !this.checked.has(fileKey(f)))
@@ -239,12 +306,16 @@ class Copies {
     })
   }
 
-  /** Stops the copy being made if something waiting is more urgent. */
+  /**
+   * Stops the copy being made if something waiting is more urgent, or if it mayn't be made while
+   * something plays.
+   */
   private preempt() {
     const cur = this.current
-    const top = this.queue()[0]
-    if (!cur || !top || top.key === cur.job.key) return
-    if (top.priority < this.urgency(cur.job.key) && this.stopping !== cur.id) {
+    if (!cur || this.stopping === cur.id) return
+    const now = { ...cur.job, priority: this.urgency(cur.job.key) }
+    const top = this.pick()
+    if (!this.allowed(now) || (top && top.key !== cur.job.key && top.priority < now.priority)) {
       this.stopping = cur.id
       api.cancelCopy()
     }
@@ -254,22 +325,25 @@ class Copies {
     if (this.running) return this.preempt()
     this.running = true
     for (;;) {
-      const job = this.queue()[0]
+      const job = this.pick()
       if (!job) break
       const id = ++this.ids
       this.current = { id, job, progress: 0 }
       try {
         const path = await api.copy(id, job.file.path, job.file.w, job.file.h, job.file.color, job.size, job.file.duration, job.priority === LATER)
+        // Null: stopped for something more urgent (or while something plays); it waits its turn again.
+        if (!path) continue
         this.made.set(job.key, path)
         if (this.first(job)) this.finished.add(fileKey(job.file))
       } catch {
-        // Stopped for something more urgent: it waits its turn again. Otherwise it can't be made.
-        if (this.stopping !== id) this.made.set(job.key, null)
+        // It can't be made: the original stands in.
+        this.made.set(job.key, null)
       }
     }
     this.current = null
     this.running = false
-    this.finished.clear()
+    // Held back (something's playing), not done: progress so far still counts.
+    if (!this.queue().length) this.finished.clear()
   }
 }
 
