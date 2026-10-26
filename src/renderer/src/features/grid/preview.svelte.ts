@@ -1,7 +1,6 @@
 import { untrack } from 'svelte'
 import { cubicOut } from 'svelte/easing'
 import { Tween } from 'svelte/motion'
-import { posterTime } from '@shared/media'
 import type { Clip } from '@shared/types'
 import { mediaUrl } from '../../lib/bridge'
 import { releaseVideo, silentVideo } from '../../lib/media'
@@ -55,7 +54,8 @@ export class HoverPreview {
       const v = silentVideo(untrack(() => copies.best(a, sizesOf(a)[0]))?.url ?? mediaUrl(a.path))
       const start = clip()?.start ?? 0
       const end = clip()?.end ?? a.duration
-      v.currentTime = Math.min(Math.max(posterTime(a.duration), start), Math.max(start, end - 0.1))
+      // From where playback starts, like the thumbnail it takes over from.
+      v.currentTime = start
       let alive = true
       // A frame on every presented video frame, looping within the trim.
       const onFrame = () => {

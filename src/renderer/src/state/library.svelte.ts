@@ -18,6 +18,8 @@ export interface AssetMeta {
   /** Video frame rate; 0 if unknown. */
   fps?: number
   thumb: ImageBitmap | null
+  /** Where in the video the thumbnail is from (seconds): its first frame, or a trimmed one's start. */
+  thumbAt?: number
   error: boolean
 }
 

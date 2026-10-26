@@ -7,7 +7,7 @@ import { api, mediaUrl } from './bridge'
  */
 
 /** Long edge of grid thumbnails: enough for the largest cell size at this display density. */
-const THUMB = Math.round(Math.min(960, 480 * (window.devicePixelRatio || 1)))
+export const THUMB = Math.round(Math.min(960, 480 * (window.devicePixelRatio || 1)))
 
 /** Natural size of an encoded image (rotation from EXIF applied), read without decoding its pixels. */
 function measure(blob: Blob): Promise<{ w: number; h: number }> {

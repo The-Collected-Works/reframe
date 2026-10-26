@@ -26,6 +26,7 @@
     board,
     settings,
     playback,
+    start = 0,
     picking,
     onNeed,
     onEdit,
@@ -41,6 +42,8 @@
     settings: CropSettings
     /** A video's playback (its track is the asset's name). */
     playback: Playback | null
+    /** Where a video starts playing (its trim's start), seconds. */
+    start?: number
     /** The eyedropper is open: no editing chrome, it needs the exact picture. */
     picking: boolean
     /** How many device pixels the media covers on screen (so how sharp a copy to play from). */
@@ -137,9 +140,12 @@
   const path = $derived(asset?.path)
   const mtime = $derived(asset?.mtime)
   const sw = $derived(asset?.w ?? 0)
+  // A video's full-size still is its poster: its first frame. One trimmed to start later shows its
+  // start frame (its thumbnail) until playback has the frame, rather than a frame it won't play.
+  const trimmed = $derived(asset?.kind === 'video' && start > 0)
   $effect(() => {
     still = null
-    if (!path || !sw) return
+    if (!path || !sw || trimmed) return
     void mtime
     const a = untrack(() => asset!)
     let alive = true

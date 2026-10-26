@@ -21,6 +21,8 @@
   import { openFolder, rescanFolder } from './state/actions'
   import { autosave } from './state/autosave.svelte'
   import { items } from './state/items.svelte'
+  import { project } from './state/project.svelte'
+  import { starts, type Start } from './state/starts.svelte'
   import { library } from './state/library.svelte'
   import { shell } from './state/shell.svelte'
   import { view } from './state/view.svelte'
@@ -55,6 +57,17 @@
       files.push(a)
     }
     untrack(() => copies.prepare(files))
+  })
+
+  // Videos trimmed to start later show that frame, not their first: loaded as trims change.
+  $effect(() => {
+    const list: Start[] = []
+    for (const e of items.all) {
+      const at = e.kind === 'video' ? (project.file.clips[e.name]?.start ?? 0) : 0
+      const m = at > 0 ? items.meta(e) : undefined
+      if (m?.w) list.push({ path: e.path, mtime: e.mtime, w: m.w, h: m.h, duration: m.duration, color: m.color, at })
+    }
+    untrack(() => starts.want(list))
   })
 
   // The window controls are drawn by the OS over the page, so CSS can't dim them with the dialog's

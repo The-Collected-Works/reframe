@@ -149,6 +149,15 @@ class Copies {
     return null
   }
 
+  /** The file of the smallest copy made, if any (quick to read single frames from: every one's a keyframe). */
+  smallest(file: MediaFile): string | null {
+    for (const s of sizesOf(file)) {
+      const path = this.made.get(copyKey(file, s))
+      if (path) return path
+    }
+    return null
+  }
+
   /** None could be made at any size (the original has to stand in). */
   failed(file: MediaFile): boolean {
     return sizesOf(file).every((s) => this.made.get(copyKey(file, s)) === null)

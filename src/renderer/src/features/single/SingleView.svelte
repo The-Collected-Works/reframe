@@ -184,6 +184,7 @@
       {board}
       {settings}
       {playback}
+      start={clip.start}
       picking={shell.picking}
       onNeed={(px) => (need = quantize(px))}
       onEdit={(patch) => asset && project.edit([asset.name], patch)}

@@ -1,8 +1,5 @@
 import type { MediaKind } from './types'
 
-/** Time of the frame used for a video's thumbnail: early, but past any fade-in. */
-export const posterTime = (duration: number): number => (duration > 0 ? Math.min(1, duration * 0.1) : 0)
-
 /** Every format Reframe opens: what kind of asset it is, and the type it's served as. */
 const FORMATS: Record<string, { kind: MediaKind; mime: string }> = {
   '.jpg': { kind: 'image', mime: 'image/jpeg' },

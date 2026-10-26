@@ -1,6 +1,7 @@
 import { library, withMeta, type Asset, type AssetMeta } from './library.svelte'
 import { entriesOf, itemsOf, type Entry } from './model/items'
 import { project } from './project.svelte'
+import { starts } from './starts.svelte'
 
 /**
  * Every item, as rows: the folder's files, their variants and the layouts. Rebuilt only when the
@@ -31,11 +32,19 @@ class Items {
   /** An item with what's been loaded about its file. */
   asset(key: string | null | undefined): Asset | undefined {
     const e = this.entry(key)
-    return e && withMeta(e, this.meta(e))
+    return e && this.with(e)
   }
 
+  /**
+   * An item with what's been loaded about its file. A video's thumbnail is the frame playback starts
+   * on: its first, or once loaded, a trimmed one's start (see Starts).
+   */
   with(e: Entry): Asset {
-    return withMeta(e, this.meta(e))
+    const a = withMeta(e, this.meta(e))
+    if (e.kind !== 'video') return a
+    const at = project.file.clips[e.name]?.start ?? 0
+    const frame = at > 0 ? starts.get({ path: e.path, mtime: e.mtime, at }) : undefined
+    return frame ? { ...a, thumb: frame, thumbAt: at } : { ...a, thumbAt: 0 }
   }
 }
 

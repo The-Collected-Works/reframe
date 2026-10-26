@@ -5,7 +5,6 @@ import { constants as os, setPriority } from 'node:os'
 import { join } from 'node:path'
 import { inColor, OUT_TAGS, parseColor } from '@shared/color'
 import { layoutArgs, videoArgs } from '@shared/filtergraph'
-import { posterTime } from '@shared/media'
 import type { ColorMeta, LayoutExportJob, PosterResult, VideoExportJob } from '@shared/types'
 import { writeJsonAtomic } from './fsutil'
 
@@ -230,13 +229,13 @@ const grabFrame = (kind: Kind, path: string, time: number, color: ColorMeta | un
   ])
 
 /**
- * First meaningful frame (full resolution, rotation and pixel aspect applied), duration and
+ * First frame (full resolution, rotation and pixel aspect applied), duration and
  * colour metadata. The frame goes through RGB using the source's own matrix and range, so the
  * JPEG shows the same colours as the video rather than a BT.601 misreading of BT.709 data.
  */
 export async function poster(path: string): Promise<PosterResult> {
   const st = await fs.stat(path)
-  const key = cacheKey('v3', path, st)
+  const key = cacheKey('v4', path, st)
   const jpg = join(CACHE, key + '.jpg')
   const meta = join(CACHE, key + '.json')
   try {
@@ -253,8 +252,8 @@ export async function poster(path: string): Promise<PosterResult> {
   const color = parseColor(probe.stderr)
   const audio = /Stream #.*Audio:/.test(probe.stderr)
   const fps = parseFps(probe.stderr)
-  let res = await grabFrame('poster', path, posterTime(duration), color, 3).done
-  if (!res.stdout.length) res = await grabFrame('poster', path, 0, color, 3).done
+  // The first frame: what playback starts on, so the thumbnail never jumps to another one.
+  const res = await grabFrame('poster', path, 0, color, 3).done
   if (!res.stdout.length) throw new Error('Could not read video')
 
   await fs.mkdir(CACHE, { recursive: true })

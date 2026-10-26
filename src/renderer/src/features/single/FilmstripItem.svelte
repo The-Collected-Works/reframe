@@ -29,7 +29,9 @@
   const settings = $derived(resolveSettings(board, asset.name))
   const width = $derived(Math.round((FILM_HEIGHT * board.width) / board.height))
   const dpr = window.devicePixelRatio || 1
-  const key = $derived(`${JSON.stringify(settings)}|${width}x${FILM_HEIGHT}@${dpr}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}|${scene?.stamp}`)
+  const key = $derived(
+    `${JSON.stringify(settings)}|${width}x${FILM_HEIGHT}@${dpr}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}@${asset.thumbAt}|${scene?.stamp}`
+  )
 
   let canvas: HTMLCanvasElement
   let ready = $state(false)

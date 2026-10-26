@@ -54,7 +54,7 @@
   // What's on the canvas, so unchanged cells skip redrawing.
   let drawn = ''
   const key = $derived(
-    `${JSON.stringify(settings)}|${width}x${height}@${window.devicePixelRatio}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}|${scene?.stamp}`
+    `${JSON.stringify(settings)}|${width}x${height}@${window.devicePixelRatio}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}@${asset.thumbAt}|${scene?.stamp}`
   )
 
   function draw() {

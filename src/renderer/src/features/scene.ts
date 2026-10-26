@@ -41,7 +41,7 @@ export function layoutScene(key: string, board: Artboard): LayoutScene | null {
     layout.bgColor,
     arrangement.cells.map((c) => {
       const cell = cells.get(c.slot.id)!
-      return [c.rect, cell.settings, cell.asset?.path, cell.asset?.mtime, cell.asset?.w, !!cell.asset?.thumb]
+      return [c.rect, cell.settings, cell.asset?.path, cell.asset?.mtime, cell.asset?.w, !!cell.asset?.thumb, cell.asset?.thumbAt]
     })
   ])
   return { key, layout, arrangement, cells, duration: layoutDuration(layout.duration, lengths), stamp }
