@@ -39,7 +39,13 @@ export class LayoutPlayer {
   time = $state(0)
   frame = $state(0)
 
-  private videos = new Map<string, { src: string; v: HTMLVideoElement }>()
+  private videos = new Map<string, { src: string; file: string; v: HTMLVideoElement }>()
+  /**
+   * Each cell's last frame, by slot (and which file it's from), drawn while its video has none to
+   * give: mid-seek, or just swapped for its playback copy. Otherwise every scrub step would flash
+   * the cell's still in between.
+   */
+  private shots = new Map<string, { file: string; c: OffscreenCanvas }>()
   /** A seek waiting for the one in flight to land; only the newest target is kept. */
   private pending = new Map<HTMLVideoElement, number>()
   private queue: LayoutVideo[] = []
@@ -61,6 +67,7 @@ export class LayoutPlayer {
     this.stop()
     for (const { v } of this.videos.values()) releaseVideo(v)
     this.videos.clear()
+    this.shots.clear()
   }
 
   /** How many cells are still waiting for their playback copy. */
@@ -72,10 +79,16 @@ export class LayoutPlayer {
     ).size
   }
 
-  /** What to draw for a cell now: its video once it has a frame, or null (its thumbnail stands in). */
-  source(slot: string): HTMLVideoElement | null {
-    const v = this.videos.get(slot)?.v
-    return v && v.readyState >= 2 ? v : null
+  /**
+   * What to draw for a cell now: its video's frame, or while that's not there (seeking) the last one
+   * it showed; null before it has shown any (its thumbnail stands in).
+   */
+  source(slot: string): CanvasImageSource | null {
+    const have = this.videos.get(slot)
+    if (!have) return null
+    if (have.v.readyState >= 2 && !have.v.seeking) return have.v
+    const shot = this.shots.get(slot)
+    return shot?.file === have.file ? shot.c : null
   }
 
   toggle(): void {
@@ -112,23 +125,34 @@ export class LayoutPlayer {
           if (have?.src === src) continue
           if (have) this.release(have.v)
           const v = silentVideo(src)
+          const file = fileKey(c)
           v.loop = false
           v.addEventListener('seeked', () => {
+            // Keep the frame that landed before chasing a newer target, so scrubbing shows each.
+            this.keep(c.slot, file, v)
             const next = this.pending.get(v)
             this.pending.delete(v)
             if (next != null) v.currentTime = next
             this.frame++
           })
+          // Every frame it presents while playing, too.
+          const onFrame = () => {
+            if (this.videos.get(c.slot)?.v !== v) return
+            this.keep(c.slot, file, v)
+            v.requestVideoFrameCallback(onFrame)
+          }
+          v.requestVideoFrameCallback(onFrame)
           v.addEventListener('loadeddata', () => {
             this.sync(true)
             this.frame++
           })
-          this.videos.set(c.slot, { src, v })
+          this.videos.set(c.slot, { src, file, v })
         }
         for (const [slot, { v }] of this.videos) {
           if (keep.has(slot)) continue
           this.release(v)
           this.videos.delete(slot)
+          this.shots.delete(slot)
         }
         this.sync(true)
       })
@@ -159,6 +183,18 @@ export class LayoutPlayer {
       raf = requestAnimationFrame(tick)
       return () => cancelAnimationFrame(raf)
     })
+  }
+
+  /** Copies a video's current frame as its cell's last frame. */
+  private keep(slot: string, file: string, v: HTMLVideoElement) {
+    if (v.readyState < 2 || v.seeking || !v.videoWidth) return
+    let shot = this.shots.get(slot)
+    if (!shot || shot.c.width !== v.videoWidth || shot.c.height !== v.videoHeight) {
+      shot = { file, c: new OffscreenCanvas(v.videoWidth, v.videoHeight) }
+      this.shots.set(slot, shot)
+    }
+    shot.file = file
+    shot.c.getContext('2d')!.drawImage(v, 0, 0)
   }
 
   private release(v: HTMLVideoElement) {
