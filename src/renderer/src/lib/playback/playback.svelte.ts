@@ -202,13 +202,16 @@ export class Playback {
         const copy = copies.best(t.file, size)
         // No copy yet: the one being made, as it's written (only the part encoded so far plays, but
         // smoothly, and it's always ahead of playback); else the original, where that's allowed.
-        const stream = copy ? null : copies.streaming(t.file)
+        // (Only its address: reading its progress would re-run this twice a second while it's made.)
+        const stream = copy ? null : copies.streamUrl(t.file)
         const original = this.opts.originals || copies.failed(t.file)
-        return { t, size, stream: !!stream, url: copy?.url ?? stream?.url ?? (original ? mediaUrl(t.file.path) : null) }
+        return { t, size, stream: !!stream, url: copy?.url ?? stream ?? (original ? mediaUrl(t.file.path) : null) }
       })
       untrack(() => {
         const keep = new Set<string>()
         const wanted = new Set<string>()
+        // Whether any clip came, went or changed source: only then is everything put back in step.
+        let moved = false
         for (const { t, size, stream, url } of tracks) {
           keep.add(t.id)
           const key = `${t.id}|${t.file.path}|${t.file.mtime}|${size}`
@@ -218,9 +221,10 @@ export class Playback {
           if (!c) {
             this.clips.set(t.id, (c = new Clip()))
             this.changed++
+            moved = true
           }
           c.onerror = (bad) => copies.lost(t.file, bad)
-          if (url) c.setSource(url, stream ? { duration: t.file.duration } : undefined)
+          if (url && c.setSource(url, stream ? { duration: t.file.duration } : undefined)) moved = true
         }
         for (const [key, withdraw] of this.wants) {
           if (wanted.has(key)) continue
@@ -236,8 +240,11 @@ export class Playback {
           this.exact.get(id)?.bitmap.close()
           this.exact.delete(id)
           this.changed++
+          moved = true
         }
-        this.sync(true)
+        // A trim or a cell's timing changing (the tracks change, the clips don't) is followed by
+        // playback's own correction; jumping would seek every video for nothing.
+        this.sync(moved)
       })
     })
 
@@ -298,6 +305,7 @@ export class Playback {
           this.audio = null
         }
         if (!path || !s) return
+        const fresh = !this.audio
         if (!this.audio) {
           const el = new Audio(mediaUrl(path))
           el.preload = 'auto'
@@ -305,7 +313,8 @@ export class Playback {
         }
         this.audio.el.volume = Math.min(1, Math.max(0, s.volume))
         this.audio.el.muted = s.volume === 0
-        this.sync(true)
+        // New sound starts in step; a volume change (or the tracks re-sizing) needs no seek.
+        if (fresh) this.sync(true)
       })
     })
 

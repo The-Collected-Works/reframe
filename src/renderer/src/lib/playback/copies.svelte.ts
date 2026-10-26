@@ -79,6 +79,11 @@ class Copies {
   /** The copy being made. */
   /** The copy being made: how far along, and (a first copy) the stream it can be played from meanwhile. */
   private current = $state.raw<{ id: number; job: Job; progress: number; stream?: string } | null>(null)
+  /**
+   * That stream on its own, by file: it changes only when a stream starts or ends, so what plays
+   * from it isn't disturbed by every step of progress.
+   */
+  private live = $state.raw<{ file: string; url: string } | null>(null)
   private ids = 0
   private asked = 0
   private stopping = 0
@@ -95,7 +100,10 @@ class Copies {
 
   constructor() {
     api.onCopyProgress(({ id, progress, stream }) => {
-      if (this.current?.id === id) this.current = { ...this.current, progress, stream: stream ?? this.current.stream }
+      const cur = this.current
+      if (cur?.id !== id) return
+      this.current = { ...cur, progress, stream: stream ?? cur.stream }
+      if (stream && this.live?.url !== mediaUrl(stream)) this.live = { file: fileKey(cur.job.file), url: mediaUrl(stream) }
     })
   }
 
@@ -181,6 +189,12 @@ class Copies {
     const cur = this.current
     if (!cur?.stream || fileKey(cur.job.file) !== fileKey(file) || !this.first(cur.job)) return null
     return { url: mediaUrl(cur.stream), ready: cur.progress * file.duration }
+  }
+
+  /** The address of a first copy's stream while it's being made (see `streaming`), and nothing else. */
+  streamUrl(file: MediaFile): string | null {
+    const live = this.live
+    return live && live.file === fileKey(file) ? live.url : null
   }
 
   /**
@@ -372,6 +386,7 @@ class Copies {
       if (!job) break
       const id = ++this.ids
       this.current = { id, job, progress: 0 }
+      this.live = null
       // A first copy streams while it's made: what's been encoded plays at once (see StreamFeed).
       try {
         const path = await api.copy(
@@ -395,6 +410,7 @@ class Copies {
       }
     }
     this.current = null
+    this.live = null
     this.running = false
     // Held back (something's playing), not done: progress so far still counts.
     if (!this.queue().length) this.finished.clear()

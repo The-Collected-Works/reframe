@@ -34,11 +34,11 @@ export class Clip {
   onerror: ((url: string) => void) | null = null
 
   /**
-   * Shows `url` from now on (the same one again changes nothing). `stream`: it's a copy still being
-   * made, played as it grows; its whole length is `duration`.
+   * Shows `url` from now on (the same one again changes nothing: false). `stream`: it's a copy
+   * still being made, played as it grows; its whole length is `duration`.
    */
-  setSource(url: string, stream?: { duration: number }): void {
-    if (url === this.src) return
+  setSource(url: string, stream?: { duration: number }): boolean {
+    if (url === this.src) return false
     this.src = url
     if (this.incoming) this.drop(this.incoming)
     let v: HTMLVideoElement
@@ -71,6 +71,7 @@ export class Clip {
       { once: true }
     )
     v.addEventListener('seeked', () => this.incoming === v && this.takeOver(v), { once: true })
+    return true
   }
 
   /** Lets go of a video, and the stream feeding it if there is one. */
