@@ -24,9 +24,7 @@
   let { active }: { active: boolean } = $props()
 
   const tree = $derived(view.layout.tree)
-  // A flat folder needs no headers; as soon as there are subfolders (or excluded ones), every
-  // folder gets one.
-  const sectioned = $derived(view.prefs.group && (tree.length > 1 || (tree.length === 1 && tree[0].folder !== '')))
+  const sectioned = $derived(view.layout.sectioned)
   let frozen = project.board
   const board = $derived.by(() => {
     if (active) frozen = project.board

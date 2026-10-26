@@ -37,7 +37,8 @@ export interface FolderNode {
   excluded?: SkippedFolder
 }
 
-export type Layout = { tree: FolderNode[]; visible: Entry[] }
+/** `sectioned`: folders get headers (to fold them by); without, it's one plain run of thumbnails. */
+export type Layout = { tree: FolderNode[]; visible: Entry[]; sectioned: boolean }
 
 /**
  * What the grid shows, from the items and the view options. The grids come first, in a section of
@@ -86,7 +87,7 @@ export function layout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skip
   if (!group) {
     const flat = { ...node(''), collapsed: false, assets: assets.filter(pass).sort(cmp) }
     flat.count = flat.assets.length
-    return { tree: [...gridNode, ...(flat.count ? [flat] : [])], visible: [...grids, ...flat.assets] }
+    return { tree: [...gridNode, ...(flat.count ? [flat] : [])], visible: [...grids, ...flat.assets], sectioned: false }
   }
 
   // Build the tree: every folder with something to show, and the folders leading to it.
@@ -119,6 +120,11 @@ export function layout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skip
   top.assets.sort(cmp)
   top.count = top.assets.length
   const tree = [...gridNode, ...(top.assets.length ? [top] : []), ...roots]
+  // A flat folder needs no headers; as soon as there's anything else (subfolders, excluded ones,
+  // grids), every section gets one. Without headers nothing can be folded: a fold left from when
+  // there were (the grids since deleted, say) would otherwise hide everything, out of reach.
+  const sectioned = tree.length > 1 || (tree.length === 1 && tree[0].folder !== '')
+  if (!sectioned) tree.forEach((n) => (n.collapsed = false))
 
   const visible: Entry[] = []
   const walk = (n: FolderNode) => {
@@ -127,5 +133,5 @@ export function layout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skip
     n.children.forEach(walk)
   }
   tree.forEach(walk)
-  return { tree, visible }
+  return { tree, visible, sectioned }
 }
