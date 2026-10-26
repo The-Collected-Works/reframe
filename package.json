@@ -16,6 +16,7 @@
     "dev:win": "node scripts/dev-win.mjs",
     "build": "electron-vite build",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
     "start": "electron-vite preview",
     "postinstall": "node node_modules/electron/install.js && node node_modules/ffmpeg-static/install.js",
     "dist:win": "node scripts/fetch-ffmpeg.mjs win x64 && electron-vite build && electron-builder --win --x64 --publish never",
@@ -36,7 +37,8 @@
     "prettier-plugin-svelte": "4.1.1",
     "svelte-check": "4.7.7",
     "typescript": "6.0.3",
-    "vite": "8.3.5"
+    "vite": "8.3.5",
+    "vitest": "5.0.3"
   },
   "dependencies": {
     "@lucide/svelte": "1.61.0",

@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
   import { useKeymap } from '../../lib/keymap.svelte'
-  import { copies } from '../../lib/playback/copies.svelte'
+  import { copies } from '../../state/playback.svelte'
   import { basename } from '../../lib/paths'
   import { combineSelection, deleteSelection, duplicateSelection, includeFolder, renameItem, setMode, toggleCollapsed } from '../../state/actions'
   import { items } from '../../state/items.svelte'

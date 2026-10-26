@@ -6,7 +6,7 @@
 <script lang="ts">
   import { api } from '../../lib/bridge'
   import { hint } from '../../lib/keymap.svelte'
-  import { copies } from '../../lib/playback/copies.svelte'
+  import { copies } from '../../state/playback.svelte'
   import { addBoard, collapseAll, deleteBoard, duplicateBoard, openFolder, resetView, setMode, setViewPrefs } from '../../state/actions'
   import { library } from '../../state/library.svelte'
   import { project } from '../../state/project.svelte'

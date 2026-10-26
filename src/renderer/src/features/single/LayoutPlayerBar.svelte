@@ -4,7 +4,7 @@
   import { fmtTime } from '../../lib/format'
   import { Icon } from '../../ui'
   import Preparing from './Preparing.svelte'
-  import type { Playback } from '../../lib/playback/playback.svelte'
+  import type { Player } from '../../state/playback.svelte'
 
   let {
     player,
@@ -12,7 +12,7 @@
     preparing,
     cached
   }: {
-    player: Playback
+    player: Player
     duration: number
     /** How far every cell plays smoothly (seconds), for the cache line. */
     cached: number

@@ -1,6 +1,6 @@
 import { getContext, setContext } from 'svelte'
 import type { Artboard, Clip, CropSettings } from '@shared/types'
-import type { CopyState } from '../../lib/playback/copies.svelte'
+import type { CopyState } from '../../lib/playback/copies'
 import type { Asset } from '../../state/library.svelte'
 import type { Entry } from '../../state/model/items'
 import type { LayoutScene } from '../scene'

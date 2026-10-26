@@ -4,20 +4,24 @@ Notes for picking up work on the `grids` branch on another machine. Everything h
 
 ## How playback works now
 
-Everything that plays video goes through `src/renderer/src/lib/playback/`: the single view, layouts, and hover previews in the grid.
+Everything that plays video goes through `src/renderer/src/lib/playback/`: the single view and layouts play through it, and hover previews in the grid play its copies.
 
-- **`copies.svelte.ts`** knows which playback copies exist and decides what's made next.
+The engine is plain TypeScript with no Svelte inside. It's told what to do through methods, and it says when something changed through change signals (`emitter.ts`). The media worker comes in as an interface (`host.ts`), so the engine runs in Node against fakes: `npm test` runs its unit tests. `state/playback.svelte.ts` is the one place it meets Svelte:
+- the app's single `Copies` store, wrapped so each read follows what it depends on (what's made or wanted, and for progress, each step);
+- `Player`, a `Playback` for components, with its outputs as reactive state and one effect per input (tracks, range, sound, hold).
+
+- **`copies.ts`** knows which playback copies exist and decides what's made next.
   - Copies are 960 and 1920px on the long side, capped at the source's size.
   - Every frame is a keyframe, at the source frame rate (up to 60), H.264 High 4.2, CRF 20, lanczos scaling, converted to BT.709 as export converts.
   - They're made one at a time by the media worker, in priority order: `NOW` (on screen) < `SOON` (filmstrip neighbours) < sharper copies of what's on screen < `LATER` (every other video in the folder, made ahead of time at low CPU priority).
   - A more urgent copy stops a less urgent one. While anything plays or scrubs, and for 2s after, only `NOW` copies are made.
   - Copies are kept on disk between sessions (`<userData>/posters/copies`, 8 GB, least recently used first). When a folder opens, one call looks up which are already made.
 - **`stream.ts`** plays a copy while it's still being made. The worker writes a video's first copy twice from one encode (ffmpeg's `tee` muxer): the normal file, plus a fragmented MP4 in quarter-second fragments. `StreamFeed` reads the growing file through the `media:` protocol using byte ranges and feeds it to a `MediaSource`.
-- **`clip.svelte.ts`** is one video's pictures from whatever source it's given:
+- **`clip.ts`** is one video's pictures from whatever source it's given:
   - only the newest seek target is kept;
   - the last frame is held during a seek, captured asynchronously and only just before seeking;
   - a new source takes over only once it has the right frame, so there's never a gap.
-- **`playback.svelte.ts`** is one clock with any number of tracks: a single video is one track, a layout is one per video cell.
+- **`playback.ts`** is one clock with any number of tracks: a single video is one track, a layout is one per video cell.
   - Each track's source, in order of preference: its best copy for its size on screen, then the stream of its copy being made, then (single view only) the original.
   - Sound plays from the original file through a separate `Audio` element.
   - Exact frames come from ffmpeg when paused, but only when no copy is sharp enough (zoomed in past 1920).
@@ -50,39 +54,13 @@ A 15s capture's 960 copy takes ~2.6s to make. The limit is decoding the 4K sourc
 
 ## Improvements, most valuable first
 
-### 1. Split the engine into a plain TypeScript core and one Svelte adapter
+### 1. Split the engine into a plain TypeScript core and one Svelte adapter (done)
 
-Do this first: items 2 and 3 add more state, and the current structure makes state easy to get wrong.
-
-**Now:** the engine's classes use Svelte runes (`$state`, `$derived`, `$effect`, `$effect.root`). That followed the single-view player it replaced. It also lets components subscribe to exactly what they read: the current time, new frames, copy progress.
-
-**Why change it:** dependency tracking in effects is implicit, and engine logic (timing, queues, I/O, cancellation) is imperative. Most of the engine's bugs so far came from that mismatch:
-- an effect that read and wrote the same state (an infinite update loop);
-- the source-picking effect subscribing to copy progress by accident, which seeked every playing video twice a second (`bbaf853`);
-- `untrack` needed all over the place.
-
-It also ties the logic to the Svelte compiler, so queue ordering, preemption, source choice and clock sync can't be plain unit tests in Node. And it bends the codebase's own rule that `lib/` holds no app state (the README was softened to fit).
-
-**Do:**
-- **Core** (`lib/playback/`, no runes): `Copies`, `Clip`, `StreamFeed`, and the clock and sync from `Playback`, as ordinary classes.
-  - Inputs through explicit methods, such as `setTracks(tracks)`, `setRange()`, `seek(t)`, `play()`, `scrub*()`.
-  - Outputs through callbacks or a small `onChange` / version counter.
-  - No implicit subscriptions anywhere.
-- **Adapter** (one `.svelte.ts`, e.g. `state/playback.svelte.ts`):
-  - mirrors the core's outputs into `$state` for the UI: time, playing, frame version, copy states, activity, how far each video is ready;
-  - pushes reactive inputs into the core from one clearly bounded `$effect` per playback: tracks, size on screen, volume, the eyedropper's hold.
-
-That leaves one place where reactivity meets the engine, instead of effects spread through it.
-
-**Tests:** with the core in plain TypeScript, add unit tests (Vitest, say) for:
-- queue priority and preemption, including the 2s idle hold after playback;
-- source choice (copy, then stream, then original);
-- `slotTime` sync;
-- `StreamFeed` reacting to 404, 416 and a full buffer.
-
-**Check against:** the numbers table above, re-measured with the harness (item 8). None should get worse, and seeks during steady playback should stay at 0.
-
-**Size:** about a day. Everything outside `lib/playback/` only touches the engine through `Playback`, `copies`, `canStream` and `Clip.frame()`, so the change stays contained.
+Done on 2026-10-26: see "How playback works now" above. What changed:
+- `Copies`, `Clip`, `StreamFeed` and `Playback` are ordinary classes. Inputs arrive through methods; outputs leave through `changed` (and `Copies.progressed`, kept apart so progress never re-picks sources: the cause of `bbaf853`). `Copies.changed` is batched to one notification per microtask, so listeners never run in the middle of the change that set them off.
+- The store's queue is worked out once per change, not on every read.
+- The worker, video elements, the clock and timers are passed in (`MediaHost`, `ClipLike`, `Scheduler`, `StreamEnv`).
+- Tests (`*.test.ts` beside each file, fakes in `lib/playback/test/`) cover queue priority and preemption, the 2s idle hold, finding earlier copies, status and progress, lost and failed copies, source choice (copy, stream, original, sharper), clock sync with loop and hold, steady playback through copy progress, re-renders, scrubbing, holding, and `StreamFeed` with 404, 416, new bytes and a full buffer.
 
 ### 2. Put sound in the copies
 
@@ -93,14 +71,14 @@ That leaves one place where reactivity meets the engine, instead of effects spre
 - the streamed fMP4 then carries two tracks, so `StreamFeed`'s MIME type becomes `video/mp4; codecs="avc1.64002A, mp4a.40.2"`;
 - layout sound (mixing cells via Web Audio) builds on this.
 
-**Files:** `main/ffmpeg.ts` (`buildCopy`), `lib/playback/stream.ts`, `lib/playback/playback.svelte.ts` (the sound effect), `lib/playback/clip.svelte.ts` (videos are `silentVideo`s now).
+**Files:** `main/ffmpeg.ts` (`buildCopy`), `lib/playback/stream.ts`, `lib/playback/playback.ts` (`updateSound`, `sync`), `lib/playback/clip.ts` (videos are `silentVideo`s now).
 
 ### 3. Make more than one copy at a time
 
 **Now:** one at a time, and only that one streams. A layout of four new clips plays its first cell at once, while the others show stills until their turn.
 **Do:** run N copies at once, where N comes from the core count (2 on this machine, 1 on small ones). Track `current` per running job (it's a single value now) and let each first copy stream (`live` becomes a map by file).
 **Files:**
-- `lib/playback/copies.svelte.ts`: `next()`, `current`, `live`, `preempt`;
+- `lib/playback/copies.ts`: `next()`, `current`, `live`, `preempt`;
 - `main/ffmpeg.ts`: `copyChain` serialises builds; `cancelCopy` kills every `copy` process, so it needs a job id.
 
 ### 4. Key the cache by content, not path

@@ -1,5 +1,24 @@
-import { releaseVideo, silentVideo } from '../media'
+import { releaseVideo, silentVideo } from './video'
+import { Emitter } from './emitter'
 import { StreamFeed } from './stream'
+
+/** What playback needs of a clip (a fake stands in for it in tests). */
+export interface ClipLike {
+  readonly version: number
+  /** Fires for each new frame. */
+  readonly frames: Emitter
+  onerror: ((url: string) => void) | null
+  readonly ready: boolean
+  readonly seeking: boolean
+  setSource(url: string, stream?: { duration: number }): boolean
+  frame(): CanvasImageSource | null
+  seek(t: number): void
+  play(): void
+  pause(): void
+  setRate(rate: number): void
+  follow(t: number, jump: boolean, loopLength: number): void
+  release(): void
+}
 
 /**
  * One video's pictures, from whichever copy (or original) it's given. Seeks keep only the newest
@@ -9,9 +28,11 @@ import { StreamFeed } from './stream'
  * be a copy still being made, streamed (see StreamFeed). Silent: sound is played apart. Call
  * `release()` when done.
  */
-export class Clip {
+export class Clip implements ClipLike {
   /** Bumped whenever there's a new frame to draw. */
-  version = $state(0)
+  version = 0
+  /** Fires for each new frame (trim previews draw from it straight away). */
+  readonly frames = new Emitter()
 
   private el: HTMLVideoElement | null = null
   private src = ''
@@ -28,8 +49,6 @@ export class Clip {
   /** Streams feeding videos (a copy still being made). */
   private feeds = new Map<HTMLVideoElement, StreamFeed>()
 
-  /** Called for each new frame (trim previews draw from it straight away). */
-  onframe: (() => void) | null = null
   /** Called with a source that wouldn't load (so another can be found). */
   onerror: ((url: string) => void) | null = null
 
@@ -107,7 +126,7 @@ export class Clip {
 
   private bump() {
     this.version++
-    this.onframe?.()
+    this.frames.emit()
   }
 
   /**
@@ -191,7 +210,6 @@ export class Clip {
   }
 
   release(): void {
-    this.onframe = null
     this.onerror = null
     if (this.el) this.drop(this.el)
     if (this.incoming) this.drop(this.incoming)

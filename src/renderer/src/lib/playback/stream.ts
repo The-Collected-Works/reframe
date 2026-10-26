@@ -5,6 +5,21 @@ const TYPE = 'video/mp4; codecs="avc1.64002A"'
 export const canStream = (): boolean => typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(TYPE)
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** What a StreamFeed reads with and plays into: the browser's own, or fakes in tests. */
+export interface StreamEnv {
+  fetch: (url: string, init: RequestInit) => Promise<Response>
+  mediaSource: () => MediaSource
+  objectUrl: (ms: MediaSource) => string
+  revoke: (url: string) => void
+}
+
+const browser = (): StreamEnv => ({
+  fetch: (url, init) => fetch(url, init),
+  mediaSource: () => new MediaSource(),
+  objectUrl: (ms) => URL.createObjectURL(ms),
+  revoke: (url) => URL.revokeObjectURL(url)
+})
 const ended = (sb: SourceBuffer) => new Promise((r) => sb.addEventListener('updateend', r, { once: true }))
 
 /**
@@ -16,7 +31,7 @@ const ended = (sb: SourceBuffer) => new Promise((r) => sb.addEventListener('upda
 export class StreamFeed {
   /** For the video's `src`. */
   readonly url: string
-  private ms = new MediaSource()
+  private ms: MediaSource
   private sb: SourceBuffer | null = null
   private offset = 0
   private stopped = false
@@ -25,9 +40,11 @@ export class StreamFeed {
   constructor(
     private src: string,
     duration: number,
-    private video: () => HTMLVideoElement | null
+    private video: () => HTMLVideoElement | null,
+    private env: StreamEnv = browser()
   ) {
-    this.url = URL.createObjectURL(this.ms)
+    this.ms = env.mediaSource()
+    this.url = env.objectUrl(this.ms)
     this.ms.addEventListener(
       'sourceopen',
       () => {
@@ -43,7 +60,7 @@ export class StreamFeed {
 
   stop(): void {
     this.stopped = true
-    URL.revokeObjectURL(this.url)
+    this.env.revoke(this.url)
   }
 
   /**
@@ -54,7 +71,7 @@ export class StreamFeed {
     while (!this.stopped) {
       let data: ArrayBuffer | null = null
       try {
-        const res = await fetch(this.src, { headers: { Range: `bytes=${this.offset}-` } })
+        const res = await this.env.fetch(this.src, { headers: { Range: `bytes=${this.offset}-` } })
         // 416: nothing new yet; 404: not started yet.
         if (res.ok) data = await res.arrayBuffer()
       } catch {

@@ -15,7 +15,7 @@
   import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
   import { camera, type View } from './camera.svelte'
   import { dragTo, hitTest, type DragStart } from './gizmo'
-  import type { Playback } from '../../lib/playback/playback.svelte'
+  import type { Player } from '../../state/playback.svelte'
   import { bitmapProxy } from './proxy.svelte'
   import { WheelNav } from './nav'
   import { drawStage } from './render'
@@ -41,7 +41,7 @@
     /** The asset's settings on `board`. */
     settings: CropSettings
     /** A video's playback (its track is the asset's name). */
-    playback: Playback | null
+    playback: Player | null
     /** Where a video starts playing (its trim's start), seconds. */
     start?: number
     /** The eyedropper is open: no editing chrome, it needs the exact picture. */

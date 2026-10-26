@@ -16,7 +16,7 @@
   import { api } from './lib/bridge'
   import { FileDrop, refuseDrop } from './lib/file-drop.svelte'
   import { keyHandler } from './lib/keymap.svelte'
-  import { copies, type MediaFile } from './lib/playback/copies.svelte'
+  import { copies, type MediaFile } from './state/playback.svelte'
   import { basename } from './lib/paths'
   import { openFolder, rescanFolder } from './state/actions'
   import { autosave } from './state/autosave.svelte'

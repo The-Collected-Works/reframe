@@ -15,5 +15,5 @@
     "types": ["node"],
     "paths": { "@shared/*": ["./src/shared/*"] }
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "electron.vite.config.ts", "svelte.config.mjs"]
+  "include": ["src/**/*.ts", "src/**/*.svelte", "electron.vite.config.ts", "svelte.config.mjs", "vitest.config.mts"]
 }

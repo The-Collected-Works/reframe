@@ -9,7 +9,7 @@
   import { bounds, computeLayout, type Placement, type Point } from '@shared/layout'
   import type { Artboard, CropSettings, Slot, SettingKey } from '@shared/types'
   import { trackPointer } from '../../lib/drag'
-  import type { Playback } from '../../lib/playback/playback.svelte'
+  import type { Player } from '../../state/playback.svelte'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { Icon } from '../../ui'
   import { LAYOUT_EDITOR, SINGLE } from '../keymaps'
@@ -44,7 +44,7 @@
     /** The cell being edited. */
     slot: string | null
     /** Its videos' playback (a track per video cell, by slot). */
-    player: Playback | null
+    player: Player | null
     /** The eyedropper is open: no editing chrome, it needs the exact picture. */
     picking: boolean
     /** Device pixels per artboard pixel on screen (so how sharp a copy each cell plays from). */

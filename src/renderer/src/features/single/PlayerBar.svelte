@@ -1,7 +1,7 @@
 <!-- Play / pause, the time, the timeline with its trim handles, the trimmed length and the volume. -->
 <script lang="ts">
   import { fmtTime } from '../../lib/format'
-  import type { Playback } from '../../lib/playback/playback.svelte'
+  import type { Player } from '../../state/playback.svelte'
   import type { Asset } from '../../state/library.svelte'
   import { Icon } from '../../ui'
   import Preparing from './Preparing.svelte'
@@ -23,7 +23,7 @@
     preparing,
     cached
   }: {
-    playback: Playback
+    playback: Player
     asset: Asset
     clip: { start: number; end: number }
     /** The artboard's, for trim previews. */

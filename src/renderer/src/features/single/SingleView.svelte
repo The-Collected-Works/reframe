@@ -8,8 +8,6 @@
   import { slotKey } from '@shared/arrangement'
   import { computeLayout, drawFrame } from '@shared/layout'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
-  import { copies, sizesOf, SOON } from '../../lib/playback/copies.svelte'
-  import { Playback, type Track } from '../../lib/playback/playback.svelte'
   import { removeSlot, setMode, setSlot, swapSlots } from '../../state/actions'
   import { items } from '../../state/items.svelte'
   import { prioritize } from '../../state/loading'
@@ -17,6 +15,7 @@
   import { preview } from '../../state/preview.svelte'
   import { project } from '../../state/project.svelte'
   import { selection } from '../../state/selection.svelte'
+  import { copies, Player, sizesOf, SOON, type Track } from '../../state/playback.svelte'
   import { shell } from '../../state/shell.svelte'
   import { view } from '../../state/view.svelte'
   import { Button } from '../../ui'
@@ -55,12 +54,12 @@
   const quantize = (px: number) => Math.ceil(px / 128) * 128
   let need = $state(0)
   const playable = $derived(asset?.kind === 'video' && asset.w > 0 ? asset.name : null)
-  let playback = $state.raw<Playback | null>(null)
+  let playback = $state.raw<Player | null>(null)
   $effect(() => {
     if (!playable) return
     const p = untrack(
       () =>
-        new Playback({
+        new Player({
           tracks: () => (asset?.kind === 'video' ? [{ id: asset.name, file: asset, start: 0, length: asset.duration, end: 'loop', need }] : []),
           range: () => clip,
           sound: () => (asset && asset.audio !== false ? { track: asset.name, volume: settings.mute ? 0 : preview.volume } : null),
@@ -139,10 +138,10 @@
     const making = waiting.map((f) => copies.state(f)).find((s) => s?.state === 'making')
     return { label: `Preparing playback · ${waiting.length} to go`, progress: making?.state === 'making' ? making.progress : null }
   })
-  let layoutPlayback = $state.raw<Playback | null>(null)
+  let layoutPlayback = $state.raw<Player | null>(null)
   $effect(() => {
     if (!layoutKey) return
-    const p = new Playback({
+    const p = new Player({
       tracks: () => layoutTracks,
       range: () => ({ start: 0, end: scene?.duration ?? 0 }),
       hold: () => shell.picking

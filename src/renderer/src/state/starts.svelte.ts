@@ -2,7 +2,7 @@ import { SvelteMap } from 'svelte/reactivity'
 import type { ColorMeta } from '@shared/types'
 import { api } from '../lib/bridge'
 import { THUMB } from '../lib/media'
-import { copies } from '../lib/playback/copies.svelte'
+import { copies } from './playback.svelte'
 
 /** A trimmed video: the file, and where its trim starts. */
 export interface Start {
