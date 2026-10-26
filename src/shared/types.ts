@@ -257,10 +257,16 @@ export interface ReframeApi {
    */
   frame(path: string, time: number, color?: ColorMeta, tag?: string, edge?: number): Promise<Uint8Array>
   /**
-   * Path of a playback copy `edge` pixels on its long side (every frame a keyframe), made in the
-   * background on first request, one at a time. They're removed when the app quits.
+   * Path of a playback copy `edge` pixels on its long side (every frame a keyframe), made on first
+   * request (one at a time; `background` ones at low priority), with progress reported under `id`.
+   * Kept between sessions.
    */
-  copy(path: string, w: number, h: number, color: ColorMeta | undefined, edge: number): Promise<string>
+  copy(id: number, path: string, w: number, h: number, color: ColorMeta | undefined, edge: number, duration: number, background: boolean): Promise<string>
+  /** Which of these copies are made already (their paths, or null), making none. */
+  copiesMade(list: { path: string; edge: number }[]): Promise<(string | null)[]>
+  /** Stops the copy being made; its request fails ("cancelled"). */
+  cancelCopy(): Promise<void>
+  onCopyProgress(cb: (p: { id: number; progress: number }) => void): () => void
   reveal(path: string): Promise<void>
   /** Newer GitHub release than this build, if any. */
   checkUpdate(): Promise<{ version: string; notes: ReleaseNote[]; status: UpdateStatus } | null>

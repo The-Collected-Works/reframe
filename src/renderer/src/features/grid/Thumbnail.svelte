@@ -16,7 +16,7 @@
   import type { Entry } from '../../state/model/items'
   import { hasOverrides } from '../../state/model/project'
   import { folderOf } from '../../state/model/tree'
-  import { Dot, Icon } from '../../ui'
+  import { Dot, Icon, Ring } from '../../ui'
   import { thumbSource } from '../scene'
   import { dragOffset, NO_GUIDES, type Guides } from '../snapping'
   import { useGrid } from './context'
@@ -26,6 +26,7 @@
   const g = useGrid()
   const scene = $derived(entry.kind === 'layout' ? g.composite(entry.name) : null)
   const home = $derived(entry.source ?? entry.name)
+  const copying = $derived(g.copying(entry))
 
   // Only this thumbnail's own loaded details: another one arriving doesn't touch it.
   const asset = $derived(g.asset(entry))
@@ -201,6 +202,17 @@
     {#if asset.error}<div class="cell-error">Can’t read file</div>{/if}
     <!-- Without the caption row, the adjusted dot sits on the picture's corner instead. -->
     {#if !g.names && overridden}<span class="corner-dot"><Dot title="Adjusted" /></span>{/if}
+    <!-- Its playback copy (for smooth playing and scrubbing) being made, or waiting its turn. -->
+    {#if copying}
+      <span
+        class="cell-copy"
+        title={copying.state === 'making'
+          ? `Preparing for smooth playback · ${Math.round(copying.progress * 100)}%`
+          : 'Waiting to be prepared for smooth playback'}
+      >
+        <Ring value={copying.state === 'making' ? copying.progress : null} size={12} />
+      </span>
+    {/if}
   </div>
   {#if g.names}
     <div class="cell-meta">
@@ -304,6 +316,19 @@
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.55);
     pointer-events: none;
+  }
+
+  .cell-copy {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    z-index: 2;
+    display: grid;
+    padding: 3px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    animation: fade 200ms var(--ease) both;
   }
 
   .cell-loading {

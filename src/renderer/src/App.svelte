@@ -4,7 +4,7 @@
   launch, autosave, shortcuts, file drops.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import ExportDialog from './features/export/ExportDialog.svelte'
   import Grid from './features/grid/Grid.svelte'
   import { finishPick } from './features/inspector/eyedropper'
@@ -16,9 +16,11 @@
   import { api } from './lib/bridge'
   import { FileDrop, refuseDrop } from './lib/file-drop.svelte'
   import { keyHandler } from './lib/keymap.svelte'
+  import { copies, type MediaFile } from './lib/playback/copies.svelte'
   import { basename } from './lib/paths'
   import { openFolder, rescanFolder } from './state/actions'
   import { autosave } from './state/autosave.svelte'
+  import { items } from './state/items.svelte'
   import { library } from './state/library.svelte'
   import { shell } from './state/shell.svelte'
   import { view } from './state/view.svelte'
@@ -38,6 +40,22 @@
   $effect(() => api.onFolderChanged(rescanFolder))
 
   const saving = autosave()
+
+  // Every video gets its playback copy ahead of time (what's showing in the grid first, then the
+  // rest), so most are ready before they're opened. Copies are kept, so it's once per video.
+  $effect(() => {
+    const order = [...view.visible, ...items.all]
+    const seen = new Set<string>()
+    const files: MediaFile[] = []
+    for (const e of order) {
+      if (e.kind !== 'video' || seen.has(e.path)) continue
+      const a = items.with(e)
+      if (!a.w || !a.duration) continue
+      seen.add(e.path)
+      files.push(a)
+    }
+    untrack(() => copies.prepare(files))
+  })
 
   // The window controls are drawn by the OS over the page, so CSS can't dim them with the dialog's
   // backdrop; the main process matches them instead.

@@ -4,7 +4,7 @@ import { Readable } from 'node:stream'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import { mimeOf } from '@shared/media'
 import type { ColorMeta, FolderScan, LayoutExportJob, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
-import { cancelExport, clearCopies, copy, exportLayout, exportVideo, frame, poster, stopWorker } from './jobs'
+import { cancelCopy, cancelExport, clearOldProxies, copiesMade, copy, exportLayout, exportVideo, frame, poster, stopWorker } from './jobs'
 import { markFolder, noteSkipped, saveProject, scanFolder, setSkipped, unmarkFolder, watchFolder } from './folder'
 import { installUpdate, pollAutoUpdate, updateStatus } from './autoupdate'
 import { folderArg, forget, readState, recentFolders, remember, updateSystemMenus } from './recent'
@@ -263,12 +263,26 @@ ipcMain.handle('frame', (_e, path: string, time: number, color?: ColorMeta, tag?
   mustRead(path)
   return frame(path, time, color, tag, edge)
 })
-ipcMain.handle('copy', async (_e, path: string, w: number, h: number, color: ColorMeta | undefined, edge: number) => {
-  mustRead(path)
-  const out = await copy(path, w, h, color, edge)
-  readable.add(normalize(out))
-  return out
+ipcMain.handle(
+  'copy',
+  async (e, id: number, path: string, w: number, h: number, color: ColorMeta | undefined, edge: number, duration: number, background: boolean) => {
+    mustRead(path)
+    const out = await copy(path, w, h, color, edge, duration, background, (progress) => e.sender.send('copy-progress', { id, progress }))
+    readable.add(normalize(out))
+    return out
+  }
+)
+ipcMain.handle('copies-made', async (_e, list: { path: string; edge: number }[]) => {
+  const ok = list.map((c) => canRead(c.path))
+  const found = await copiesMade(list.filter((_, i) => ok[i]))
+  let i = 0
+  return ok.map((yes) => {
+    const out = yes ? found[i++] : null
+    if (out) readable.add(normalize(out))
+    return out
+  })
 })
+ipcMain.handle('cancel-copy', () => cancelCopy())
 // Export progress on the taskbar / Dock icon (-1 clears it).
 ipcMain.handle('set-progress', (e, p: number) => BrowserWindow.fromWebContents(e.sender)?.setProgressBar(p < 0 ? -1 : p))
 // Windows / Linux draw the caption buttons over the page (titleBarOverlay), so a modal's backdrop
@@ -339,7 +353,7 @@ app.on('second-instance', (_e, argv) => {
 
 app.whenReady().then(() => {
   if (!primary) return
-  clearCopies().catch(() => {})
+  clearOldProxies().catch(() => {})
   protocol.handle('media', serveMedia)
   setMenu()
   createWindow()
@@ -349,7 +363,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => app.quit())
 
 // However the app quits (window closed, ⌘Q, restarting into an update), stop the media worker
-// first: it kills any running ffmpeg and removes half-written exports and the playback copies.
+// first: it kills any running ffmpeg and removes half-written exports and copies.
 let stopped = false
 app.on('before-quit', (e) => {
   if (stopped) return

@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { useKeymap } from '../../lib/keymap.svelte'
+  import { copies } from '../../lib/playback/copies.svelte'
   import { basename } from '../../lib/paths'
   import { combineSelection, deleteSelection, duplicateSelection, includeFolder, renameItem, setMode, toggleCollapsed } from '../../state/actions'
   import { items } from '../../state/items.svelte'
@@ -115,6 +116,7 @@
     selected: (name) => selection.has(name),
     focused: (name) => selection.focus === name,
     clip: (name) => project.file.clips[name],
+    copying: (e) => (e.kind === 'video' ? copies.state(e) : null),
     renaming: (name) => shell.renamingItem === name,
     rename: (name, label) => {
       shell.renamingItem = null

@@ -8,6 +8,7 @@
   import { slotKey } from '@shared/arrangement'
   import { computeLayout, drawFrame } from '@shared/layout'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
+  import { copies, sizesOf, SOON } from '../../lib/playback/copies.svelte'
   import { Playback, type Track } from '../../lib/playback/playback.svelte'
   import { removeSlot, setMode, setSlot, swapSlots } from '../../state/actions'
   import { items } from '../../state/items.svelte'
@@ -75,6 +76,22 @@
     }
   })
 
+  // While its copy is being made it plays from the original, which is slower: say so.
+  const preparing = $derived.by(() => {
+    if (asset?.kind !== 'video' || !asset.w || !copies.pending(asset)) return null
+    const st = copies.state(asset)
+    return st?.state === 'making'
+      ? { label: 'Preparing smooth playback', progress: st.progress }
+      : { label: 'Waiting to prepare smooth playback', progress: null }
+  })
+
+  // The videos either side in the filmstrip are likely next: their copies come before the rest.
+  $effect(() => {
+    const near = [strip[index - 1], strip[index + 1]].filter((a) => a?.kind === 'video' && a.w > 0)
+    const withdraw = untrack(() => near.map((a) => copies.want(a, sizesOf(a)[0], SOON)))
+    return () => withdraw.forEach((w) => w())
+  })
+
   function onTrimEnd(start: number, end: number) {
     trimDraft = null
     if (!asset) return
@@ -103,6 +120,13 @@
       const p = computeLayout(rect.w, rect.h, a.w, a.h, cell!.settings)
       return [{ id: slot.id, file: a, start: c.start, length: c.end - c.start, end: slot.end ?? 'loop', need: quantize(Math.max(p.w, p.h) * scale) }]
     })
+  })
+  // Until every cell has a copy, the ones without show stills: say how many, and how far along.
+  const layoutPreparing = $derived.by(() => {
+    const waiting = [...new Map(layoutTracks.filter((t) => copies.pending(t.file)).map((t) => [t.file.path, t.file])).values()]
+    if (!waiting.length) return null
+    const making = waiting.map((f) => copies.state(f)).find((s) => s?.state === 'making')
+    return { label: `Preparing playback · ${waiting.length} to go`, progress: making?.state === 'making' ? making.progress : null }
   })
   let layoutPlayback = $state.raw<Playback | null>(null)
   $effect(() => {
@@ -172,7 +196,7 @@
   <div class="single-fade"></div>
   <div class="single-overlay">
     {#if layoutPlayback && scene?.duration}
-      <LayoutPlayerBar player={layoutPlayback} duration={scene.duration} />
+      <LayoutPlayerBar player={layoutPlayback} duration={scene.duration} preparing={layoutPreparing} />
     {:else if asset && playback && asset.duration > 0}
       <PlayerBar
         {playback}
@@ -184,6 +208,7 @@
         onVolume={(v) => preview.setVolume(v)}
         onToggleMute={() => preview.toggleMute()}
         {onPreview}
+        {preparing}
         onTrim={(start, end) => (trimDraft = { start, end })}
         {onTrimEnd}
       />

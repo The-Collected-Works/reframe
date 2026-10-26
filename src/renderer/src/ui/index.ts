@@ -5,6 +5,7 @@
 export { default as Button } from './buttons/Button.svelte'
 export { default as Dot } from './display/Dot.svelte'
 export { default as Kbd } from './display/Kbd.svelte'
+export { default as Ring } from './display/Ring.svelte'
 export { default as Tag } from './display/Tag.svelte'
 export { default as Checkbox } from './forms/Checkbox.svelte'
 export { default as ColorField } from './forms/ColorField.svelte'

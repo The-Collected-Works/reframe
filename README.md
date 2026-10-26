@@ -51,7 +51,7 @@ The renderer (`src/renderer/src`) is Svelte 5:
 - `features/`: the app's screens (top bar, grid, single view, inspector, export). Each feature's root component is its only connection to state; the parts inside it take props.
 - `features/keymaps.ts`: every keyboard shortcut. The app runs them and the shortcuts panel lists them, so new ones go here.
 - `lib/`: plumbing with no app state (the bridge to the main process, media loading, drag tracking, motion).
-- `lib/playback/`: the playback engine everything that plays video uses (the single view, layouts, hover previews). A `Playback` is one clock and any number of tracks; each track's pictures come from a `Clip`, fed from playback copies sized to what's on screen (`copies`: small, every frame a keyframe, made by the media worker and removed when the app quits), and from the exact frame when the clock stops. Sound plays from the original file, apart from the pictures.
+- `lib/playback/`: the playback engine everything that plays video uses (the single view, layouts, hover previews). A `Playback` is one clock and any number of tracks; each track's pictures come from a `Clip`, fed from playback copies sized to what's on screen (`copies`: small, every frame a keyframe, made by the media worker for every video ahead of time, what's open first, and kept between sessions), and from the exact frame when the clock stops. Sound plays from the original file, apart from the pictures.
 - `styles/`: theme tokens, base element styles, a few utility classes and shared keyframes. Everything else is scoped to its component.
 
 The main process (`src/main`) scans folders, runs ffmpeg and writes exports; `src/shared` is the crop geometry both sides use.

@@ -4,6 +4,7 @@
   import type { Playback } from '../../lib/playback/playback.svelte'
   import type { Asset } from '../../state/library.svelte'
   import { Icon } from '../../ui'
+  import Preparing from './Preparing.svelte'
   import Timeline from './Timeline.svelte'
   import Volume from './Volume.svelte'
 
@@ -18,7 +19,8 @@
     onToggleMute,
     onPreview,
     onTrim,
-    onTrimEnd
+    onTrimEnd,
+    preparing
   }: {
     playback: Playback
     asset: Asset
@@ -35,12 +37,15 @@
     onPreview: (canvas: HTMLCanvasElement, t: number) => void
     onTrim: (start: number, end: number) => void
     onTrimEnd: (start: number, end: number) => void
+    /** Its playback copy being made (or waiting to be): what to say, and how far along. */
+    preparing: { label: string; progress: number | null } | null
   } = $props()
 
   const time = $derived(playback.time)
 </script>
 
 <div class="player">
+  {#if preparing}<Preparing {...preparing} />{/if}
   <!-- Both glyphs stay mounted and crossfade, so the button never pops. -->
   <button class={['play', { playing: playback.playing, loading: playback.waiting }]} onclick={() => playback.toggle()} title="Play / Pause (Space)">
     <span class="glyph play-glyph"><Icon name="play" size={14} /></span>
@@ -71,6 +76,7 @@
 <style>
   /* Floating glass over the media. */
   .player {
+    position: relative;
     width: min(720px, calc(100% - 48px));
     height: 44px;
     display: flex;

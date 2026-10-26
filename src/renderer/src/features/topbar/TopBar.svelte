@@ -6,6 +6,7 @@
 <script lang="ts">
   import { api } from '../../lib/bridge'
   import { hint } from '../../lib/keymap.svelte'
+  import { copies } from '../../lib/playback/copies.svelte'
   import { addBoard, collapseAll, deleteBoard, duplicateBoard, openFolder, resetView, setMode, setViewPrefs } from '../../state/actions'
   import { library } from '../../state/library.svelte'
   import { project } from '../../state/project.svelte'
@@ -16,6 +17,7 @@
   import { boardMenu } from '../menus'
   import AddArtboard from './AddArtboard.svelte'
   import AppInfo from './AppInfo.svelte'
+  import CopyActivity from './CopyActivity.svelte'
   import ArtboardTabs from './ArtboardTabs.svelte'
   import FolderMenu from './FolderMenu.svelte'
   import UpdateButton from './UpdateButton.svelte'
@@ -63,6 +65,7 @@
   {/if}
 
   <div class="drag spacer"></div>
+  {#if library.dir && copies.activity}<CopyActivity {...copies.activity} />{/if}
 
   {#if update.current}<UpdateButton update={update.current} onInstall={() => api.installUpdate()} onOpenRelease={() => api.openRelease()} />{/if}
 

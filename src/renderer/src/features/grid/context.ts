@@ -1,5 +1,6 @@
 import { getContext, setContext } from 'svelte'
 import type { Artboard, Clip, CropSettings } from '@shared/types'
+import type { CopyState } from '../../lib/playback/copies.svelte'
 import type { Asset } from '../../state/library.svelte'
 import type { Entry } from '../../state/model/items'
 import type { LayoutScene } from '../scene'
@@ -40,6 +41,8 @@ export interface GridModel {
   selected(name: string): boolean
   focused(name: string): boolean
   clip(name: string): Clip | undefined
+  /** A video's playback copy being made (or waiting to be). */
+  copying(entry: Entry): CopyState
   /** A variant or layout whose name is being edited in place. */
   renaming(name: string): boolean
   /** The new name (null: cancelled). */

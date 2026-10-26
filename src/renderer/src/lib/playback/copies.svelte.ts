@@ -1,4 +1,4 @@
-import { SvelteMap } from 'svelte/reactivity'
+import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import type { ColorMeta } from '@shared/types'
 import { api, mediaUrl } from '../bridge'
 
@@ -8,6 +8,7 @@ export interface MediaFile {
   mtime: number
   w: number
   h: number
+  duration: number
   color?: ColorMeta
 }
 
@@ -15,6 +16,17 @@ export interface MediaFile {
 const SIZES = [960, 1920]
 /** A copy this much smaller than what's on screen still looks sharp (and saves making a bigger one). */
 const SLACK = 0.85
+
+/** How soon a copy is needed: on screen now, likely next (a neighbour in the filmstrip), or some time. */
+export const NOW = 0
+export const SOON = 1
+export const LATER = 2
+/**
+ * A sharper copy of something that already plays smoothly comes after the first copies of what's
+ * likely next (stepping to a video that's ready beats extra sharpness: paused, the frame shown is
+ * full resolution anyway), but before the rest.
+ */
+const SHARPER = 1.5
 
 /** The copy sizes a file can have, smallest first. */
 export const sizesOf = (f: MediaFile): number[] => [...new Set(SIZES.map((s) => Math.min(s, Math.max(f.w, f.h))))]
@@ -25,44 +37,93 @@ export function sizeFor(f: MediaFile, need: number): number {
   return sizes.find((s) => s >= need * SLACK) ?? sizes[sizes.length - 1]
 }
 
-const fileKey = (f: MediaFile) => `${f.path}|${f.mtime}`
+const fileKey = (f: Pick<MediaFile, 'path' | 'mtime'>) => `${f.path}|${f.mtime}`
 const copyKey = (f: MediaFile, size: number) => `${fileKey(f)}|${size}`
+
+/** A copy to make, and how soon. */
+interface Job {
+  key: string
+  file: MediaFile
+  size: number
+  priority: number
+  since: number
+}
+
+/** What's happening to a file's copies, for showing it. */
+export type CopyState = { state: 'making'; progress: number } | { state: 'queued' } | null
 
 /**
  * The playback copies of video files: small, every frame a keyframe, so they play several at once
  * and seek instantly where originals (4K, 60fps, keyframes seconds apart) can't. Made by the media
- * worker one at a time, in the order this decides: what's wanted on screen now, smallest first
- * (quick to make, so something good shows soon), in the order it was asked for. Nothing is made
- * for what's no longer wanted. Kept for the session; the app clears them when it quits.
+ * worker one at a time, most urgent first: what's on screen now, then what's likely next, then
+ * every other video in the folder, ahead of time, at low priority. Within each, smaller sizes first
+ * (something playable soonest), then in the order asked. When something more urgent comes up while
+ * a less urgent copy is being made, that one stops and waits its turn again, so what you're looking
+ * at never waits behind anything. Copies are kept between sessions: opening a folder first asks
+ * which are made already.
  */
 class Copies {
   /** By file and size: the copy's path, or null (none could be made). */
   private made = new SvelteMap<string, string | null>()
-  /** What's wanted, by file and size, with how many ask for it and since when. */
-  private wanted = new Map<string, { file: MediaFile; size: number; refs: number; since: number }>()
-  private making = false
+  /** Files whose made copies have been looked up, and those being looked up. */
+  private checked = new SvelteSet<string>()
+  private checking = new SvelteSet<string>()
+  private toCheck: MediaFile[] = []
+  /** Asked for by what's showing (on screen now, or likely next), with how many ask. */
+  private wanted = new SvelteMap<string, { job: Job; refs: number }>()
+  /** Every video in the folder, made ahead of time at the smallest size. */
+  private ahead = $state.raw<MediaFile[]>([])
+  /** The copy being made. */
+  private current = $state.raw<{ id: number; job: Job; progress: number } | null>(null)
+  private ids = 0
   private asked = 0
+  private stopping = 0
+  private running = false
+  /** Copies made since there was last nothing to do, for overall progress. */
+  private finished = new SvelteSet<string>()
+
+  constructor() {
+    api.onCopyProgress(({ id, progress }) => {
+      if (this.current?.id === id) this.current = { ...this.current, progress }
+    })
+  }
 
   /**
-   * Asks for `file` at `size` (and at the smallest size first, if that's bigger): made in the
-   * background unless already there. Returns a function that withdraws the request. Call it from an
-   * effect, so it's withdrawn when whatever asked goes away.
+   * Asks for `file` at `size` (and at its smallest size first, if that's not it), as soon as
+   * `priority` says. Returns a function that withdraws the request: call it from an effect, so
+   * it's withdrawn when whatever asked goes away.
    */
-  want(file: MediaFile, size: number): () => void {
-    const sizes = [...new Set([sizesOf(file)[0], size])]
-    for (const s of sizes) {
-      const key = copyKey(file, s)
-      const w = this.wanted.get(key)
-      if (w) w.refs++
-      else this.wanted.set(key, { file, size: s, refs: 1, since: ++this.asked })
-    }
+  want(file: MediaFile, size: number, priority = NOW): () => void {
+    const smallest = sizesOf(file)[0]
+    const sizes = [...new Set([smallest, size])]
+    const keys = sizes.map((s) => `${copyKey(file, s)}#${priority}`)
+    sizes.forEach((s, i) => {
+      const w = this.wanted.get(keys[i])
+      if (w) this.wanted.set(keys[i], { ...w, refs: w.refs + 1 })
+      else
+        this.wanted.set(keys[i], {
+          job: { key: copyKey(file, s), file, size: s, priority: s === smallest ? priority : priority + SHARPER, since: ++this.asked },
+          refs: 1
+        })
+    })
+    this.check([file])
     this.next()
     return () => {
-      for (const s of sizes) {
-        const w = this.wanted.get(copyKey(file, s))
-        if (w && --w.refs <= 0) this.wanted.delete(copyKey(file, s))
+      for (const k of keys) {
+        const w = this.wanted.get(k)
+        if (!w) continue
+        if (w.refs <= 1) this.wanted.delete(k)
+        else this.wanted.set(k, { ...w, refs: w.refs - 1 })
       }
+      // What's being made may now matter less than what's waiting.
+      this.preempt()
     }
+  }
+
+  /** Every video in the folder: each gets its smallest copy ahead of time. */
+  prepare(files: MediaFile[]): void {
+    this.ahead = files
+    this.check(files)
   }
 
   /**
@@ -84,25 +145,131 @@ class Copies {
     return sizesOf(file).every((s) => this.made.get(copyKey(file, s)) === null)
   }
 
-  /** Whether `file` has nothing to show from yet (and one is on its way). */
+  /** Whether `file` has nothing to show from yet, and one is on its way. */
   pending(file: MediaFile): boolean {
     return !this.best(file, 0) && !this.failed(file)
   }
 
+  /** Whether `file` has a copy at `size` (or bigger) yet. */
+  has(file: MediaFile, size: number): boolean {
+    return sizesOf(file).some((s) => s >= size && !!this.made.get(copyKey(file, s)))
+  }
+
+  /**
+   * What's happening to a file's first copy (the one that makes it play smoothly): being made (and
+   * how far along), waiting, or nothing (made, or not wanted). Sharper copies aren't counted: by
+   * then it plays smoothly already.
+   */
+  state(file: Pick<MediaFile, 'path' | 'mtime'>): CopyState {
+    const fk = fileKey(file)
+    const cur = this.current
+    if (cur && fileKey(cur.job.file) === fk && this.first(cur.job)) return { state: 'making', progress: cur.progress }
+    return this.waiting.has(fk) ? { state: 'queued' } : null
+  }
+
+  /**
+   * Overall: videos made smooth, of how many need it (the one in progress counted with its
+   * progress); or, with all of them done, a sharper copy being made; null with nothing to do.
+   */
+  get activity(): { label: string; done: number; total: number; progress: number } | null {
+    const cur = this.current
+    const files = new Set(this.waiting)
+    if (cur && this.first(cur.job)) files.add(fileKey(cur.job.file))
+    if (files.size) {
+      const done = [...this.finished].filter((f) => !files.has(f)).length
+      return { label: 'Preparing videos', done, total: done + files.size, progress: cur && this.first(cur.job) ? cur.progress : 0 }
+    }
+    return cur ? { label: 'Sharpening for full view', done: 0, total: 1, progress: cur.progress } : null
+  }
+
+  /** It's a file's smallest copy: the one that makes it play smoothly. */
+  private first(job: Job): boolean {
+    return job.size === sizesOf(job.file)[0]
+  }
+
+  /** Everything still to make, most urgent first (a copy wanted in several ways at its most urgent). */
+  private todo = $derived.by((): Job[] => {
+    const best = new Map<string, Job>()
+    const consider = (j: Job) => {
+      const fk = fileKey(j.file)
+      if (this.made.has(j.key) || !this.checked.has(fk) || this.checking.has(fk)) return
+      const have = best.get(j.key)
+      if (!have || j.priority < have.priority) best.set(j.key, j)
+    }
+    for (const { job } of this.wanted.values()) consider(job)
+    this.ahead.forEach((file, i) => {
+      const size = sizesOf(file)[0]
+      consider({ key: copyKey(file, size), file, size, priority: LATER, since: i })
+    })
+    return [...best.values()].sort((a, b) => a.priority - b.priority || a.size - b.size || a.since - b.since)
+  })
+  /** Files with first copies still to make. */
+  private waiting = $derived(new Set(this.todo.filter((j) => this.first(j)).map((j) => fileKey(j.file))))
+
+  private queue(): Job[] {
+    return this.todo
+  }
+
+  /** How urgent a copy is now (it may have stopped being wanted since it was started). */
+  private urgency(key: string): number {
+    const q = this.queue().find((j) => j.key === key)
+    return q?.priority ?? LATER + 1
+  }
+
+  /** Looks up which copies of these files are made already, in one go. */
+  private check(files: MediaFile[]) {
+    const fresh = files.filter((f) => !this.checked.has(fileKey(f)))
+    if (!fresh.length) return void this.next()
+    for (const f of fresh) {
+      this.checked.add(fileKey(f))
+      this.checking.add(fileKey(f))
+    }
+    this.toCheck.push(...fresh)
+    queueMicrotask(async () => {
+      const batch = this.toCheck.splice(0)
+      if (!batch.length) return
+      const list = batch.flatMap((f) => sizesOf(f).map((edge) => ({ f, edge })))
+      const found = await api.copiesMade(list.map(({ f, edge }) => ({ path: f.path, edge }))).catch(() => list.map(() => null))
+      list.forEach(({ f, edge }, i) => {
+        const p = found[i]
+        if (p) this.made.set(copyKey(f, edge), p)
+      })
+      for (const f of batch) this.checking.delete(fileKey(f))
+      this.next()
+    })
+  }
+
+  /** Stops the copy being made if something waiting is more urgent. */
+  private preempt() {
+    const cur = this.current
+    const top = this.queue()[0]
+    if (!cur || !top || top.key === cur.job.key) return
+    if (top.priority < this.urgency(cur.job.key) && this.stopping !== cur.id) {
+      this.stopping = cur.id
+      api.cancelCopy()
+    }
+  }
+
   private async next() {
-    if (this.making) return
-    this.making = true
+    if (this.running) return this.preempt()
+    this.running = true
     for (;;) {
-      const todo = [...this.wanted.entries()].filter(([k]) => !this.made.has(k)).sort(([, a], [, b]) => a.size - b.size || a.since - b.since)
-      if (!todo.length) break
-      const [key, { file, size }] = todo[0]
+      const job = this.queue()[0]
+      if (!job) break
+      const id = ++this.ids
+      this.current = { id, job, progress: 0 }
       try {
-        this.made.set(key, await api.copy(file.path, file.w, file.h, file.color, size))
+        const path = await api.copy(id, job.file.path, job.file.w, job.file.h, job.file.color, job.size, job.file.duration, job.priority === LATER)
+        this.made.set(job.key, path)
+        if (this.first(job)) this.finished.add(fileKey(job.file))
       } catch {
-        this.made.set(key, null)
+        // Stopped for something more urgent: it waits its turn again. Otherwise it can't be made.
+        if (this.stopping !== id) this.made.set(job.key, null)
       }
     }
-    this.making = false
+    this.current = null
+    this.running = false
+    this.finished.clear()
   }
 }
 

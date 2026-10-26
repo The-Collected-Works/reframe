@@ -123,17 +123,6 @@ export class Playback {
     return this.playing && [...this.clips.values()].some((c) => !c.ready)
   }
 
-  /** How many files are still having their copies made, with nothing to show meanwhile. */
-  get preparing(): number {
-    if (this.opts.originals) return 0
-    return new Set(
-      this.opts
-        .tracks()
-        .filter((t) => copies.pending(t.file))
-        .map((t) => t.file.path)
-    ).size
-  }
-
   toggle(): void {
     const { start, end } = this.opts.range()
     if (end - start <= 0) return

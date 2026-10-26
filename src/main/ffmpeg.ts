@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { promises as fs, type Stats } from 'node:fs'
+import { constants as os, setPriority } from 'node:os'
 import { join } from 'node:path'
 import { inColor, OUT_TAGS, parseColor } from '@shared/color'
 import { layoutArgs, videoArgs } from '@shared/filtergraph'
@@ -48,11 +49,10 @@ function run(kind: Kind, args: string[], onStdout?: (chunk: string) => void): { 
 
 const kill = (kind: Kind) => running.forEach((k, p) => k === kind && p.kill('SIGKILL'))
 
-/** Stops everything and removes anything left half-written, and the playback copies. */
+/** Stops everything and removes anything left half-written. */
 export async function shutdown(): Promise<void> {
   running.forEach((_, p) => p.kill('SIGKILL'))
   await Promise.all([...partFiles].map((f) => fs.rm(f, { force: true })))
-  await fs.rm(COPIES, { recursive: true, force: true })
 }
 
 // ---------- export ----------
@@ -285,25 +285,54 @@ export async function frame(path: string, time: number, color?: ColorMeta, tag =
 
 const COPIES = join(CACHE, 'copies')
 const COPY_BYTES = 8 * 1024 ** 3
-// One at a time, in the order asked: the renderer decides what's needed first.
+// One at a time: the renderer decides the order, and stops one that something more urgent needs
+// the machine for (see cancelCopy).
 let copyChain: Promise<unknown> = Promise.resolve()
 const copying = new Map<string, Promise<string>>()
+let copyCancelled = false
+
+const copyPath = async (path: string, edge: number) => join(COPIES, `${cacheKey('copy1', path, await fs.stat(path))}-${edge}.mp4`)
+const exists = (f: string) =>
+  fs.access(f).then(
+    () => true,
+    () => false
+  )
+
+/**
+ * Which of these copies are made already (path, or null), without making any: kept between
+ * sessions, so a folder opened again plays at once.
+ */
+export async function copiesMade(list: { path: string; edge: number }[]): Promise<(string | null)[]> {
+  return Promise.all(
+    list.map(async ({ path, edge }) => {
+      const out = await copyPath(path, edge).catch(() => null)
+      if (!out || !(await exists(out))) return null
+      touch(out)
+      return out
+    })
+  )
+}
 
 /**
  * A copy of a video for playing and scrubbing in the app, `edge` pixels on its long side. Every
  * frame is a keyframe, so any frame decodes on its own: seeking is instant, however the source was
  * encoded, and several play at once where several 4K originals can't. The source's frame rate (up
- * to 60), sharp scaling and generous quality: these are for looking at, and go when the app quits.
- * Converted to BT.709 the way export converts, so it matches the real frame it stands in for.
+ * to 60), sharp scaling and generous quality: these are for looking at. Converted to BT.709 the way
+ * export converts, so it matches the real frame it stands in for. Kept (up to 8 GB, the least
+ * recently used going first). `background`: made at low priority, so the app stays responsive.
  */
-export async function copy(path: string, w: number, h: number, color: ColorMeta | undefined, edge: number): Promise<string> {
-  const out = join(COPIES, `${cacheKey('copy1', path, await fs.stat(path))}-${edge}.mp4`)
-  if (
-    await fs.access(out).then(
-      () => true,
-      () => false
-    )
-  ) {
+export async function copy(
+  path: string,
+  w: number,
+  h: number,
+  color: ColorMeta | undefined,
+  edge: number,
+  duration: number,
+  background: boolean,
+  onProgress: (p: number) => void
+): Promise<string> {
+  const out = await copyPath(path, edge)
+  if (await exists(out)) {
     touch(out)
     return out
   }
@@ -311,7 +340,7 @@ export async function copy(path: string, w: number, h: number, color: ColorMeta 
   if (!job) {
     job = copyChain
       .catch(() => {})
-      .then(() => buildCopy(path, out, w, h, color, edge))
+      .then(() => buildCopy(path, out, w, h, color, edge, duration, background, onProgress))
       .then(() => out)
     copyChain = job
     copying.set(out, job)
@@ -320,7 +349,24 @@ export async function copy(path: string, w: number, h: number, color: ColorMeta 
   return job
 }
 
-async function buildCopy(path: string, out: string, w: number, h: number, color: ColorMeta | undefined, edge: number): Promise<void> {
+/** Stops the copy being made (something more urgent needs the machine); its request fails. */
+export function cancelCopy(): void {
+  copyCancelled = true
+  kill('copy')
+}
+
+async function buildCopy(
+  path: string,
+  out: string,
+  w: number,
+  h: number,
+  color: ColorMeta | undefined,
+  edge: number,
+  duration: number,
+  background: boolean,
+  onProgress: (p: number) => void
+): Promise<void> {
+  copyCancelled = false
   await fs.mkdir(COPIES, { recursive: true })
   const s = Math.min(1, edge / Math.max(w, h, 1))
   const even = (n: number) => Math.max(2, Math.round((n * s) / 2) * 2)
@@ -329,6 +375,9 @@ async function buildCopy(path: string, out: string, w: number, h: number, color:
     '-hide_banner',
     '-loglevel',
     'error',
+    '-nostats',
+    '-progress',
+    'pipe:1',
     '-y',
     ...(hw ? ['-hwaccel', 'auto'] : []),
     '-i',
@@ -353,12 +402,33 @@ async function buildCopy(path: string, out: string, w: number, h: number, color:
     '+faststart',
     part
   ]
-  const attempt = async (hw: boolean) => (await run('copy', args(hw)).done).code === 0
+  const attempt = async (hw: boolean) => {
+    let line = ''
+    const { proc, done } = run('copy', args(hw), (chunk) => {
+      // Progress arrives as key=value lines, which can be split across chunks.
+      const lines = (line + chunk).split('\n')
+      line = lines.pop() ?? ''
+      for (const l of lines) {
+        const m = /^out_time_us=(\d+)/.exec(l)
+        if (m && duration > 0) onProgress(Math.min(1, Number(m[1]) / 1e6 / duration))
+      }
+    })
+    // Making copies ahead of time stays out of the way of everything else.
+    if (background && proc.pid)
+      try {
+        setPriority(proc.pid, os.priority.PRIORITY_BELOW_NORMAL)
+      } catch {
+        // Not permitted here; run at normal priority.
+      }
+    return (await done).code === 0
+  }
   partFiles.add(part)
   try {
     // Hardware decoding where it works, else software.
-    if (!(await attempt(true)) && !(await attempt(false))) throw new Error('Could not make a playback copy')
+    if (!(await attempt(true)) && !copyCancelled && !(await attempt(false))) throw new Error('Could not make a playback copy')
+    if (copyCancelled) throw new Error('cancelled')
     await fs.rename(part, out)
+    onProgress(1)
   } finally {
     partFiles.delete(part)
     await fs.rm(part, { force: true })
