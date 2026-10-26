@@ -35,6 +35,12 @@
   <div class="track" role="presentation" bind:this={track} {onpointerdown}>
     <div class="rail"><div class="fill" style:width={`${(player.time / duration) * 100}%`}></div></div>
     <div class="head" style:left={`${(player.time / duration) * 100}%`}></div>
+    <!-- Each video's playback copy is being made: its cell shows a still until it's ready. -->
+    {#if player.preparing}
+      <span class="preparing" title="Making small copies of the videos that play and scrub smoothly. Exports use the originals."
+        >Preparing playback · {player.preparing} to go</span
+      >
+    {/if}
   </div>
   <span class="time muted">{fmtTime(duration)}</span>
   <span class="silent" title="Layouts export without sound for now"><Icon name="volumeOff" /></span>
@@ -146,6 +152,24 @@
     background: var(--text);
     transform: translateY(-50%);
     pointer-events: none;
+  }
+
+  .preparing {
+    position: absolute;
+    left: 50%;
+    bottom: -2px;
+    transform: translateX(-50%);
+    color: var(--muted);
+    font-size: 10px;
+    white-space: nowrap;
+    pointer-events: auto;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    50% {
+      opacity: 0.45;
+    }
   }
 
   .silent {

@@ -84,7 +84,7 @@
       const a = scene.cells.get(slot.id)?.asset
       if (a?.kind !== 'video' || !a.duration) return []
       const c = clipFor(project.file, a.name, a.duration)
-      return [{ slot: slot.id, path: a.path, start: c.start, length: c.end - c.start, end: slot.end ?? 'loop' }]
+      return [{ slot: slot.id, path: a.path, mtime: a.mtime, w: a.w, h: a.h, color: a.color, start: c.start, length: c.end - c.start, end: slot.end ?? 'loop' }]
     })
   })
   let layoutPlayer = $state.raw<LayoutPlayer | null>(null)

@@ -1,21 +1,37 @@
 import { untrack } from 'svelte'
+import { SvelteMap } from 'svelte/reactivity'
 import { slotTime } from '@shared/arrangement'
-import { mediaUrl } from '../../lib/bridge'
+import type { ColorMeta } from '@shared/types'
+import { api, mediaUrl } from '../../lib/bridge'
 import { releaseVideo, silentVideo } from '../../lib/media'
 
-/** A video cell: where its file is, and the part of it the layout plays. */
+/** A video cell: its file (and what's known about it), and the part of it the layout plays. */
 export interface LayoutVideo {
   slot: string
   path: string
+  mtime: number
+  w: number
+  h: number
+  color?: ColorMeta
   start: number
   length: number
   end: 'loop' | 'hold'
 }
 
 /**
+ * Each file's playback copy: the scrub proxy (small, every frame a keyframe), which plays and seeks
+ * smoothly where the original (4K at 60fps, keyframes seconds apart, several at once) can't. Kept
+ * for the session. null: none could be made, so the file itself plays.
+ */
+const copies = new SvelteMap<string, string | null>()
+const fileKey = (c: LayoutVideo) => `${c.path}|${c.mtime}`
+
+/**
  * Playing a layout in the single view: one clock for the layout, and a video per video cell that
- * follows it, looping or holding exactly as the export does (see slotTime). Silent, as the export
- * is for now. `frame` changes whenever there's something new to draw. Call `destroy()` when done.
+ * follows it, looping or holding exactly as the export does (see slotTime). Each plays from its
+ * file's playback copy, made in the background on first open; until then the cell's thumbnail
+ * stands in. Silent, as the export is for now. `frame` changes whenever there's something new to
+ * draw. Call `destroy()` when done.
  */
 export class LayoutPlayer {
   playing = $state(false)
@@ -23,7 +39,12 @@ export class LayoutPlayer {
   time = $state(0)
   frame = $state(0)
 
-  private videos = new Map<string, { key: string; v: HTMLVideoElement }>()
+  private videos = new Map<string, { src: string; v: HTMLVideoElement }>()
+  /** A seek waiting for the one in flight to land; only the newest target is kept. */
+  private pending = new Map<HTMLVideoElement, number>()
+  private queue: LayoutVideo[] = []
+  private working = false
+  private alive = true
   private stop: () => void
   private startedAt = 0
   private startedTime = 0
@@ -36,9 +57,19 @@ export class LayoutPlayer {
   }
 
   destroy(): void {
+    this.alive = false
     this.stop()
     for (const { v } of this.videos.values()) releaseVideo(v)
     this.videos.clear()
+  }
+
+  /** How many cells are still waiting for their playback copy. */
+  get preparing(): number {
+    return new Set(
+      this.cells()
+        .filter((c) => copies.get(fileKey(c)) === undefined)
+        .map(fileKey)
+    ).size
   }
 
   /** What to draw for a cell now: its video once it has a frame, or null (its thumbnail stands in). */
@@ -63,28 +94,40 @@ export class LayoutPlayer {
   }
 
   private effects() {
-    // A video per video cell, kept as long as the cell shows the same file.
+    // A video per video cell, from its file's playback copy once there is one.
     $effect(() => {
-      const wanted = this.cells()
+      const wanted = this.cells().map((c) => {
+        const copy = copies.get(fileKey(c))
+        return { c, src: copy ? mediaUrl(copy) : copy === null ? mediaUrl(c.path) : null }
+      })
       untrack(() => {
         const keep = new Set<string>()
-        for (const c of wanted) {
+        for (const { c, src } of wanted) {
+          if (!src) {
+            this.prepare(c)
+            continue
+          }
           keep.add(c.slot)
           const have = this.videos.get(c.slot)
-          if (have?.key === c.path) continue
-          if (have) releaseVideo(have.v)
-          const v = silentVideo(mediaUrl(c.path))
+          if (have?.src === src) continue
+          if (have) this.release(have.v)
+          const v = silentVideo(src)
           v.loop = false
-          v.addEventListener('seeked', () => this.frame++)
+          v.addEventListener('seeked', () => {
+            const next = this.pending.get(v)
+            this.pending.delete(v)
+            if (next != null) v.currentTime = next
+            this.frame++
+          })
           v.addEventListener('loadeddata', () => {
             this.sync(true)
             this.frame++
           })
-          this.videos.set(c.slot, { key: c.path, v })
+          this.videos.set(c.slot, { src, v })
         }
         for (const [slot, { v }] of this.videos) {
           if (keep.has(slot)) continue
-          releaseVideo(v)
+          this.release(v)
           this.videos.delete(slot)
         }
         this.sync(true)
@@ -94,10 +137,7 @@ export class LayoutPlayer {
     // The clock: while playing, time runs and wraps at the layout's length; each video follows it.
     $effect(() => {
       if (!this.playing) {
-        untrack(() => {
-          for (const { v } of this.videos.values()) v.pause()
-          this.sync(true)
-        })
+        untrack(() => this.sync(true))
         return
       }
       this.startedAt = performance.now()
@@ -121,10 +161,51 @@ export class LayoutPlayer {
     })
   }
 
+  private release(v: HTMLVideoElement) {
+    this.pending.delete(v)
+    releaseVideo(v)
+  }
+
+  /** Asks for a file's playback copy, one file at a time, for as long as this layout is open. */
+  private prepare(c: LayoutVideo) {
+    if (copies.has(fileKey(c)) || this.queue.some((q) => fileKey(q) === fileKey(c))) return
+    this.queue.push(c)
+    if (!this.working) this.work()
+  }
+
+  private async work() {
+    this.working = true
+    while (this.alive && this.queue.length) {
+      const c = this.queue[0]
+      if (!copies.has(fileKey(c))) {
+        try {
+          copies.set(fileKey(c), await api.scrubProxy(c.path, c.w, c.h, c.color))
+        } catch (e) {
+          if (!this.alive) break
+          // Another view asked for one meanwhile (only the newest request builds): ask again shortly.
+          if (/superseded/.test(String(e))) {
+            await new Promise((r) => setTimeout(r, 400))
+            continue
+          }
+          copies.set(fileKey(c), null)
+        }
+      }
+      this.queue.shift()
+    }
+    this.working = false
+  }
+
+  /** Seeks there, or once the seek in flight lands (so a scrub never queues up a backlog). */
+  private seekTo(v: HTMLVideoElement, t: number) {
+    if (v.seeking) this.pending.set(v, t)
+    else v.currentTime = t
+  }
+
   /**
-   * Each video to where it should be at the current time: played along while the clock runs (and
-   * nudged back when it drifts), held on its last frame once a holding one ends, or seeked there
-   * when paused or `jump`ing.
+   * Each video to where it should be at the current time. While the clock runs a video plays along,
+   * its speed nudged to close small drift (seeking only to jump, or when it's well off: a loop
+   * coming round, say); a holding one stops on its last frame once it ends. Paused, each is seeked
+   * there.
    */
   private sync(jump: boolean) {
     for (const c of this.cells()) {
@@ -134,10 +215,15 @@ export class LayoutPlayer {
       const held = c.end === 'hold' && this.time >= c.length
       if (!this.playing || held) {
         if (!v.paused) v.pause()
-        if (Math.abs(v.currentTime - t) > 0.02 && !v.seeking) v.currentTime = t
+        v.playbackRate = 1
+        if (Math.abs(v.currentTime - t) > 0.02 || this.pending.has(v)) this.seekTo(v, t)
         continue
       }
-      if (jump || Math.abs(v.currentTime - t) > 0.25) v.currentTime = t
+      const drift = v.currentTime - t
+      if (jump || Math.abs(drift) > Math.min(0.5, c.length / 2)) {
+        v.playbackRate = 1
+        this.seekTo(v, t)
+      } else if (!v.seeking) v.playbackRate = Math.abs(drift) < 0.03 ? 1 : Math.min(1.25, Math.max(0.8, 1 - drift * 2))
       if (v.paused) v.play().catch(() => {})
     }
   }
