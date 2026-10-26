@@ -8,7 +8,7 @@
     onReset,
     onMakeDefault,
     children
-  }: { label: string; overridden: boolean; onReset: () => void; onMakeDefault: () => void; children: Snippet } = $props()
+  }: { label: string; overridden: boolean; onReset: () => void; onMakeDefault?: () => void; children: Snippet } = $props()
 </script>
 
 <div class="row">
@@ -17,7 +17,9 @@
     {#if overridden}
       <Dot title="Reset to default" onclick={onReset} />
       <!-- Revealed on hover: promote this value to the artboard's default. -->
-      <button class="row-action" title="Use this value as the default for every asset" onclick={onMakeDefault}>Make default</button>
+      {#if onMakeDefault}
+        <button class="row-action" title="Use this value as the default for every asset" onclick={onMakeDefault}>Make default</button>
+      {/if}
     {/if}
   </div>
   <div class="row-body">{@render children()}</div>

@@ -1,6 +1,7 @@
 import { SvelteMap } from 'svelte/reactivity'
 import type { AssetEntry, ColorMeta, FolderScan, SkippedFolder } from '@shared/types'
 import { hydrate } from './loading'
+import type { Entry } from './model/items'
 import { folderOf } from './model/tree'
 
 /**
@@ -20,12 +21,12 @@ export interface AssetMeta {
   error: boolean
 }
 
-/** A scanned asset together with what's been loaded about it. */
-export type Asset = AssetEntry & AssetMeta
+/** An item (a file, a variant of one, a grid) together with what's been loaded about its file. */
+export type Asset = Entry & AssetMeta
 
 const NO_META: AssetMeta = { w: 0, h: 0, duration: 0, thumb: null, error: false }
 
-export const withMeta = (entry: AssetEntry, meta: AssetMeta | undefined): Asset => ({ ...entry, ...(meta ?? NO_META) })
+export const withMeta = (entry: Entry, meta: AssetMeta | undefined): Asset => ({ ...entry, ...(meta ?? NO_META) })
 
 /** The open folder: its images and videos (in folder order), and what's been loaded about each. */
 class Library {
@@ -76,12 +77,6 @@ class Library {
     const current = this.assets.find((a) => a.name === entry.name)
     if (!current || current.path !== entry.path || current.mtime !== entry.mtime) return
     this.meta.set(entry.name, { ...NO_META, ...this.meta.get(entry.name), ...patch })
-  }
-
-  /** An asset with what's been loaded about it. */
-  asset(name: string | null): Asset | undefined {
-    const entry = name ? this.assets.find((a) => a.name === name) : undefined
-    return entry && withMeta(entry, this.meta.get(entry.name))
   }
 }
 

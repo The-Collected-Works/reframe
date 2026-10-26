@@ -29,7 +29,8 @@ export function emptyProject(): ProjectFile {
     version: 1,
     artboards: [newBoard('Square', 1080, 1080)],
     clips: {},
-    export: { dir: null, imageFormat: 'png', imageQuality: 0.92, videoCrf: 18 }
+    export: { dir: null, imageFormat: 'png', imageQuality: 0.92, videoCrf: 18 },
+    items: {}
   }
 }
 
@@ -54,7 +55,8 @@ export function normalizeProject(p: ProjectFile | null): ProjectFile {
       )
     })),
     clips: p.clips ?? {},
-    export: { ...base.export, ...p.export }
+    export: { ...base.export, ...p.export },
+    items: p.items ?? {}
   }
 }
 

@@ -4,9 +4,9 @@ import { promises as fs, type Stats } from 'node:fs'
 import { constants as os, setPriority } from 'node:os'
 import { join } from 'node:path'
 import { inColor, OUT_TAGS, parseColor } from '@shared/color'
-import { videoArgs } from '@shared/filtergraph'
+import { gridArgs, videoArgs } from '@shared/filtergraph'
 import { posterTime } from '@shared/media'
-import type { ColorMeta, PosterResult, VideoExportJob } from '@shared/types'
+import type { ColorMeta, GridExportJob, PosterResult, VideoExportJob } from '@shared/types'
 import { writeJsonAtomic } from './fsutil'
 
 // Runs inside the media worker (see worker.ts); the main process passes these in.
@@ -66,10 +66,25 @@ let exportCancelled = false
  */
 export async function exportVideo(job: VideoExportJob, onProgress: (p: number) => void): Promise<void> {
   exportCancelled = false
-  const part = job.output.replace(/(\.[^./\\]+)?$/, '.part$1')
-  const total = Math.max(0.01, (job.clip.end ?? job.duration) - job.clip.start)
+  const part = partOf(job.output)
+  partFiles.add(part)
+  try {
+    await encode(videoArgs({ ...job, output: part }), (job.clip.end ?? job.duration) - job.clip.start, onProgress)
+    await fs.rename(part, job.output)
+    onProgress(1)
+  } finally {
+    partFiles.delete(part)
+    await fs.rm(part, { force: true })
+  }
+}
+
+const partOf = (output: string) => output.replace(/(\.[^./\\]+)?$/, '.part$1')
+
+/** Runs one export encode of `seconds` of output, reporting progress through it (0..1). */
+async function encode(args: string[], seconds: number, onProgress: (p: number) => void): Promise<void> {
+  const total = Math.max(0.01, seconds)
   let line = ''
-  const { done } = run('export', videoArgs({ ...job, output: part }), (chunk) => {
+  const { done } = run('export', args, (chunk) => {
     // Progress arrives as key=value lines, which can be split across chunks.
     const lines = (line + chunk).split('\n')
     line = lines.pop() ?? ''
@@ -78,19 +93,63 @@ export async function exportVideo(job: VideoExportJob, onProgress: (p: number) =
       if (m) onProgress(Math.min(1, Number(m[1]) / 1e6 / total))
     }
   })
-  partFiles.add(part)
+  const res = await done
+  if (exportCancelled) throw new Error('cancelled')
+  if (res.code !== 0) {
+    const lines = res.stderr.trim().split('\n')
+    throw new Error(lines.slice(-3).join(' ').slice(0, 400) || `ffmpeg exited with ${res.code}`)
+  }
+}
+
+/**
+ * Renders a grid with video in it, in two passes. First each video is framed into a file the size
+ * of its cell, exactly as a single video is framed into an artboard (trimmed, so a whole file is
+ * one loop). Then those are laid over the background, looping or holding, under the renderer's
+ * layer of everything that doesn't move. Working files go once it's done (or cut short).
+ */
+export async function exportGrid(job: GridExportJob, onProgress: (p: number) => void): Promise<void> {
+  exportCancelled = false
+  const dir = join(CACHE, 'grid')
+  await fs.mkdir(dir, { recursive: true })
+  const tag = createHash('sha1').update(`${job.output}|${Date.now()}`).digest('hex').slice(0, 12)
+  const layer = join(dir, `${tag}-layer.png`)
+  const cells = job.cells.map((_, i) => join(dir, `${tag}-cell${i}.mp4`))
+  const part = partOf(job.output)
+  const working = [layer, ...cells, part]
+  working.forEach((f) => partFiles.add(f))
+  // Progress: each cell's pass in proportion to its length, then the grid's for its own.
+  const total = job.cells.reduce((n, c) => n + c.length, 0) + job.duration
+  let before = 0
+  const step = (seconds: number) => (p: number) => onProgress((before + p * seconds) / total)
   try {
-    const res = await done
-    if (exportCancelled) throw new Error('cancelled')
-    if (res.code !== 0) {
-      const lines = res.stderr.trim().split('\n')
-      throw new Error(lines.slice(-3).join(' ').slice(0, 400) || `ffmpeg exited with ${res.code}`)
+    await fs.writeFile(layer, job.layer)
+    for (const [i, c] of job.cells.entries()) {
+      if (exportCancelled) throw new Error('cancelled')
+      const cell: VideoExportJob = {
+        id: job.id,
+        input: c.input,
+        output: cells[i],
+        width: c.width,
+        height: c.height,
+        srcWidth: c.srcWidth,
+        srcHeight: c.srcHeight,
+        color: c.color,
+        settings: { ...c.settings, mute: true },
+        clip: c.clip,
+        duration: c.clip.start + c.length,
+        // Nearly lossless: it's encoded again in the second pass.
+        crf: 8
+      }
+      await encode(videoArgs(cell), c.length, step(c.length))
+      before += c.length
     }
+    if (exportCancelled) throw new Error('cancelled')
+    await encode(gridArgs(job, layer, cells, part), job.duration, step(job.duration))
     await fs.rename(part, job.output)
     onProgress(1)
   } finally {
-    partFiles.delete(part)
-    await fs.rm(part, { force: true })
+    working.forEach((f) => partFiles.delete(f))
+    await Promise.all(working.map((f) => fs.rm(f, { force: true })))
   }
 }
 

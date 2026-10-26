@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, utilityProcess, type UtilityProcess } from 'electron'
-import type { ColorMeta, PosterResult, VideoExportJob } from '@shared/types'
+import type { ColorMeta, GridExportJob, PosterResult, VideoExportJob } from '@shared/types'
 import type { WorkerReply, WorkerRequest } from './worker'
 
 const OS: Record<string, string> = { win32: 'win', darwin: 'mac', linux: 'linux' }
@@ -67,6 +67,7 @@ export const poster = (path: string) => call<PosterResult>({ type: 'poster', pat
 export const frame = (path: string, time: number, color?: ColorMeta) => call<Uint8Array>({ type: 'frame', path, time, color })
 export const scrubProxy = (path: string, w: number, h: number, color?: ColorMeta) => call<string>({ type: 'proxy', path, w, h, color })
 export const exportVideo = (job: VideoExportJob, onProgress: (p: number) => void) => call<void>({ type: 'export', job }, onProgress)
+export const exportGrid = (job: GridExportJob, onProgress: (p: number) => void) => call<void>({ type: 'grid', job }, onProgress)
 export const cancelExport = (): void => worker?.postMessage({ type: 'cancel' } satisfies WorkerRequest)
 
 /**

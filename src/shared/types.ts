@@ -36,9 +36,61 @@ export interface Artboard {
   width: number
   height: number
   defaults: CropSettings
-  /** Keyed by asset file name. */
+  /** Keyed by item: an asset's file name, a variant's key, or a grid slot's (see grid.ts). */
   overrides: Record<string, Partial<CropSettings>>
+  /** How grids are arranged on this artboard: by grid key, then split id. Unset follows its shape. */
+  splits?: Record<string, Record<string, SplitLayout>>
 }
+
+/** A cell in a grid, showing an item (or nothing yet). */
+export interface GridSlot {
+  id: string
+  item: string | null
+  /** A video shorter than the grid: plays again from its start, or holds its last frame. */
+  end?: 'loop' | 'hold'
+}
+
+/** Its children side by side or stacked, whichever way suits the space it gets on each artboard. */
+export interface GridSplit {
+  id: string
+  children: GridNode[]
+}
+
+export type GridNode = GridSlot | GridSplit
+
+/** How one split sits on one artboard. Either part left unset follows the artboard. */
+export interface SplitLayout {
+  dir?: 'row' | 'col'
+  /** Each child's share of the space, in any unit. */
+  weights?: number[]
+}
+
+/**
+ * Items that aren't files: a variant (a file again, with its own framing and trim) or a grid
+ * (several items laid out together). Each is a row of its own, keyed apart from file names.
+ */
+export interface VariantItem {
+  kind: 'variant'
+  /** The file's name. */
+  source: string
+  name: string
+}
+
+export interface GridItem {
+  kind: 'grid'
+  name: string
+  root: GridNode
+  /** In artboard pixels: between cells, and around them. */
+  gap: number
+  padding: number
+  /** Corner radius of each cell, in artboard pixels. */
+  radius: number
+  bgColor: string
+  /** Seconds; null: as long as its longest video. */
+  duration: number | null
+}
+
+export type VirtualItem = VariantItem | GridItem
 
 export interface Clip {
   start: number
@@ -59,6 +111,8 @@ export interface ProjectFile {
   /** Trim is a property of the source, shared across artboards. */
   clips: Record<string, Clip>
   export: ExportPrefs
+  /** Variants and grids, by key. */
+  items?: Record<string, VirtualItem>
 }
 
 export interface AssetEntry {
@@ -102,6 +156,40 @@ export interface VideoExportJob {
   settings: CropSettings
   clip: Clip
   duration: number
+  crf: number
+}
+
+/** One video cell of a grid export, framed into its rectangle like an artboard of that size. */
+export interface GridCellJob {
+  input: string
+  x: number
+  y: number
+  width: number
+  height: number
+  srcWidth: number
+  srcHeight: number
+  color?: ColorMeta
+  settings: CropSettings
+  clip: Clip
+  /** Seconds the clip runs (after the trim). */
+  length: number
+  end: 'loop' | 'hold'
+}
+
+/**
+ * A grid with video in it. Everything that doesn't move (background, images, rounded corners) is
+ * drawn by the renderer into `layer`, a PNG with holes where the videos show through.
+ */
+export interface GridExportJob {
+  id: string
+  output: string
+  width: number
+  height: number
+  bgColor: string
+  layer: Uint8Array
+  cells: GridCellJob[]
+  duration: number
+  fps: number
   crf: number
 }
 
@@ -160,6 +248,7 @@ export interface ReframeApi {
   chooseExportDir(defaultPath?: string): Promise<string | null>
   writeFile(path: string, data: ArrayBuffer): Promise<void>
   exportVideo(job: VideoExportJob): Promise<void>
+  exportGrid(job: GridExportJob): Promise<void>
   cancelExport(): Promise<void>
   poster(path: string): Promise<PosterResult>
   /** A frame decoded the way export decodes it, as JPEG. */

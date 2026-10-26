@@ -1,56 +1,124 @@
+import type { Dir } from '@shared/grid'
 import { resolveSettings } from '@shared/layout'
 import { api, mac, win } from '../lib/bridge'
 import { hint } from '../lib/keymap.svelte'
 import { inside } from '../lib/paths'
-import { copy, deleteBoard, duplicateBoard, edit, excludeFolder, includeFolder, paste, resetSelection, setMode } from '../state/actions'
+import {
+  addToGrid,
+  combineSelection,
+  copy,
+  deleteBoard,
+  deleteSelection,
+  duplicateBoard,
+  duplicateSelection,
+  edit,
+  excludeFolder,
+  includeFolder,
+  paste,
+  removeSlot,
+  resetSelection,
+  setMode,
+  setSlot,
+  splitSlot
+} from '../state/actions'
+import { items } from '../state/items.svelte'
 import { library } from '../state/library.svelte'
+import { isVirtual } from '../state/model/items'
 import { hasOverrides } from '../state/model/project'
-import { folderOf } from '../state/model/tree'
+import { folderOf, GRIDS } from '../state/model/tree'
 import { project } from '../state/project.svelte'
 import { selection } from '../state/selection.svelte'
 import { shell } from '../state/shell.svelte'
 import { view } from '../state/view.svelte'
-import { showMenu } from '../ui'
-import { GLOBAL, GRID } from './keymaps'
+import { showMenu, type ContextMenuItem } from '../ui'
+import { GLOBAL, GRID, GRID_EDITOR } from './keymaps'
 
-/** The right-click menus: on assets (grid and single view), artboard tabs, and folder headers. */
+/** The right-click menus: on items (grid and single view), grid cells, artboard tabs, and folder headers. */
 
 const revealLabel = mac ? 'Reveal in Finder' : win ? 'Show in Explorer' : 'Show in Folder'
 
-/** Right-click menu for an asset. Right-clicking outside the selection selects it first. */
+/**
+ * Right-click menu for an item (a file, a variant or a grid). Right-clicking outside the selection
+ * selects it first.
+ */
 export async function assetMenu(name: string, path: string, at: { x: number; y: number }, inSingle = false): Promise<void> {
   if (!selection.has(name)) selection.select(name)
   const board = project.board
   const sel = selection.names
   const skip = resolveSettings(board, name).skip
+  const grid = items.entry(name)?.kind === 'grid'
+  const assets = sel.filter((n) => items.entry(n)?.kind !== 'grid')
+  const grids = items.all.filter((e) => e.kind === 'grid')
   const id = await showMenu(at.x, at.y, [
     ...(inSingle ? [] : [{ id: 'open', label: 'Open', icon: 'open' as const, shortcut: hint(GRID.actions.open) }, { separator: true }]),
-    { id: 'copy', label: 'Copy Settings', icon: 'copy', shortcut: hint(GLOBAL.actions.copy), enabled: sel.length === 1 },
-    {
-      id: 'paste',
-      label: sel.length > 1 ? `Paste Settings to ${sel.length}` : 'Paste Settings',
-      icon: 'paste',
-      shortcut: hint(GLOBAL.actions.paste),
-      enabled: !!project.clipboard
-    },
-    {
-      id: 'reset',
-      label: 'Reset to Defaults',
-      icon: 'reset',
-      shortcut: hint(GLOBAL.actions.reset),
-      enabled: sel.some((n) => hasOverrides(board, n))
-    },
-    { separator: true },
+    ...(inSingle
+      ? []
+      : [
+          { id: 'duplicate', label: 'Duplicate', icon: 'duplicate' as const, shortcut: hint(GRID.actions.duplicate) },
+          { id: 'combine', label: 'Combine into Grid', icon: 'layout' as const, shortcut: hint(GRID.actions.combine), enabled: assets.length > 0 },
+          // One per grid, while there are few enough to list.
+          ...(assets.length && grids.length && grids.length <= 6
+            ? grids.map((g): ContextMenuItem => ({ id: `add:${g.name}`, label: `Add to “${g.label}”`, icon: 'plus' }))
+            : []),
+          { separator: true }
+        ]),
+    ...(grid
+      ? []
+      : [
+          { id: 'copy', label: 'Copy Settings', icon: 'copy' as const, shortcut: hint(GLOBAL.actions.copy), enabled: sel.length === 1 },
+          {
+            id: 'paste',
+            label: sel.length > 1 ? `Paste Settings to ${sel.length}` : 'Paste Settings',
+            icon: 'paste' as const,
+            shortcut: hint(GLOBAL.actions.paste),
+            enabled: !!project.clipboard
+          },
+          {
+            id: 'reset',
+            label: 'Reset to Defaults',
+            icon: 'reset' as const,
+            shortcut: hint(GLOBAL.actions.reset),
+            enabled: sel.some((n) => hasOverrides(board, n))
+          },
+          { separator: true }
+        ]),
     { id: 'leaveOut', label: 'Leave Out of Export', icon: 'leaveOut', checked: skip },
     { separator: true },
-    { id: 'reveal', label: revealLabel, icon: 'reveal' }
+    ...(isVirtual(name) ? [{ id: 'rename', label: 'Rename', icon: 'rename' as const }] : []),
+    ...(grid ? [] : [{ id: 'reveal', label: revealLabel, icon: 'reveal' as const }]),
+    ...(sel.some(isVirtual) ? [{ id: 'delete', label: 'Delete', icon: 'trash' as const, shortcut: hint(GRID.actions.remove), danger: true }] : [])
   ])
   if (id === 'open') setMode('single')
+  else if (id === 'duplicate') duplicateSelection()
+  else if (id === 'combine') combineSelection()
+  else if (id?.startsWith('add:')) addToGrid(id.slice(4))
   else if (id === 'copy') copy()
   else if (id === 'paste') paste()
   else if (id === 'reset') resetSelection()
   else if (id === 'leaveOut') edit({ skip: !skip })
+  else if (id === 'rename') {
+    selection.focus = name
+    shell.renamingItem = name
+  } else if (id === 'delete') deleteSelection()
   else if (id === 'reveal') api.reveal(path)
+}
+
+/** Right-click on a grid's cell in the single view (it's selected first). */
+export async function slotMenu(slot: string, filled: boolean, video: boolean, end: 'loop' | 'hold', at: { x: number; y: number }): Promise<void> {
+  selection.slot = slot
+  const id = await showMenu(at.x, at.y, [
+    { id: 'choose', label: filled ? 'Replace…' : 'Choose…', icon: 'replace' },
+    { separator: true },
+    { id: 'row', label: 'Add Cell Beside', icon: 'splitRow' },
+    { id: 'col', label: 'Add Cell Below', icon: 'splitCol' },
+    ...(video ? [{ separator: true }, { id: 'hold', label: 'Hold Last Frame When Shorter', icon: 'pause' as const, checked: end === 'hold' }] : []),
+    { separator: true },
+    { id: 'remove', label: 'Remove Cell', icon: 'trash', shortcut: hint(GRID_EDITOR.actions.remove), danger: true }
+  ])
+  if (id === 'choose') shell.choosing = slot
+  else if (id === 'row' || id === 'col') splitSlot(id as Dir)
+  else if (id === 'hold') setSlot(slot, { end: end === 'hold' ? 'loop' : 'hold' })
+  else if (id === 'remove') removeSlot()
 }
 
 /** Right-click menu for an artboard tab. */
@@ -74,9 +142,18 @@ export async function boardMenu(boardId: string, at: { x: number; y: number }): 
 
 /** Right-click on a folder's section header in the grid. */
 export async function folderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
+  if (folder === GRIDS) {
+    const grids = view.visible.filter((a) => a.kind === 'grid').map((a) => a.name)
+    const id = await showMenu(at.x, at.y, [{ id: 'select', label: 'Select All Grids', icon: 'check', enabled: grids.length > 0 }])
+    if (id === 'select') selection.set(grids)
+    return
+  }
   // What's visible in the folder and the folders inside it (selecting hidden assets would let edits
-  // land out of sight).
-  const names = view.visible.filter((a) => folderOf(a.name) === folder || (folder !== '' && a.name.startsWith(folder + '/'))).map((a) => a.name)
+  // land out of sight). A variant is in its file's folder.
+  const home = (a: { name: string; source?: string }) => a.source ?? a.name
+  const names = view.visible
+    .filter((a) => a.kind !== 'grid' && (folderOf(home(a)) === folder || (folder !== '' && home(a).startsWith(folder + '/'))))
+    .map((a) => a.name)
   const id = await showMenu(at.x, at.y, [
     { id: 'select', label: 'Select All in Folder', icon: 'check', enabled: names.length > 0 },
     { id: 'reveal', label: revealLabel, icon: 'reveal' },

@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
+  Columns2,
   Copy,
   CopyPlus,
   Download,
@@ -13,7 +14,10 @@ import {
   EyeOff,
   Folder,
   FolderOpen,
+  GripVertical,
   Info,
+  Layers2,
+  LayoutDashboard,
   LayoutGrid,
   ListFilter,
   Maximize2,
@@ -22,9 +26,11 @@ import {
   Pipette,
   Play,
   Plus,
+  Replace,
   RotateCcw,
   RotateCcwSquare,
   RotateCwSquare,
+  Rows2,
   Share,
   SlidersHorizontal,
   Square,
@@ -75,7 +81,14 @@ export const ICONS = {
   rotateR: RotateCwSquare,
   // Named by the axis line, not the motion: mirroring left-right is the vertical-axis glyph.
   flipH: TrianglesCenterlineDashedVertical,
-  flipV: TrianglesCenterlineDashedHorizontal
+  flipV: TrianglesCenterlineDashedHorizontal,
+  // Variants and grids.
+  variant: Layers2,
+  layout: LayoutDashboard,
+  splitRow: Columns2,
+  splitCol: Rows2,
+  replace: Replace,
+  grip: GripVertical
 }
 
 /** Drawn solid rather than outlined. */

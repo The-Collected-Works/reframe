@@ -23,6 +23,7 @@ const api: ReframeApi = {
   chooseExportDir: (defaultPath) => ipcRenderer.invoke('choose-export-dir', defaultPath),
   writeFile: (path, data) => ipcRenderer.invoke('write-file', path, data),
   exportVideo: (job) => ipcRenderer.invoke('export-video', job),
+  exportGrid: (job) => ipcRenderer.invoke('export-grid', job),
   cancelExport: () => ipcRenderer.invoke('cancel-export'),
   poster: (path) => ipcRenderer.invoke('poster', path),
   frame: (path, time, color) => ipcRenderer.invoke('frame', path, time, color),

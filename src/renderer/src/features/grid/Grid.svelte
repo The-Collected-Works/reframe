@@ -5,8 +5,9 @@
 <script lang="ts">
   import { useKeymap } from '../../lib/keymap.svelte'
   import { basename } from '../../lib/paths'
-  import { includeFolder, setMode, toggleCollapsed } from '../../state/actions'
-  import { library, withMeta } from '../../state/library.svelte'
+  import { combineSelection, deleteSelection, duplicateSelection, includeFolder, renameItem, setMode, toggleCollapsed } from '../../state/actions'
+  import { items } from '../../state/items.svelte'
+  import { library } from '../../state/library.svelte'
   import { prioritize } from '../../state/loading'
   import { project } from '../../state/project.svelte'
   import { selection } from '../../state/selection.svelte'
@@ -15,6 +16,7 @@
   import { Icon } from '../../ui'
   import { GRID } from '../keymaps'
   import { assetMenu, excludedFolderMenu, folderMenu } from '../menus'
+  import { gridScene } from '../scene'
   import { GAP, PAD, provideGrid, scroll } from './context'
   import GridFolder from './GridFolder.svelte'
   import { boxSelect } from './marquee'
@@ -54,7 +56,10 @@
       prev: () => selection.step(-1),
       next: () => selection.step(1),
       up: () => stepRow(-1),
-      down: () => stepRow(1)
+      down: () => stepRow(1),
+      duplicate: { when: () => selection.size > 0, run: duplicateSelection },
+      combine: { when: () => selection.size > 0, run: combineSelection },
+      remove: { when: () => selection.size > 0, run: deleteSelection }
     },
     () => active
   )
@@ -107,10 +112,16 @@
     get previews() {
       return active && !shell.picking
     },
-    asset: (entry) => withMeta(entry, library.meta.get(entry.name)),
+    asset: (entry) => items.with(entry),
+    composite: (name) => gridScene(name, board),
     selected: (name) => selection.has(name),
     focused: (name) => selection.focus === name,
     clip: (name) => project.file.clips[name],
+    renaming: (name) => shell.renamingItem === name,
+    rename: (name, label) => {
+      shell.renamingItem = null
+      if (label != null) renameItem(name, label)
+    },
     press: (name, mode) => {
       if (mode !== 'replace') selection.select(name, mode)
       else if (selection.has(name)) selection.focus = name
@@ -150,7 +161,7 @@
       <GridFolder {node} />
     {/each}
   {/if}
-  {#if library.assets.length > 0 && !tree.length}<div class="empty-hint center">Nothing matches this filter</div>{/if}
+  {#if items.all.length > 0 && !tree.length}<div class="empty-hint center">Nothing matches this filter</div>{/if}
   {#if (library.skipped.length > 0 && !sectioned) || library.truncated}
     <div class="grid-foot">
       {#if library.skipped.length > 0 && !sectioned}

@@ -1,6 +1,8 @@
 import { getContext, setContext } from 'svelte'
-import type { Artboard, AssetEntry, Clip, CropSettings } from '@shared/types'
+import type { Artboard, Clip, CropSettings } from '@shared/types'
 import type { Asset } from '../../state/library.svelte'
+import type { Entry } from '../../state/model/items'
+import type { GridScene } from '../scene'
 
 export const GAP = 8
 /** Mat around each frame; matches the thumbnail's padding. */
@@ -32,10 +34,16 @@ export interface GridModel {
   /** Videos may play on hover (not while the eyedropper is open: it needs the exact thumbnail). */
   readonly previews: boolean
 
-  asset(entry: AssetEntry): Asset
+  asset(entry: Entry): Asset
+  /** A grid as it sits on the artboard. */
+  composite(name: string): GridScene | null
   selected(name: string): boolean
   focused(name: string): boolean
   clip(name: string): Clip | undefined
+  /** A variant or grid whose name is being edited in place. */
+  renaming(name: string): boolean
+  /** The new name (null: cancelled). */
+  rename(name: string, label: string | null): void
 
   /** A press on a thumbnail: a plain one keeps a multiple selection (so it can be dragged) and focuses. */
   press(name: string, mode: 'replace' | 'toggle' | 'range'): void

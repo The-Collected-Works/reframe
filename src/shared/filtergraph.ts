@@ -1,6 +1,6 @@
 import { inColor, OUT_COLOR, OUT_TAGS } from './color'
 import { blurLayout, bounds, computeLayout, quarterTurns, rasterPlan, rotatedPlan } from './layout'
-import type { VideoExportJob } from './types'
+import type { GridExportJob, VideoExportJob } from './types'
 
 const hex = (c: string): string => '0x' + c.replace('#', '').slice(0, 6).padEnd(6, '0')
 const rgb = (c: string): [number, number, number] => {
@@ -85,5 +85,35 @@ export function videoArgs(job: VideoExportJob): string[] {
   if (s.mute) args.push('-an')
   else args.push('-map', '0:a:0?', '-c:a', 'aac', '-b:a', '192k')
   args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', String(job.crf), '-pix_fmt', 'yuv420p', ...OUT_TAGS, '-movflags', '+faststart', job.output)
+  return args
+}
+
+/**
+ * ffmpeg arguments for putting a grid together, once each of its videos has been framed into its
+ * own cell-sized file (see exportGrid): the background, each video where it goes (looping, or
+ * holding its last frame once it ends), then the layer of everything that doesn't move on top
+ * (images, gaps, rounded corners), with holes where the videos show through.
+ */
+export function gridArgs(job: GridExportJob, layer: string, cells: string[], output: string): string[] {
+  const { width: W, height: H } = job
+  const color = hex(job.bgColor)
+  const duration = job.duration.toFixed(3)
+  const args = ['-hide_banner', '-y', '-nostats', '-progress', 'pipe:1']
+  args.push('-f', 'lavfi', '-i', `color=c=${color}:s=${W}x${H}:r=${job.fps}:d=${duration}`)
+  args.push('-loop', '1', '-i', layer)
+  job.cells.forEach((c, i) => {
+    if (c.end === 'loop') args.push('-stream_loop', '-1')
+    args.push('-i', cells[i])
+  })
+  // The framed cells were written as BT.709; they're composited in planar RGB, as single videos are.
+  let graph = '[0:v]format=gbrp,setsar=1[b0]'
+  job.cells.forEach((c, i) => {
+    graph += `;[${i + 2}:v]scale=iw:ih:in_color_matrix=bt709:in_range=tv,format=gbrp,setsar=1[c${i}]`
+    graph += `;[b${i}][c${i}]overlay=${c.x}:${c.y}:eof_action=repeat:format=gbrp[b${i + 1}]`
+  })
+  const even = W % 2 || H % 2 ? `,pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:color=${color}` : ''
+  graph += `;[1:v]format=gbrap[top];[b${job.cells.length}][top]overlay=0:0:format=gbrp${even},${OUT_COLOR}[v]`
+  args.push('-filter_complex', graph, '-map', '[v]', '-an', '-t', duration)
+  args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', String(job.crf), '-pix_fmt', 'yuv420p', ...OUT_TAGS, '-movflags', '+faststart', output)
   return args
 }

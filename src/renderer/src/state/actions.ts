@@ -1,8 +1,12 @@
-import type { CropSettings, FolderScan, SettingKey } from '@shared/types'
+import { slotKey, type Dir } from '@shared/grid'
+import type { CropSettings, FolderScan, GridSlot, SettingKey } from '@shared/types'
 import { api } from '../lib/bridge'
 import { hint } from '../lib/keymap.svelte'
+import { plural } from '../lib/format'
 import { showToast } from '../ui'
+import { items } from './items.svelte'
 import { library } from './library.svelte'
+import * as model from './model/items'
 import { baseName } from './model/tree'
 import { FRAMING_KEYS, hasOverrides } from './model/project'
 import type { ViewPrefs } from './prefs'
@@ -10,7 +14,7 @@ import { project } from './project.svelte'
 import { selection } from './selection.svelte'
 import { shell } from './shell.svelte'
 import { view, type Mode } from './view.svelte'
-import { GLOBAL } from '../features/keymaps'
+import { GLOBAL, GRID } from '../features/keymaps'
 
 /**
  * What the app does across more than one store, or with the main process, or saying so in a
@@ -18,6 +22,7 @@ import { GLOBAL } from '../features/keymaps'
  */
 
 const undoHint = `${hint(GLOBAL.actions.undo)} to undo`
+const GRID_OPEN = GRID.actions.open
 
 // ---- the folder
 
@@ -50,7 +55,7 @@ export async function rescanFolder(): Promise<void> {
   const scan = await api.rescanFolder().catch(() => null)
   if (!scan || scan.dir !== library.dir) return
   library.rescan(scan)
-  keepSelectionIn(scan.assets.map((a) => a.name))
+  keepSelectionIn(items.all.map((a) => a.name))
 }
 
 /** Leaves a folder (and everything in it) out of the project; its bar stays, dimmed, to bring it back. */
@@ -116,26 +121,49 @@ export function clearSelection(): void {
   selection.clear(view.mode === 'single')
 }
 
-// ---- editing: the selection, or with nothing selected, the artboard's defaults
+// ---- editing: the selection, or with nothing selected, the artboard's defaults. In a grid, the
+// slot being edited.
 
+/** The slot being edited in the grid on screen, by its key in the overrides. */
+export function editingSlot(): string | null {
+  return view.mode === 'single' && selection.focus && selection.slot ? slotKey(selection.focus, selection.slot) : null
+}
+
+const isGrid = (key: string) => items.entry(key)?.kind === 'grid'
+
+/**
+ * What edits apply to: the slot being edited in a grid, or else the selection. A grid has no
+ * framing of its own (its slots do), so of the settings it only takes being left out of an export.
+ */
+export function targets(patch?: Partial<CropSettings>): string[] {
+  const slot = editingSlot()
+  if (slot) return [slot]
+  const framing = !patch || Object.keys(patch).some((k) => k !== 'skip')
+  return framing ? selection.names.filter((n) => !isGrid(n)) : selection.names
+}
+
+/** Edits the targets; nothing at all when only grids are selected (rather than the defaults). */
 export function edit(patch: Partial<CropSettings>): void {
-  project.edit(selection.names, patch)
+  const names = targets(patch)
+  if (names.length || !selection.size) project.edit(names, patch)
 }
 
 export function editEach(fn: (s: CropSettings) => Partial<CropSettings>): void {
-  project.editEach(selection.names, fn)
+  const names = targets()
+  if (names.length || !selection.size) project.editEach(names, fn)
 }
 
 /** Back to the defaults for `keys` (an asset's override goes; a default goes back to the built-in value). */
 export function resetKeys(keys: SettingKey[]): void {
-  project.resetKeys(selection.names, keys)
+  const names = targets()
+  if (names.length || !selection.size) project.resetKeys(names, keys)
 }
 
 /** The focused asset's values for `keys` become the defaults; the selection then follows them. */
 export function makeDefault(keys: SettingKey[]): void {
-  const names = selection.names
-  if (!names.length) return
-  const source = selection.focus && selection.has(selection.focus) ? selection.focus : names[0]
+  const names = targets()
+  if (!names.length || editingSlot()) return
+  const source = selection.focus && names.includes(selection.focus) ? selection.focus : names[0]
   project.makeDefault(source, names, keys)
   showToast(`Now the default for ${project.board.name}`)
 }
@@ -145,21 +173,120 @@ export function makeDefault(keys: SettingKey[]): void {
  * exported stays as it is.
  */
 export function resetSelection(): void {
-  const names = selection.names.filter((n) => hasOverrides(project.board, n))
+  const names = targets().filter((n) => hasOverrides(project.board, n))
   if (!names.length) return
   project.resetKeys(names, FRAMING_KEYS)
-  showToast(`Reset ${names.length === 1 ? baseName(names[0]) : `${names.length} assets`} · ${undoHint}`)
+  showToast(`Reset ${names.length === 1 ? (items.entry(names[0])?.label ?? 'cell') : `${names.length} assets`} · ${undoHint}`)
 }
 
 export function copy(): void {
-  if (!selection.focus) return
-  const n = project.copy(selection.focus)
+  const from = editingSlot() ?? selection.focus
+  if (!from || isGrid(from)) return
+  const n = project.copy(from)
   showToast(n ? `Copied ${n} setting${n === 1 ? '' : 's'}` : 'Copied defaults')
 }
 
 export function paste(): void {
-  const n = selection.size
-  if (project.paste(selection.names)) showToast(n > 1 ? `Pasted to ${n} items` : 'Pasted')
+  const names = targets()
+  if (project.paste(names)) showToast(names.length > 1 ? `Pasted to ${names.length} items` : 'Pasted')
+}
+
+// ---- variants and grids
+
+/** The selection in on-screen order. */
+const inOrder = (names: string[]) => view.visible.filter((e) => names.includes(e.name)).map((e) => e.name)
+
+/** Copies of the selected items, selected in their place: variants of files, and copies of grids. */
+export function duplicateSelection(): void {
+  const keys = inOrder(selection.names)
+  if (!keys.length) return
+  let made: string[] = []
+  project.change((f) => {
+    const r = model.duplicate(f, keys, project.boardId)
+    made = r.keys
+    return r.file
+  })
+  selection.set(made)
+  const others = project.file.artboards.length > 1 ? ` · left out of other artboards` : ''
+  showToast(`Duplicated ${made.length === 1 ? `as “${items.entry(made[0])?.label}”` : plural(made.length, 'item')}${others}`)
+}
+
+/** A new grid of the selected assets (in on-screen order), selected. */
+export function combineSelection(): void {
+  const members = inOrder(selection.names).filter((n) => !isGrid(n))
+  if (!members.length) return
+  let key = ''
+  project.change((f) => {
+    const r = model.combine(f, members, project.board.defaults.bgColor)
+    key = r.key
+    return r.file
+  })
+  selection.set([key])
+  selection.focus = key
+  showToast(`Made “${items.entry(key)?.label}” · ${hint(GRID_OPEN)} to arrange it`)
+}
+
+/** Adds the selected assets to the end of a grid. */
+export function addToGrid(key: string): void {
+  const members = inOrder(selection.names).filter((n) => !isGrid(n))
+  if (!members.length) return
+  project.change((f) => model.append(f, key, members))
+  showToast(`Added ${plural(members.length, 'item')} to “${items.entry(key)?.label}”`)
+}
+
+/** Deletes the selected variants and grids (files stay: they're the folder's). */
+export function deleteSelection(): void {
+  const keys = selection.names.filter(model.isVirtual)
+  if (!keys.length) return
+  const label = keys.length === 1 ? `“${items.entry(keys[0])?.label}”` : plural(keys.length, 'item')
+  const grids = model.gridsShowing(project.file, keys)
+  project.change((f) => model.remove(f, keys))
+  selection.keepOnly(new Set(view.visible.map((e) => e.name)))
+  if (!selection.focus) view.mode = 'grid'
+  showToast(`Deleted ${label}${grids ? `, emptying slots in ${plural(grids, 'grid')}` : ''} · ${undoHint}`)
+}
+
+export function renameItem(key: string, name: string): void {
+  const n = name.trim()
+  if (n) project.change((f) => model.rename(f, key, n))
+}
+
+// ---- grid slots (in the single view, on the grid in focus)
+
+const focusGrid = () => (selection.focus && isGrid(selection.focus) ? selection.focus : null)
+
+/** A new empty slot beside or below the one being edited, ready to fill. */
+export function splitSlot(dir: Dir): void {
+  const grid = focusGrid()
+  const slot = selection.slot
+  if (!grid || !slot) return
+  let made = ''
+  project.change((f) => {
+    const r = model.splitSlot(f, grid, slot, dir, project.boardId)
+    made = r.slot
+    return r.file
+  })
+  selection.slot = made
+  shell.choosing = made
+}
+
+export function removeSlot(): void {
+  const grid = focusGrid()
+  const slot = selection.slot
+  if (!grid || !slot) return
+  project.change((f) => model.removeSlot(f, grid, slot))
+  selection.slot = null
+}
+
+export function swapSlots(a: string, b: string): void {
+  const grid = focusGrid()
+  if (grid) project.change((f) => model.swapSlots(f, grid, a, b))
+}
+
+/** What a slot shows (its framing starts over), or how it ends. */
+export function setSlot(slot: string, patch: Partial<Omit<GridSlot, 'id'>>): void {
+  const grid = focusGrid()
+  if (grid) project.change((f) => model.setSlot(f, grid, slot, patch))
 }
 
 export function undo(): void {

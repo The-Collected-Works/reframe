@@ -1,25 +1,31 @@
 <!--
-  One asset in the grid: the artboard as it will export, with its name below (and an adjusted dot,
-  and a video's length). Videos play in place on hover. Drag the picture to move it within the
-  artboard; click to select (shift for a range, ⌘/Ctrl to add); double-click to open it.
+  One item in the grid: the artboard as it will export, with its name below (and an adjusted dot,
+  and a video's length). A variant is marked as one; a grid is drawn from its cells' thumbnails.
+  Videos play in place on hover. Drag the picture to move it within the artboard; click to select
+  (shift for a range, ⌘/Ctrl to add); double-click to open it.
 -->
 <script lang="ts">
+  import type { Attachment } from 'svelte/attachments'
+  import { drawGrid } from '@shared/grid'
   import { drawFrame, resolveSettings } from '@shared/layout'
-  import type { AssetEntry } from '@shared/types'
   import { visibility } from '../../lib/attach'
   import { trackPointer } from '../../lib/drag'
   import { scheduleDraw } from '../../lib/draw-queue'
   import { themeColor } from '../../lib/theme'
   import { fmtTime } from '../../lib/format'
+  import type { Entry } from '../../state/model/items'
   import { hasOverrides } from '../../state/model/project'
-  import { baseName, folderOf } from '../../state/model/tree'
-  import { Dot } from '../../ui'
+  import { folderOf } from '../../state/model/tree'
+  import { Dot, Icon } from '../../ui'
+  import { thumbSource } from '../scene'
   import { dragOffset, NO_GUIDES, type Guides } from '../snapping'
   import { useGrid } from './context'
   import { HoverPreview } from './preview.svelte'
 
-  let { entry, width }: { entry: AssetEntry; width: number } = $props()
+  let { entry, width }: { entry: Entry; width: number } = $props()
   const g = useGrid()
+  const scene = $derived(entry.kind === 'grid' ? g.composite(entry.name) : null)
+  const home = $derived(entry.source ?? entry.name)
 
   // Only this thumbnail's own loaded details: another one arriving doesn't touch it.
   const asset = $derived(g.asset(entry))
@@ -46,7 +52,9 @@
   let visible = $state(false)
   // What's on the canvas, so unchanged cells skip redrawing.
   let drawn = ''
-  const key = $derived(`${JSON.stringify(settings)}|${width}x${height}@${window.devicePixelRatio}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}`)
+  const key = $derived(
+    `${JSON.stringify(settings)}|${width}x${height}@${window.devicePixelRatio}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}|${scene?.stamp}`
+  )
 
   function draw() {
     if (!canvas) return
@@ -57,9 +65,14 @@
       canvas.width = pw
       canvas.height = ph
     }
-    if (asset.thumb) ready = true
+    if (asset.thumb || scene) ready = true
     const ctx = canvas.getContext('2d')!
     const kk = k * dpr
+    if (scene) {
+      drawGrid(ctx, scene.grid, scene.layout, board.width, board.height, kk, thumbSource(scene), EMPTY)
+      drawn = key
+      return
+    }
     const fade = preview.fade.current
     const video = fade > 0 ? preview.video : null
     if (video && fade >= 1) {
@@ -94,6 +107,33 @@
       ctx.stroke()
     }
     drawn = video || g.x.length || g.y.length ? '' : key
+  }
+
+  // Where a grid's cell has nothing in it yet.
+  const EMPTY = 'rgba(128, 128, 128, 0.22)'
+
+  // The rename field: focused with its text selected; Enter or leaving it saves, Esc cancels.
+  const renameField: Attachment<HTMLInputElement> = (input) => {
+    let done = false
+    const finish = (save: boolean) => {
+      if (done) return
+      done = true
+      g.rename(entry.name, save ? input.value : null)
+    }
+    const onkeydown = (e: KeyboardEvent) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') finish(true)
+      else if (e.key === 'Escape') finish(false)
+    }
+    const onblur = () => finish(true)
+    input.addEventListener('keydown', onkeydown)
+    input.addEventListener('blur', onblur)
+    input.focus()
+    input.select()
+    return () => {
+      input.removeEventListener('keydown', onkeydown)
+      input.removeEventListener('blur', onblur)
+    }
   }
 
   // Drawn (in the shared per-frame budget) whenever what it shows changes while it's on screen.
@@ -157,7 +197,7 @@
     onpointerleave={asset.kind === 'video' ? () => (preview.hovering = false) : undefined}
   >
     <canvas bind:this={canvas} data-eyedropper data-ready={ready || undefined} style:width={`${width}px`} style:height={`${height}px`}></canvas>
-    {#if !asset.thumb && !asset.error}<div class="cell-loading"></div>{/if}
+    {#if !scene && !asset.thumb && !asset.error}<div class="cell-loading"></div>{/if}
     {#if asset.error}<div class="cell-error">Can’t read file</div>{/if}
     <!-- Without the caption row, the adjusted dot sits on the picture's corner instead. -->
     {#if !g.names && overridden}<span class="corner-dot"><Dot title="Adjusted" /></span>{/if}
@@ -165,11 +205,22 @@
   {#if g.names}
     <div class="cell-meta">
       {#if overridden}<Dot title="Adjusted" />{/if}
-      <span class="cell-name" title={asset.name}>
-        {#if g.withFolder && folderOf(asset.name)}<span class="cell-folder">{folderOf(asset.name)}/</span>{/if}{baseName(asset.name)}
-      </span>
+      {#if entry.kind === 'grid'}
+        <span class="cell-kind" title="Grid"><Icon name="layout" size={12} /></span>
+      {:else if entry.source}
+        <span class="cell-kind" title={`Variant of ${entry.source}`}><Icon name="variant" size={12} /></span>
+      {/if}
+      {#if g.renaming(entry.name)}
+        <input class="cell-rename" value={entry.label} aria-label="Name" spellcheck="false" onpointerdown={(e) => e.stopPropagation()} {@attach renameField} />
+      {:else}
+        <span class="cell-name" title={entry.source ? `${entry.label} · from ${entry.source}` : entry.kind === 'grid' ? entry.label : asset.name}>
+          {#if g.withFolder && entry.kind !== 'grid' && folderOf(home)}<span class="cell-folder">{folderOf(home)}/</span>{/if}{entry.label}
+        </span>
+      {/if}
       {#if asset.kind === 'video' && asset.duration > 0}
         <span class="cell-dur">{fmtTime((clip?.end ?? asset.duration) - (clip?.start ?? 0))}</span>
+      {:else if scene?.duration}
+        <span class="cell-dur">{fmtTime(scene.duration)}</span>
       {/if}
     </div>
   {/if}
@@ -301,6 +352,33 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* What kind of item it is, when not a file: a variant or a grid. */
+  .cell-kind {
+    display: grid;
+    place-items: center;
+    flex: none;
+    color: var(--faint);
+  }
+
+  .selected .cell-kind {
+    color: var(--muted);
+  }
+
+  .cell-rename {
+    flex: 1;
+    min-width: 0;
+    height: 20px;
+    margin: 0 -4px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 4px;
+    outline: 0;
+    background: var(--tint-2);
+    box-shadow: 0 0 0 1px var(--accent);
+    color: var(--text);
+    font-size: 11px;
   }
 
   /* The folder before a name, when the grid isn't grouped by folder. */

@@ -29,8 +29,8 @@ export const GLOBAL_HANDLERS: Record<Actions, Handler> = {
   pick: pickBackground
 }
 
-/** Nothing but opening a folder until one is open, or while the export dialog is. */
-export const blocked = (): boolean => !library.dir || shell.exportOpen
+/** Nothing but opening a folder until one is open, or while a dialog (export, choosing a cell's content) is. */
+export const blocked = (): boolean => !library.dir || shell.exportOpen || !!shell.choosing
 
 /** An artboard's editor is open: plain keys are its own. */
 export const quiet = (): boolean => !!shell.editingBoard

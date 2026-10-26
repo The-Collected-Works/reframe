@@ -1,12 +1,17 @@
 import { resolveSettings } from '@shared/layout'
-import type { Artboard, AssetEntry, SkippedFolder } from '@shared/types'
+import type { Artboard, SkippedFolder } from '@shared/types'
 import type { ViewPrefs } from '../prefs'
+import type { Entry } from './items'
 import { hasOverrides } from './project'
 
 /**
- * The library: the scanned assets as the grid shows them, a tree of folders filtered and sorted
- * by the view options. Asset names are paths relative to the open folder, "/"-separated.
+ * The library: every item as the grid shows it, a tree of folders filtered and sorted by the view
+ * options, with the grids in a section of their own above. Asset names are paths relative to the
+ * open folder, "/"-separated; a variant sits in its file's folder, right after it.
  */
+
+/** The grids' section, folded and remembered like a folder. Not a path: no folder is called that. */
+export const GRIDS = '~grids'
 
 /** An asset's file name, without the folders it's in ("Shoot A/clip.mp4" → "clip.mp4"). */
 export const baseName = (name: string): string => name.slice(name.lastIndexOf('/') + 1)
@@ -25,26 +30,27 @@ export interface FolderNode {
   /** Relative path, "/"-separated; "" is the top level's own files. */
   folder: string
   name: string
-  assets: AssetEntry[]
+  assets: Entry[]
   children: FolderNode[]
   count: number
   collapsed: boolean
   excluded?: SkippedFolder
 }
 
-export type Layout = { tree: FolderNode[]; visible: AssetEntry[] }
+export type Layout = { tree: FolderNode[]; visible: Entry[] }
 
 /**
- * What the grid shows, from the assets and the view options. Grouped, a tree of folders: the top
- * level's own files first (if any), then each top-level folder with its subfolders inside it.
- * Not grouped, one node holding everything. Also the flat list of visible assets in on-screen
+ * What the grid shows, from the items and the view options. The grids come first, in a section of
+ * their own. Grouped, then a tree of folders: the top level's own files first (if any), then each
+ * top-level folder with its subfolders inside it. Not grouped, one node holding everything else.
+ * Also the flat list of visible assets in on-screen
  * order (a folder's files, then its subfolders; nothing inside a collapsed folder), which the
  * filmstrip, arrow keys, Select All, shift-click ranges and the export dialog's "Visible" scope
  * all follow. `board` is only given when the filter looks at edits.
  */
-export function layout(assets: AssetEntry[], prefs: ViewPrefs, collapsed: string[], skipped: SkippedFolder[], board: Artboard | null): Layout {
+export function layout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skipped: SkippedFolder[], board: Artboard | null): Layout {
   const { filter, sort, group } = prefs
-  const pass = (a: AssetEntry) =>
+  const pass = (a: Entry) =>
     filter === 'images'
       ? a.kind === 'image'
       : filter === 'videos'
@@ -54,13 +60,21 @@ export function layout(assets: AssetEntry[], prefs: ViewPrefs, collapsed: string
           : filter === 'excluded'
             ? !!board && resolveSettings(board, a.name).skip
             : true
-  const byName = (a: AssetEntry, b: AssetEntry) => natural(baseName(a.name), baseName(b.name)) || natural(folderOf(a.name), folderOf(b.name))
-  const cmp =
+  // A variant sorts as its file does (it has the file's kind and date), then after it, by name.
+  const home = (a: Entry) => a.source ?? a.name
+  const byName = (a: Entry, b: Entry) => natural(baseName(home(a)), baseName(home(b))) || natural(folderOf(home(a)), folderOf(home(b)))
+  const files =
     sort === 'date'
-      ? (a: AssetEntry, b: AssetEntry) => b.mtime - a.mtime || byName(a, b)
+      ? (a: Entry, b: Entry) => b.mtime - a.mtime || byName(a, b)
       : sort === 'type'
-        ? (a: AssetEntry, b: AssetEntry) => natural(a.kind, b.kind) || byName(a, b)
+        ? (a: Entry, b: Entry) => natural(a.kind, b.kind) || byName(a, b)
         : byName
+  const cmp = (a: Entry, b: Entry) => files(a, b) || +!!a.source - +!!b.source || natural(a.label, b.label)
+  const grids = all.filter((a) => a.kind === 'grid' && pass(a)).sort((a, b) => natural(a.label, b.label))
+  const assets = all.filter((a) => a.kind !== 'grid')
+  const gridNode: FolderNode[] = grids.length
+    ? [{ folder: GRIDS, name: 'Grids', assets: grids, children: [], count: grids.length, collapsed: group && collapsed.includes(GRIDS) }]
+    : []
   const node = (folder: string): FolderNode => ({
     folder,
     name: folder.slice(folder.lastIndexOf('/') + 1),
@@ -70,9 +84,9 @@ export function layout(assets: AssetEntry[], prefs: ViewPrefs, collapsed: string
     collapsed: collapsed.includes(folder)
   })
   if (!group) {
-    const all = { ...node(''), collapsed: false, assets: assets.filter(pass).sort(cmp) }
-    all.count = all.assets.length
-    return { tree: [all], visible: all.assets }
+    const flat = { ...node(''), collapsed: false, assets: assets.filter(pass).sort(cmp) }
+    flat.count = flat.assets.length
+    return { tree: [...gridNode, ...(flat.count ? [flat] : [])], visible: [...grids, ...flat.assets] }
   }
 
   // Build the tree: every folder with something to show, and the folders leading to it.
@@ -90,7 +104,7 @@ export function layout(assets: AssetEntry[], prefs: ViewPrefs, collapsed: string
   }
   for (const a of assets) {
     if (!pass(a)) continue
-    const folder = folderOf(a.name)
+    const folder = folderOf(home(a))
     ;(folder ? ensure(folder) : top).assets.push(a)
   }
   for (const f of skipped) ensure(f.path).excluded = f
@@ -104,9 +118,9 @@ export function layout(assets: AssetEntry[], prefs: ViewPrefs, collapsed: string
   roots.sort((a, b) => natural(a.name, b.name)).forEach(finish)
   top.assets.sort(cmp)
   top.count = top.assets.length
-  const tree = [...(top.assets.length ? [top] : []), ...roots]
+  const tree = [...gridNode, ...(top.assets.length ? [top] : []), ...roots]
 
-  const visible: AssetEntry[] = []
+  const visible: Entry[] = []
   const walk = (n: FolderNode) => {
     if (n.collapsed || n.excluded) return
     visible.push(...n.assets)

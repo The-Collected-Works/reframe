@@ -7,6 +7,7 @@
   import { SvelteSet } from 'svelte/reactivity'
   import { api } from '../../lib/bridge'
   import { join } from '../../lib/paths'
+  import { items as all } from '../../state/items.svelte'
   import { library } from '../../state/library.svelte'
   import { project } from '../../state/project.svelte'
   import { selection } from '../../state/selection.svelte'
@@ -22,13 +23,13 @@
   const out = $derived(prefs.dir ?? join(library.dir!, 'export'))
 
   const included = new SvelteSet(untrack(() => project.file.artboards.map((b) => b.id)))
-  const counts = $derived({ all: library.assets.length, visible: view.visible.length, selected: selection.size })
+  const counts = $derived({ all: all.all.length, visible: view.visible.length, selected: selection.size })
   // A wider choice than "all" starts out chosen: several selected, or a filtered grid.
-  let scope = $state<Scope>(untrack(() => (selection.size > 1 ? 'selected' : view.visible.length < library.assets.length ? 'visible' : 'all')))
+  let scope = $state<Scope>(untrack(() => (selection.size > 1 ? 'selected' : view.visible.length < all.all.length ? 'visible' : 'all')))
   const items = $derived.by(() => {
     const boards = project.file.artboards.filter((b) => included.has(b.id))
-    const pool = scope === 'selected' ? library.assets.filter((a) => selection.has(a.name)) : scope === 'visible' ? view.visible : library.assets
-    return plan(boards, pool, library.meta, project.file.clips, out, prefs)
+    const pool = scope === 'selected' ? all.all.filter((a) => selection.has(a.name)) : scope === 'visible' ? view.visible : all.all
+    return plan(boards, pool, (key) => all.asset(key), project.file, out, prefs)
   })
 
   let job = $state.raw<ExportJob | null>(null)
@@ -55,8 +56,8 @@
       {scope}
       {counts}
       {prefs}
-      images={items.some((i) => i.asset.kind === 'image')}
-      videos={items.some((i) => i.asset.kind === 'video')}
+      images={items.some((i) => i.out === 'image')}
+      videos={items.some((i) => i.out === 'video')}
       onChooseDir={async () => {
         const d = await api.chooseExportDir(out)
         if (d) project.setExportPrefs({ dir: d })

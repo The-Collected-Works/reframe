@@ -33,13 +33,13 @@ export class ExportJob {
     })
     // Mark the destinations first, so files appearing there are never picked up as assets.
     await api.markOutput([this.out, ...new Set(this.items.map((i) => i.boardDir))]).catch(() => {})
-    const queue = this.items.filter((i) => i.asset.kind === 'image')
+    const queue = this.items.filter((i) => i.out === 'image')
     await Promise.all(
       Array.from({ length: 3 }, async () => {
         while (queue.length && !this.cancelled) await this.render(queue.shift()!)
       })
     )
-    for (const v of this.items.filter((i) => i.asset.kind === 'video')) {
+    for (const v of this.items.filter((i) => i.out === 'video')) {
       if (this.cancelled) break
       await this.render(v)
     }
@@ -61,7 +61,7 @@ export class ExportJob {
     if (this.cancelled) return
     this.update(item.id, { state: 'running' })
     try {
-      if (item.asset.kind === 'image') await renderImage(item, this.prefs)
+      if (item.out === 'image') await renderImage(item, this.prefs)
       else await renderVideo(item, this.prefs, () => this.cancelled)
       this.update(item.id, { state: 'done', progress: 1 })
     } catch (e) {

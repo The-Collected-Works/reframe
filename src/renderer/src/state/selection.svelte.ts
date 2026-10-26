@@ -8,6 +8,16 @@ class Selection {
   names = $state.raw<string[]>([])
   focus = $state.raw<string | null>(null)
   private index = $derived(new Set(this.names))
+  private slotIn = $state.raw<{ grid: string; id: string } | null>(null)
+
+  /** With a grid in focus, the slot being edited in it (none: the grid itself). */
+  get slot(): string | null {
+    return this.slotIn && this.slotIn.grid === this.focus ? this.slotIn.id : null
+  }
+
+  set slot(id: string | null) {
+    this.slotIn = id && this.focus ? { grid: this.focus, id } : null
+  }
 
   has(name: string): boolean {
     return this.index.has(name)

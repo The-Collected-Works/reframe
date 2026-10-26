@@ -10,7 +10,6 @@
   import { trackPointer } from '../../lib/drag'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { loadStill } from '../../lib/media'
-  import { crossfade, fly, settledRect, snapshot } from '../../lib/motion'
   import type { Asset } from '../../state/library.svelte'
   import { SINGLE } from '../keymaps'
   import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
@@ -18,7 +17,9 @@
   import { dragTo, hitTest, type DragStart } from './gizmo'
   import type { Player } from './player.svelte'
   import { bitmapProxy } from './proxy.svelte'
+  import { WheelNav } from './nav'
   import { drawStage } from './render'
+  import { zoomTransitions } from './zoom.svelte'
 
   let {
     asset,
@@ -204,66 +205,17 @@
   }
 
   // Zoom transitions: the grid thumbnail flies up into the board on enter and back down on exit;
-  // stepping between assets crossfades. While the flyer is in the air the canvas stays hidden.
-  let entering = $state(false)
-  let entered = false
-  $effect(() => {
-    if (entered || !width) return
-    entered = true
-    untrack(() => {
-      if (!asset?.w) return
-      const cell = document.querySelector<HTMLCanvasElement>(`.cell[data-name="${CSS.escape(asset.name)}"] canvas[data-ready]`)
-      const host = stage.closest<HTMLElement>('.content')
-      if (!cell || !host) return
-      const s0 = stage.getBoundingClientRect()
-      const to = new DOMRect(s0.left + target.bx, s0.top + target.by, board.width * target.k, board.height * target.k)
-      entering = true
-      fly(host, snapshot(cell), cell.getBoundingClientRect(), to).then((dismiss) => {
-        entering = false
-        requestAnimationFrame(dismiss)
-      })
-    })
-  })
-  // Where the stage is on screen; by the time the view is torn down it's already out of the page.
-  let stageRect = new DOMRect()
-  $effect(() => {
-    void width
-    void height
-    stageRect = stage.getBoundingClientRect()
-  })
-  $effect(() => {
-    // Hold on to the elements too: their references are cleared as the view is torn down.
-    const c = canvas
-    const host = stage.closest<HTMLElement>('.content')
-    return () => {
-      // Leaving: capture the board as drawn, then land it on its grid cell once the grid is back.
-      const leaving = asset?.name
-      const { k, bx, by } = cam.current
-      if (!leaving || !c.width || !host) return
-      const w = board.width * k
-      const h = board.height * k
-      const from = new DOMRect(stageRect.left + bx, stageRect.top + by, w, h)
-      const shot = snapshot(c, bx * dpr, by * dpr, w * dpr, h * dpr)
-      requestAnimationFrame(() =>
-        requestAnimationFrame(async () => {
-          // Only if the grid is what's showing now.
-          const cell = document.querySelector<HTMLCanvasElement>(`.grid-scroll:not(.inactive) .cell[data-name="${CSS.escape(leaving)}"] canvas`)
-          if (!cell) return
-          cell.style.opacity = '0'
-          // The grid is still growing back from its receded scale; aim for where the cell settles.
-          const dismiss = await fly(host, shot, from, settledRect(cell, cell.closest<HTMLElement>('.grid-scroll')!), 300)
-          cell.style.opacity = ''
-          dismiss()
-        })
-      )
-    }
-  })
-  // Stepping to another asset crossfades from what was on screen (before it's redrawn).
-  let shown = untrack(() => asset?.name)
-  $effect.pre(() => {
-    const name = asset?.name
-    if (shown && name !== shown && canvas) crossfade(canvas)
-    shown = name
+  // stepping between assets crossfades.
+  const zoom = zoomTransitions({
+    stage: () => stage,
+    canvas: () => canvas,
+    name: () => asset?.name,
+    drawable: () => !!asset?.w,
+    board: () => board,
+    width: () => width,
+    height: () => height,
+    target: () => target,
+    view: () => cam.current
   })
 
   // Ends a gizmo drag still in progress if the view closes mid-drag.
@@ -292,39 +244,25 @@
   const fitView = () => (manual = null)
   const actualPixels = () => zoomView(1 / dpr / current().k, width / 2, height / 2)
 
-  // Trackpads: pinch zooms (Chromium reports it as a wheel with ctrlKey), two fingers pan. A mouse
-  // wheel zooms. Mouse notches come in whole multiples of 120 with no sideways component; once a
-  // gesture looks like a trackpad it stays one, so momentum never flips into zooming. Alt+scroll
-  // scales the media itself.
-  let trackpadUntil = 0
+  // Wheel, pinch and two-finger pans move the view (see WheelNav); Alt+scroll scales the media itself.
+  const nav = new WheelNav()
   let wheelIdle: ReturnType<typeof setTimeout> | undefined
   $effect(() => () => clearTimeout(wheelIdle))
   function onwheel(e: WheelEvent) {
     e.preventDefault()
-    const r = stage.getBoundingClientRect()
-    const sx = e.clientX - r.left
-    const sy = e.clientY - r.top
-    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1
-    const dx = e.deltaX * unit
-    const dy = e.deltaY * unit
-    const now = performance.now()
     if (e.altKey) {
       if (!asset?.w) return
       interacting = true
       clearTimeout(wheelIdle)
       wheelIdle = setTimeout(endInteraction, 500)
+      const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? height : 1)
       const zoom = snapZoom(settings.zoom * Math.exp(-dy * 0.0015), true)
       onEdit(zoomAbout(settings, board.width, board.height, asset.w, asset.h, zoom, toBoard(e.clientX, e.clientY)))
       return
     }
-    const legacy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY ?? 0
-    const notch = e.deltaMode !== 0 || (e.deltaX === 0 && legacy !== 0 && legacy % 120 === 0)
-    if (e.ctrlKey || e.metaKey) zoomView(Math.exp(-dy * (notch ? 0.0015 : 0.01)), sx, sy)
-    else if (notch && now > trackpadUntil) zoomView(Math.exp(-dy * 0.0015), sx, sy)
-    else {
-      trackpadUntil = now + 300
-      panView(-dx, -dy)
-    }
+    const g = nav.read(e, stage.getBoundingClientRect())
+    if ('zoom' in g) zoomView(g.zoom, g.at.x, g.at.y)
+    else panView(g.pan.dx, g.pan.dy)
   }
 
   // ⌘/Ctrl+0 fits; ⌘/Ctrl +/− zoom about the centre. Esc deselects first (before the app's Esc
@@ -442,7 +380,7 @@
     if (asset) onMenu({ x: e.clientX, y: e.clientY })
   }}
 >
-  <canvas bind:this={canvas} data-eyedropper style:width={`${width}px`} style:height={`${height}px`} style:opacity={entering ? 0 : 1}></canvas>
+  <canvas bind:this={canvas} data-eyedropper style:width={`${width}px`} style:height={`${height}px`} style:opacity={zoom.entering ? 0 : 1}></canvas>
   {#if asset}
     <button
       class="zoom-chip"

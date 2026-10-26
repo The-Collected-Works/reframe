@@ -24,10 +24,10 @@
   {#each job.items as i (i.id)}
     {@const st = job.status[i.id]}
     <div class={['job', st?.state]} title={st?.error}>
-      <span class="job-name">{i.asset.name}</span>
+      <span class="job-name">{i.asset.source || i.asset.kind === 'grid' ? i.asset.label : i.asset.name}</span>
       <span class="muted small">{i.board.name}</span>
       <span class="job-state">
-        {#if st?.state === 'running' && i.asset.kind === 'video'}{Math.round(st.progress * 100)}%{:else if st?.state === 'done'}<Icon
+        {#if st?.state === 'running' && i.out === 'video'}{Math.round(st.progress * 100)}%{:else if st?.state === 'done'}<Icon
             name="check"
             size={12}
           />{:else if st?.state === 'error'}Failed{/if}

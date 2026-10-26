@@ -1,5 +1,6 @@
-import type { AssetEntry } from '@shared/types'
+import { items } from './items.svelte'
 import { library } from './library.svelte'
+import type { Entry } from './model/items'
 import { layout } from './model/tree'
 import { storeCollapsed, storedCollapsed, storedView, storeView, VIEW_DEFAULTS, type ViewPrefs } from './prefs'
 import { project } from './project.svelte'
@@ -22,10 +23,10 @@ class View {
   // slider never re-sorts anything.
   private edits = $derived(this.prefs.filter === 'adjusted' || this.prefs.filter === 'excluded' ? project.board : null)
   /** The folder tree the grid shows, and the visible assets in on-screen order (see tree.ts). */
-  readonly layout = $derived(layout(library.assets, this.prefs, this.collapsed, library.skipped, this.edits))
+  readonly layout = $derived(layout(items.all, this.prefs, this.collapsed, library.skipped, this.edits))
 
   /** The visible assets, in on-screen order: what the filmstrip, arrow keys and ranges follow. */
-  get visible(): AssetEntry[] {
+  get visible(): Entry[] {
     return this.layout.visible
   }
 

@@ -1,20 +1,25 @@
 <script lang="ts">
+  import { drawGrid } from '@shared/grid'
   import { drawFrame, resolveSettings } from '@shared/layout'
   import type { Artboard } from '@shared/types'
   import { visibility } from '../../lib/attach'
   import { scheduleDraw } from '../../lib/draw-queue'
   import type { Asset } from '../../state/library.svelte'
+  import { thumbSource, type GridScene } from '../scene'
   import { FILM_HEIGHT } from './film'
 
   let {
     asset,
     board,
+    scene,
     on,
     onclick,
     onSeen
   }: {
     asset: Asset
     board: Artboard
+    /** A grid, as it sits on the board. */
+    scene: GridScene | null
     /** The one the single view shows. */
     on: boolean
     onclick: () => void
@@ -24,7 +29,7 @@
   const settings = $derived(resolveSettings(board, asset.name))
   const width = $derived(Math.round((FILM_HEIGHT * board.width) / board.height))
   const dpr = window.devicePixelRatio || 1
-  const key = $derived(`${JSON.stringify(settings)}|${width}x${FILM_HEIGHT}@${dpr}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}`)
+  const key = $derived(`${JSON.stringify(settings)}|${width}x${FILM_HEIGHT}@${dpr}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}|${scene?.stamp}`)
 
   let canvas: HTMLCanvasElement
   let ready = $state(false)
@@ -32,14 +37,16 @@
   let drawn = ''
 
   function draw() {
-    if (!canvas || !asset.thumb) return
+    if (!canvas || (!asset.thumb && !scene)) return
     const pw = Math.round(width * dpr)
     const ph = Math.round(FILM_HEIGHT * dpr)
     if (canvas.width !== pw || canvas.height !== ph) {
       canvas.width = pw
       canvas.height = ph
     }
-    drawFrame(canvas.getContext('2d')!, asset.thumb, asset.w, asset.h, board.width, board.height, settings, pw / board.width)
+    const ctx = canvas.getContext('2d')!
+    if (scene) drawGrid(ctx, scene.grid, scene.layout, board.width, board.height, pw / board.width, thumbSource(scene))
+    else drawFrame(ctx, asset.thumb, asset.w, asset.h, board.width, board.height, settings, pw / board.width)
     ready = true
     drawn = key
   }
@@ -49,11 +56,11 @@
   })
   const onVisible = (v: boolean) => {
     visible = v
-    if (v && !asset.thumb) onSeen()
+    if (v && !asset.thumb && !scene) onSeen()
   }
 </script>
 
-<button tabindex={-1} class={['film-item', { on, skipped: settings.skip }]} title={asset.name} {onclick}>
+<button tabindex={-1} class={['film-item', { on, skipped: settings.skip }]} title={asset.label} {onclick}>
   <canvas bind:this={canvas} data-ready={ready || undefined} {@attach visibility(onVisible)} style:width={`${width}px`} style:height={`${FILM_HEIGHT}px`}
   ></canvas>
 </button>

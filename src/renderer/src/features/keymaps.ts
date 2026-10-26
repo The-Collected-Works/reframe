@@ -34,7 +34,10 @@ export const GRID = keymap({
     prev: { keys: 'arrowleft', label: 'Previous' },
     next: { keys: 'arrowright', label: 'Next' },
     up: { keys: 'arrowup', label: 'Row above' },
-    down: { keys: 'arrowdown', label: 'Row below' }
+    down: { keys: 'arrowdown', label: 'Row below' },
+    duplicate: { keys: 'mod+d', label: 'Duplicate' },
+    combine: { keys: 'mod+g', label: 'Combine into a grid' },
+    remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Delete a variant or grid' }
   },
   notes: [
     { keys: 'shift+Click', label: 'Select a range' },
@@ -70,5 +73,20 @@ export const SINGLE = keymap({
   ]
 })
 
+export const GRID_EDITOR = keymap({
+  title: 'Grid editor',
+  actions: {
+    deselect: { keys: 'escape', label: 'Deselect the cell, then back to grid' },
+    remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Remove the cell' }
+  },
+  notes: [
+    { keys: 'Drag a gap', label: 'Resize the cells either side (this artboard)' },
+    { keys: 'Click a cell', label: 'Frame what it shows' },
+    { keys: 'Drag a cell’s tab', label: 'Swap it with another cell' },
+    { keys: 'Right-click a cell', label: 'Add a cell, replace, remove' },
+    { keys: 'alt', label: 'No snapping', section: 'While dragging a gap' }
+  ]
+})
+
 /** In the order the shortcuts panel lists them. */
-export const KEYMAPS = [GLOBAL, GRID, SINGLE]
+export const KEYMAPS = [GLOBAL, GRID, SINGLE, GRID_EDITOR]

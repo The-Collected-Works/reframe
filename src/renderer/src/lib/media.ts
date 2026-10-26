@@ -61,7 +61,7 @@ export const posterBlob = (data: Uint8Array) => new Blob([data as BlobPart], { t
  * createImageBitmap, which also applies EXIF orientation the same way <img> does.
  */
 const stills = new Map<string, Promise<Blob>>()
-export function loadStill(a: AssetEntry): Promise<Blob> {
+export function loadStill(a: Pick<AssetEntry, 'path' | 'mtime'> & { kind: string }): Promise<Blob> {
   const key = a.path + a.mtime
   let p = stills.get(key)
   if (!p) {
