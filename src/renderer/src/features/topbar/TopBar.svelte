@@ -14,7 +14,7 @@
   import { view } from '../../state/view.svelte'
   import { Button, Segmented, Slider } from '../../ui'
   import { GLOBAL } from '../keymaps'
-  import { boardMenu } from '../menus'
+  import { boardMenu, openFolderMenu } from '../menus'
   import AddArtboard from './AddArtboard.svelte'
   import AppInfo from './AppInfo.svelte'
   import CopyActivity from './CopyActivity.svelte'
@@ -38,6 +38,7 @@
         () => {}
       )}
     onOpen={openFolder}
+    onMenu={openFolderMenu}
     onForget={(d) =>
       api.forgetFolder(d).then(
         (r) => (recent = r),

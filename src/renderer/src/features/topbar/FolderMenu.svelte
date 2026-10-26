@@ -13,7 +13,8 @@
     recent,
     onShow,
     onOpen,
-    onForget
+    onForget,
+    onMenu
   }: {
     dir: string | null
     recent: string[]
@@ -22,6 +23,8 @@
     /** Opens `dir`, or (without one) asks which folder. */
     onOpen: (dir?: string) => void
     onForget: (dir: string) => void
+    /** Right-click: what can be done with the open folder. */
+    onMenu: (at: { x: number; y: number }) => void
   } = $props()
 
   let open = $state(false)
@@ -47,7 +50,17 @@
 </script>
 
 <div class="anchor">
-  <button class={['folder', { open }]} title={dir ?? undefined} onclick={toggle}>
+  <button
+    class={['folder', { open }]}
+    title={dir ?? undefined}
+    onclick={toggle}
+    oncontextmenu={(e) => {
+      e.preventDefault()
+      if (!dir) return
+      open = false
+      onMenu({ x: e.clientX, y: e.clientY })
+    }}
+  >
     <Icon name="folder" size={15} />
     <span>{dir ? basename(dir) : 'Open folder'}</span>
   </button>

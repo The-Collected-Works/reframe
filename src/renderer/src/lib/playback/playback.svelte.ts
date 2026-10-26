@@ -7,9 +7,9 @@ import { copies, sizeFor, sizesOf, type MediaFile } from './copies.svelte'
 /**
  * Playback: one clock, and any number of videos following it. A single video in the single view is
  * one track; a layout is a track per video cell; anything later (sequences, sound mixes) is more of
- * the same. Pictures come from playback copies sized to what's on screen (see Copies), and when the
- * clock stops, from the exact frame (decoded by ffmpeg the way export decodes, at screen size), so
- * what's judged and colour-picked is what will export. Sound comes from the original file, apart
+ * the same. Pictures come from playback copies sized to what's on screen (see Copies), or one still
+ * being made, streamed as it's written; zoomed in past them all, when the clock stops, from the
+ * exact frame (decoded by ffmpeg the way export decodes, at screen size). Sound comes from the original file, apart
  * from the pictures, so pictures can come from any copy. Call `destroy()` when done.
  */
 
@@ -200,13 +200,16 @@ export class Playback {
       const tracks = this.opts.tracks().map((t) => {
         const size = sizeFor(t.file, t.need)
         const copy = copies.best(t.file, size)
+        // No copy yet: the one being made, as it's written (only the part encoded so far plays, but
+        // smoothly, and it's always ahead of playback); else the original, where that's allowed.
+        const stream = copy ? null : copies.streaming(t.file)
         const original = this.opts.originals || copies.failed(t.file)
-        return { t, size, url: copy?.url ?? (original ? mediaUrl(t.file.path) : null) }
+        return { t, size, stream: !!stream, url: copy?.url ?? stream?.url ?? (original ? mediaUrl(t.file.path) : null) }
       })
       untrack(() => {
         const keep = new Set<string>()
         const wanted = new Set<string>()
-        for (const { t, size, url } of tracks) {
+        for (const { t, size, stream, url } of tracks) {
           keep.add(t.id)
           const key = `${t.id}|${t.file.path}|${t.file.mtime}|${size}`
           wanted.add(key)
@@ -217,7 +220,7 @@ export class Playback {
             this.changed++
           }
           c.onerror = (bad) => copies.lost(t.file, bad)
-          if (url) c.setSource(url)
+          if (url) c.setSource(url, stream ? { duration: t.file.duration } : undefined)
         }
         for (const [key, withdraw] of this.wants) {
           if (wanted.has(key)) continue

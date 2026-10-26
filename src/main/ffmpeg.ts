@@ -179,7 +179,7 @@ async function prune(dir: string, maxBytes: number): Promise<void> {
   let total = 0
   const doomed: string[] = []
   for (const f of files.filter((x) => x !== null).sort((a, b) => b.used - a.used)) {
-    if (f.name.includes('.part.') && !partFiles.has(f.path)) doomed.push(f.path)
+    if ((f.name.includes('.part.') || f.name.includes('.stream.')) && !partFiles.has(f.path)) doomed.push(f.path)
     else if ((total += f.size) > maxBytes) doomed.push(f.path)
   }
   await Promise.all(doomed.map((f) => fs.rm(f, { force: true })))
@@ -330,7 +330,8 @@ export async function copy(
   edge: number,
   duration: number,
   background: boolean,
-  onProgress: (p: number) => void
+  stream: boolean,
+  onProgress: (p: number, stream?: string) => void
 ): Promise<string | null> {
   const out = await copyPath(path, edge)
   if (await exists(out)) {
@@ -341,7 +342,7 @@ export async function copy(
   if (!job) {
     job = copyChain
       .catch(() => {})
-      .then(() => buildCopy(path, out, w, h, color, edge, duration, background, onProgress))
+      .then(() => buildCopy(path, out, w, h, color, edge, duration, background, stream, onProgress))
       .then(() => out)
     copyChain = job
     copying.set(out, job)
@@ -352,6 +353,37 @@ export async function copy(
     if (String((e as Error).message) === 'cancelled') return null
     throw e
   })
+}
+
+/** What the caches hold (posters and playback copies), in bytes. */
+export async function cacheSize(): Promise<number> {
+  const sizeOf = async (dir: string): Promise<number> => {
+    const names = await fs.readdir(dir).catch(() => [] as string[])
+    const sizes = await Promise.all(
+      names.map((n) =>
+        fs.stat(join(dir, n)).then(
+          (st) => (st.isFile() ? st.size : 0),
+          () => 0
+        )
+      )
+    )
+    return sizes.reduce((a, b) => a + b, 0)
+  }
+  return (await sizeOf(CACHE)) + (await sizeOf(COPIES))
+}
+
+/**
+ * Empties the caches: stops the copy being made, then removes every playback copy and poster (what's
+ * in use right now may stay until it's let go). Returns how many bytes went.
+ */
+export async function clearCache(): Promise<number> {
+  const before = await cacheSize()
+  cancelCopy()
+  await copyChain.catch(() => {})
+  await fs.rm(COPIES, { recursive: true, force: true }).catch(() => {})
+  const names = await fs.readdir(CACHE).catch(() => [] as string[])
+  await Promise.all(names.map((n) => fs.rm(join(CACHE, n), { force: true }).catch(() => {})))
+  return before - (await cacheSize())
 }
 
 /** Stops the copy being made (something more urgent needs the machine); its request fails. */
@@ -369,13 +401,32 @@ async function buildCopy(
   edge: number,
   duration: number,
   background: boolean,
-  onProgress: (p: number) => void
+  stream: boolean,
+  onProgress: (p: number, stream?: string) => void
 ): Promise<void> {
   copyCancelled = false
   await fs.mkdir(COPIES, { recursive: true })
   const s = Math.min(1, edge / Math.max(w, h, 1))
   const even = (n: number) => Math.max(2, Math.round((n * s) / 2) * 2)
   const part = out.replace(/\.mp4$/, '.part.mp4')
+  // Streaming, the same encode is also written as a fragmented MP4 (a quarter second a fragment),
+  // which can be played while it's still being written: the renderer feeds its fragments to a
+  // MediaSource as they land. The finished copy is the ordinary file.
+  // Each attempt streams to a file of its own: a retry starts over, and so does whatever plays it.
+  const liveOf = (hw: boolean) => (stream ? out.replace(/\.mp4$/, hw ? '.stream.mp4' : '.stream-sw.mp4') : null)
+  let live = null as string | null
+  // The tee muxer's own syntax: forward slashes, and its separators escaped.
+  const teePath = (p: string) => p.replace(/\\/g, '/').replace(/([|[\]'])/g, '\\$1')
+  const output = (lv: string | null) =>
+    lv
+      ? [
+          '-flags',
+          '+global_header',
+          '-f',
+          'tee',
+          `[f=mp4:movflags=empty_moov+default_base_moof:frag_duration=250000]${teePath(lv)}|[f=mp4:movflags=+faststart]${teePath(part)}`
+        ]
+      : ['-movflags', '+faststart', part]
   const args = (hw: boolean) => [
     '-hide_banner',
     '-loglevel',
@@ -387,6 +438,8 @@ async function buildCopy(
     ...(hw ? ['-hwaccel', 'auto'] : []),
     '-i',
     path,
+    '-map',
+    '0:v:0',
     '-an',
     '-sn',
     '-dn',
@@ -402,12 +455,24 @@ async function buildCopy(
     '20',
     '-g',
     '1',
+    // Fixed, so a stream's codec is known before it starts (see the renderer's StreamFeed).
+    '-profile:v',
+    'high',
+    '-level:v',
+    '4.2',
     ...OUT_TAGS,
-    '-movflags',
-    '+faststart',
-    part
+    ...output(liveOf(hw))
   ]
   const attempt = async (hw: boolean) => {
+    if (live) {
+      partFiles.delete(live)
+      await fs.rm(live, { force: true })
+    }
+    live = liveOf(hw)
+    if (live) {
+      partFiles.add(live)
+      onProgress(0, live)
+    }
     let line = ''
     const { proc, done } = run('copy', args(hw), (chunk) => {
       // Progress arrives as key=value lines, which can be split across chunks.
@@ -415,7 +480,7 @@ async function buildCopy(
       line = lines.pop() ?? ''
       for (const l of lines) {
         const m = /^out_time_us=(\d+)/.exec(l)
-        if (m && duration > 0) onProgress(Math.min(1, Number(m[1]) / 1e6 / duration))
+        if (m && duration > 0) onProgress(Math.min(1, Number(m[1]) / 1e6 / duration), live ?? undefined)
       }
     })
     // Making copies ahead of time stays out of the way of everything else.
@@ -428,15 +493,27 @@ async function buildCopy(
     return (await done).code === 0
   }
   partFiles.add(part)
+  let made = false
   try {
     // Hardware decoding where it works, else software.
     if (!(await attempt(true)) && !copyCancelled && !(await attempt(false))) throw new Error('Could not make a playback copy')
     if (copyCancelled) throw new Error('cancelled')
     await fs.rename(part, out)
+    made = true
     onProgress(1)
   } finally {
     partFiles.delete(part)
     await fs.rm(part, { force: true })
+    const lv = live
+    if (lv) {
+      // A finished stream may still be playing for a moment, until the copy takes over.
+      const remove = () => {
+        partFiles.delete(lv)
+        fs.rm(lv, { force: true }).catch(() => {})
+      }
+      if (made) setTimeout(remove, 60_000)
+      else remove()
+    }
   }
   await prune(COPIES, COPY_BYTES)
 }

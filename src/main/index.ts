@@ -4,7 +4,20 @@ import { Readable } from 'node:stream'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import { mimeOf } from '@shared/media'
 import type { ColorMeta, FolderScan, LayoutExportJob, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
-import { cancelCopy, cancelExport, clearOldProxies, copiesMade, copy, exportLayout, exportVideo, frame, poster, stopWorker } from './jobs'
+import {
+  cacheSize,
+  cancelCopy,
+  cancelExport,
+  clearCache,
+  clearOldProxies,
+  copiesMade,
+  copy,
+  exportLayout,
+  exportVideo,
+  frame,
+  poster,
+  stopWorker
+} from './jobs'
 import { markFolder, noteSkipped, saveProject, scanFolder, setSkipped, unmarkFolder, watchFolder } from './folder'
 import { installUpdate, pollAutoUpdate, updateStatus } from './autoupdate'
 import { folderArg, forget, readState, recentFolders, remember, updateSystemMenus } from './recent'
@@ -269,9 +282,24 @@ ipcMain.handle('frame', (_e, path: string, time: number, color?: ColorMeta, tag?
 })
 ipcMain.handle(
   'copy',
-  async (e, id: number, path: string, w: number, h: number, color: ColorMeta | undefined, edge: number, duration: number, background: boolean) => {
+  async (
+    e,
+    id: number,
+    path: string,
+    w: number,
+    h: number,
+    color: ColorMeta | undefined,
+    edge: number,
+    duration: number,
+    background: boolean,
+    stream: boolean
+  ) => {
     mustRead(path)
-    const out = await copy(path, w, h, color, edge, duration, background, (progress) => e.sender.send('copy-progress', { id, progress }))
+    const out = await copy(path, w, h, color, edge, duration, background, stream, (progress, live) => {
+      // A copy streamed while it's made: readable from the moment it exists.
+      if (live) copiesOut.add(normalize(live))
+      e.sender.send('copy-progress', { id, progress, stream: live })
+    })
     if (out) copiesOut.add(normalize(out))
     return out
   }
@@ -287,6 +315,8 @@ ipcMain.handle('copies-made', async (_e, list: { path: string; edge: number }[])
   })
 })
 ipcMain.handle('cancel-copy', () => cancelCopy())
+ipcMain.handle('cache-size', () => cacheSize())
+ipcMain.handle('clear-cache', () => clearCache())
 // Export progress on the taskbar / Dock icon (-1 clears it).
 ipcMain.handle('set-progress', (e, p: number) => BrowserWindow.fromWebContents(e.sender)?.setProgressBar(p < 0 ? -1 : p))
 // Windows / Linux draw the caption buttons over the page (titleBarOverlay), so a modal's backdrop

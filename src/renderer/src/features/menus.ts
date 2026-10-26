@@ -1,10 +1,12 @@
 import type { Dir } from '@shared/arrangement'
 import { resolveSettings } from '@shared/layout'
 import { api, mac, win } from '../lib/bridge'
+import { fmtSize } from '../lib/format'
 import { hint } from '../lib/keymap.svelte'
 import { inside } from '../lib/paths'
 import {
   addToLayout,
+  clearCache,
   combineSelection,
   copy,
   deleteBoard,
@@ -36,6 +38,22 @@ import { GLOBAL, GRID, LAYOUT_EDITOR } from './keymaps'
 /** The right-click menus: on items (grid and single view), layout cells, artboard tabs, and folder headers. */
 
 const revealLabel = mac ? 'Reveal in Finder' : win ? 'Show in Explorer' : 'Show in Folder'
+const openLabel = mac ? 'Open in Finder' : win ? 'Open in Explorer' : 'Open in File Manager'
+
+/** Right-click on the folder button in the title bar. */
+export async function openFolderMenu(at: { x: number; y: number }): Promise<void> {
+  const dir = library.dir
+  if (!dir) return
+  const size = await api.cacheSize().catch(() => 0)
+  const id = await showMenu(at.x, at.y, [
+    { id: 'open', label: openLabel, icon: 'reveal' },
+    { separator: true },
+    // Thumbnails and playback copies, for every folder: made again as they're needed.
+    { id: 'clear', label: size > 0 ? `Clear Cache · ${fmtSize(size)}` : 'Clear Cache', icon: 'trash', enabled: size > 0 }
+  ])
+  if (id === 'open') api.reveal(dir)
+  else if (id === 'clear') clearCache()
+}
 
 /**
  * Right-click menu for an item (a file, a variant or a layout). Right-clicking outside the selection

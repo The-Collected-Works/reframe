@@ -31,7 +31,7 @@ export const clearOldProxies = (): Promise<void> => fs.rm(join(cacheDir(), 'scru
 
 let worker: UtilityProcess | null = null
 let nextId = 1
-const calls = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; progress?: (p: number) => void }>()
+const calls = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; progress?: (p: number, stream?: string) => void }>()
 
 function ensureWorker(): UtilityProcess {
   if (worker) return worker
@@ -42,7 +42,7 @@ function ensureWorker(): UtilityProcess {
   w.on('message', (m: WorkerReply) => {
     const call = calls.get(m.id)
     if (!call) return
-    if ('progress' in m) return call.progress?.(m.progress)
+    if ('progress' in m) return call.progress?.(m.progress, m.stream)
     calls.delete(m.id)
     if ('error' in m) call.reject(new Error(m.error))
     else call.resolve(m.result)
@@ -58,7 +58,7 @@ function ensureWorker(): UtilityProcess {
 /** A request as sent (the id is added here). */
 type Request = WorkerRequest extends infer R ? (R extends { id: number } ? Omit<R, 'id'> : never) : never
 
-function call<T>(msg: Request, progress?: (p: number) => void): Promise<T> {
+function call<T>(msg: Request, progress?: (p: number, stream?: string) => void): Promise<T> {
   const id = nextId++
   return new Promise<T>((resolve, reject) => {
     calls.set(id, { resolve: resolve as (v: unknown) => void, reject, progress })
@@ -77,10 +77,13 @@ export const copy = (
   edge: number,
   duration: number,
   background: boolean,
-  onProgress: (p: number) => void
-) => call<string | null>({ type: 'copy', path, w, h, color, edge, duration, background }, onProgress)
+  stream: boolean,
+  onProgress: (p: number, stream?: string) => void
+) => call<string | null>({ type: 'copy', path, w, h, color, edge, duration, background, stream }, onProgress)
 export const copiesMade = (list: { path: string; edge: number }[]) => call<(string | null)[]>({ type: 'copies-made', list })
 export const cancelCopy = (): void => worker?.postMessage({ type: 'cancel-copy' } satisfies WorkerRequest)
+export const cacheSize = () => call<number>({ type: 'cache-size' })
+export const clearCache = () => call<number>({ type: 'clear-cache' })
 export const exportVideo = (job: VideoExportJob, onProgress: (p: number) => void) => call<void>({ type: 'export', job }, onProgress)
 export const exportLayout = (job: LayoutExportJob, onProgress: (p: number) => void) => call<void>({ type: 'layout', job }, onProgress)
 export const cancelExport = (): void => worker?.postMessage({ type: 'cancel' } satisfies WorkerRequest)

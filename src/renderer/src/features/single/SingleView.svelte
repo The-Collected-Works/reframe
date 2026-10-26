@@ -122,6 +122,17 @@
     })
   })
   // Until every cell has a copy, the ones without show stills: say how many, and how far along.
+  // How far into the layout every cell plays smoothly: a cell whose copy is still being made is
+  // ready as far as it's encoded past its trim's start (the first time round).
+  const layoutCached = $derived.by(() => {
+    let reach = scene?.duration ?? 0
+    for (const t of layoutTracks) {
+      const r = copies.ready(t.file)
+      if (r < t.start + t.length - 0.05) reach = Math.min(reach, Math.max(0, r - t.start))
+    }
+    return reach
+  })
+
   const layoutPreparing = $derived.by(() => {
     const waiting = [...new Map(layoutTracks.filter((t) => copies.pending(t.file)).map((t) => [t.file.path, t.file])).values()]
     if (!waiting.length) return null
@@ -197,7 +208,7 @@
   <div class="single-fade"></div>
   <div class="single-overlay">
     {#if layoutPlayback && scene?.duration}
-      <LayoutPlayerBar player={layoutPlayback} duration={scene.duration} preparing={layoutPreparing} />
+      <LayoutPlayerBar player={layoutPlayback} duration={scene.duration} preparing={layoutPreparing} cached={layoutCached} />
     {:else if asset && playback && asset.duration > 0}
       <PlayerBar
         {playback}
@@ -210,6 +221,7 @@
         onToggleMute={() => preview.toggleMute()}
         {onPreview}
         {preparing}
+        cached={asset.kind === 'video' ? copies.ready(asset) : 0}
         onTrim={(start, end) => (trimDraft = { start, end })}
         {onTrimEnd}
       />

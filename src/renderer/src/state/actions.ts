@@ -2,7 +2,8 @@ import { slotKey, type Dir } from '@shared/arrangement'
 import type { CropSettings, FolderScan, Slot, SettingKey } from '@shared/types'
 import { api } from '../lib/bridge'
 import { hint } from '../lib/keymap.svelte'
-import { plural } from '../lib/format'
+import { fmtSize, plural } from '../lib/format'
+import { copies } from '../lib/playback/copies.svelte'
 import { showToast } from '../ui'
 import { items } from './items.svelte'
 import { library } from './library.svelte'
@@ -70,6 +71,16 @@ export async function includeFolder(folder: string): Promise<void> {
   await api.includeFolder(folder)
   await rescanFolder()
   showToast(`Included “${baseName(folder)}”`)
+}
+
+/**
+ * Empties the caches (posters and playback copies, for every folder); they're made again as
+ * they're needed.
+ */
+export async function clearCache(): Promise<void> {
+  const freed = await api.clearCache().catch(() => 0)
+  copies.reset()
+  showToast(`Cleared ${fmtSize(freed)} of cache · videos are prepared again as they're needed`)
 }
 
 // ---- the view

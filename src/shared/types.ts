@@ -259,7 +259,8 @@ export interface ReframeApi {
   /**
    * Path of a playback copy `edge` pixels on its long side (every frame a keyframe), made on first
    * request (one at a time; `background` ones at low priority), with progress reported under `id`.
-   * Kept between sessions. Null: stopped (see cancelCopy) before it was done.
+   * `stream`: also written as a fragmented MP4 that plays while it's made (its path comes with the
+   * progress). Kept between sessions. Null: stopped (see cancelCopy) before it was done.
    */
   copy(
     id: number,
@@ -269,13 +270,18 @@ export interface ReframeApi {
     color: ColorMeta | undefined,
     edge: number,
     duration: number,
-    background: boolean
+    background: boolean,
+    stream: boolean
   ): Promise<string | null>
   /** Which of these copies are made already (their paths, or null), making none. */
   copiesMade(list: { path: string; edge: number }[]): Promise<(string | null)[]>
   /** Stops the copy being made; its request gives null. */
   cancelCopy(): Promise<void>
-  onCopyProgress(cb: (p: { id: number; progress: number }) => void): () => void
+  /** What the caches (posters, playback copies) hold, in bytes. */
+  cacheSize(): Promise<number>
+  /** Empties the caches; gives how many bytes went. */
+  clearCache(): Promise<number>
+  onCopyProgress(cb: (p: { id: number; progress: number; stream?: string }) => void): () => void
   reveal(path: string): Promise<void>
   /** Newer GitHub release than this build, if any. */
   checkUpdate(): Promise<{ version: string; notes: ReleaseNote[]; status: UpdateStatus } | null>

@@ -1,11 +1,13 @@
 import { releaseVideo, silentVideo } from '../media'
+import { StreamFeed } from './stream'
 
 /**
  * One video's pictures, from whichever copy (or original) it's given. Seeks keep only the newest
  * target, so scrubbing never builds a backlog. The last frame shown is held while a seek is in
  * flight, so nothing flashes in between. Moving to another source (a sharper copy) happens without
- * a gap: the old one stays on screen until the new one has a frame where it should be. Silent: sound
- * is played apart (see Sound). Call `release()` when done.
+ * a gap: the old one stays on screen until the new one has a frame where it should be. A source can
+ * be a copy still being made, streamed (see StreamFeed). Silent: sound is played apart. Call
+ * `release()` when done.
  */
 export class Clip {
   /** Bumped whenever there's a new frame to draw. */
@@ -23,18 +25,28 @@ export class Clip {
   /** The last frame shown before a seek (or a change of source), for while there's none to show. */
   private held: ImageBitmap | null = null
   private holding = 0
+  /** Streams feeding videos (a copy still being made). */
+  private feeds = new Map<HTMLVideoElement, StreamFeed>()
 
   /** Called for each new frame (trim previews draw from it straight away). */
   onframe: (() => void) | null = null
   /** Called with a source that wouldn't load (so another can be found). */
   onerror: ((url: string) => void) | null = null
 
-  /** Shows `url` from now on (the same one again changes nothing). */
-  setSource(url: string): void {
+  /**
+   * Shows `url` from now on (the same one again changes nothing). `stream`: it's a copy still being
+   * made, played as it grows; its whole length is `duration`.
+   */
+  setSource(url: string, stream?: { duration: number }): void {
     if (url === this.src) return
     this.src = url
-    if (this.incoming) releaseVideo(this.incoming)
-    const v = silentVideo(url)
+    if (this.incoming) this.drop(this.incoming)
+    let v: HTMLVideoElement
+    if (stream) {
+      const feed = new StreamFeed(url, stream.duration, () => v)
+      v = silentVideo(feed.url)
+      this.feeds.set(v, feed)
+    } else v = silentVideo(url)
     v.loop = false
     this.incoming = v
     v.addEventListener(
@@ -43,7 +55,7 @@ export class Clip {
         if (this.incoming !== v) return
         this.incoming = null
         this.src = this.el?.src ?? ''
-        releaseVideo(v)
+        this.drop(v)
         this.onerror?.(url)
       },
       { once: true }
@@ -61,10 +73,17 @@ export class Clip {
     v.addEventListener('seeked', () => this.incoming === v && this.takeOver(v), { once: true })
   }
 
+  /** Lets go of a video, and the stream feeding it if there is one. */
+  private drop(v: HTMLVideoElement) {
+    this.feeds.get(v)?.stop()
+    this.feeds.delete(v)
+    releaseVideo(v)
+  }
+
   private takeOver(v: HTMLVideoElement) {
     if (this.el) {
       this.hold(this.el)
-      releaseVideo(this.el)
+      this.drop(this.el)
     }
     this.el = v
     this.incoming = null
@@ -173,8 +192,8 @@ export class Clip {
   release(): void {
     this.onframe = null
     this.onerror = null
-    if (this.el) releaseVideo(this.el)
-    if (this.incoming) releaseVideo(this.incoming)
+    if (this.el) this.drop(this.el)
+    if (this.incoming) this.drop(this.incoming)
     this.el = this.incoming = null
     this.held?.close()
     this.held = null

@@ -20,7 +20,8 @@
     onPreview,
     onTrim,
     onTrimEnd,
-    preparing
+    preparing,
+    cached
   }: {
     playback: Playback
     asset: Asset
@@ -39,6 +40,8 @@
     onTrimEnd: (start: number, end: number) => void
     /** Its playback copy being made (or waiting to be): what to say, and how far along. */
     preparing: { label: string; progress: number | null } | null
+    /** How far it plays smoothly (seconds), for the timeline's cache line. */
+    cached: number
   } = $props()
 
   const time = $derived(playback.time)
@@ -64,6 +67,7 @@
     {onPreview}
     {onTrim}
     {onTrimEnd}
+    {cached}
   />
   <span class="time muted">{fmtTime(clip.end - clip.start)}</span>
   {#if asset.audio === false || muted}

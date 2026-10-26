@@ -9,10 +9,13 @@
   let {
     player,
     duration,
-    preparing
+    preparing,
+    cached
   }: {
     player: Playback
     duration: number
+    /** How far every cell plays smoothly (seconds), for the cache line. */
+    cached: number
     /** Its videos' playback copies being made: what to say, and how far along. */
     preparing: { label: string; progress: number | null } | null
   } = $props()
@@ -42,7 +45,12 @@
   </button>
   <span class="time">{fmtTime(player.time)}</span>
   <div class="track" role="presentation" bind:this={track} {onpointerdown}>
-    <div class="rail"><div class="fill" style:width={`${(player.time / duration) * 100}%`}></div></div>
+    <div class="rail">
+      <!-- The cache line, as in After Effects: as far as every cell is ready to play smoothly, on
+           the rail under what's played. -->
+      <div class={['cached', { full: cached >= duration - 0.05 }]} style:width={`${(Math.min(cached, duration) / duration) * 100}%`}></div>
+      <div class="fill" style:width={`${(player.time / duration) * 100}%`}></div>
+    </div>
     <div class="head" style:left={`${(player.time / duration) * 100}%`}></div>
   </div>
   <span class="time muted">{fmtTime(duration)}</span>
@@ -145,6 +153,7 @@
   }
 
   .rail {
+    position: relative;
     height: 4px;
     border-radius: 2px;
     background: var(--tint-2);
@@ -152,8 +161,25 @@
   }
 
   .fill {
+    position: relative;
     height: 100%;
     background: var(--muted);
+  }
+
+  .cached {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: color-mix(in srgb, var(--cached) 70%, transparent);
+    pointer-events: none;
+    transition:
+      width 250ms linear,
+      opacity 600ms var(--ease) 400ms;
+  }
+
+  .cached.full {
+    opacity: 0;
   }
 
   .head {

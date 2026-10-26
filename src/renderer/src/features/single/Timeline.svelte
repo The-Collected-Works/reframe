@@ -13,7 +13,8 @@
     onScrubEnd,
     onPreview,
     onTrim,
-    onTrimEnd
+    onTrimEnd,
+    cached = duration
   }: {
     duration: number
     start: number
@@ -26,6 +27,8 @@
     onPreview: (canvas: HTMLCanvasElement, t: number) => void
     onTrim: (start: number, end: number) => void
     onTrimEnd: (start: number, end: number) => void
+    /** How far it plays smoothly (seconds): its playback copy, as far as it's made so far. */
+    cached?: number
   } = $props()
 
   let body: HTMLDivElement
@@ -94,6 +97,9 @@
   <div class="tl-body" bind:this={body}>
     <div class="tl-rail">
       <div class="tl-range" style:left={pct(start)} style:width={pct(end - start)}></div>
+      <!-- The cache line, as in After Effects: what's ready to play smoothly, on the rail under
+           what's played. It fills as the copy is made, then fades once all of it is. -->
+      <div class={['tl-cached', { full: cached >= duration - 0.05 }]} style:width={pct(Math.min(cached, duration))}></div>
       <div class="tl-played" style:left={pct(start)} style:width={pct(Math.max(0, time - start))}></div>
     </div>
     <div class="tl-head" style:left={pct(time)}></div>
@@ -164,6 +170,23 @@
 
   .tl-played {
     background: var(--text);
+  }
+
+  .tl-cached {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--cached) 70%, transparent);
+    pointer-events: none;
+    transition:
+      width 250ms linear,
+      opacity 600ms var(--ease) 400ms;
+  }
+
+  .tl-cached.full {
+    opacity: 0;
   }
 
   /* Playhead: a slim bar, slim enough to sit beside the trim grips. */

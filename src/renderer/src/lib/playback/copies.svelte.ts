@@ -1,6 +1,7 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import type { ColorMeta } from '@shared/types'
 import { api, mediaUrl } from '../bridge'
+import { canStream } from './stream'
 
 /** A video file as playback knows it. */
 export interface MediaFile {
@@ -76,7 +77,8 @@ class Copies {
   /** Every video in the folder, made ahead of time at the smallest size. */
   private ahead = $state.raw<MediaFile[]>([])
   /** The copy being made. */
-  private current = $state.raw<{ id: number; job: Job; progress: number } | null>(null)
+  /** The copy being made: how far along, and (a first copy) the stream it can be played from meanwhile. */
+  private current = $state.raw<{ id: number; job: Job; progress: number; stream?: string } | null>(null)
   private ids = 0
   private asked = 0
   private stopping = 0
@@ -92,8 +94,8 @@ class Copies {
   private losses = new Map<string, number>()
 
   constructor() {
-    api.onCopyProgress(({ id, progress }) => {
-      if (this.current?.id === id) this.current = { ...this.current, progress }
+    api.onCopyProgress(({ id, progress, stream }) => {
+      if (this.current?.id === id) this.current = { ...this.current, progress, stream: stream ?? this.current.stream }
     })
   }
 
@@ -129,6 +131,19 @@ class Copies {
     }
   }
 
+  /**
+   * The caches were emptied: everything made is forgotten (and looked for again), so it's made
+   * again as it's needed. What's playing moves to its original or a stream meanwhile.
+   */
+  reset(): void {
+    this.made.clear()
+    this.checked.clear()
+    this.checking.clear()
+    this.losses.clear()
+    this.finished.clear()
+    this.check([...this.ahead, ...[...this.wanted.values()].map((w) => w.job.file)])
+  }
+
   /** Every video in the folder: each gets its smallest copy ahead of time. */
   prepare(files: MediaFile[]): void {
     this.ahead = files
@@ -156,6 +171,25 @@ class Copies {
       if (path) return path
     }
     return null
+  }
+
+  /**
+   * A first copy still being made, to play as it's written: its stream, and how many seconds of it
+   * are encoded so far. Null when there's none.
+   */
+  streaming(file: MediaFile): { url: string; ready: number } | null {
+    const cur = this.current
+    if (!cur?.stream || fileKey(cur.job.file) !== fileKey(file) || !this.first(cur.job)) return null
+    return { url: mediaUrl(cur.stream), ready: cur.progress * file.duration }
+  }
+
+  /**
+   * How much of `file` plays smoothly (seconds from its start): all of it once a copy's made, as far
+   * as it's encoded while one streams, else none.
+   */
+  ready(file: MediaFile): number {
+    if (this.best(file, 0)) return file.duration
+    return this.streaming(file)?.ready ?? 0
   }
 
   /** None could be made at any size (the original has to stand in). */
@@ -338,8 +372,19 @@ class Copies {
       if (!job) break
       const id = ++this.ids
       this.current = { id, job, progress: 0 }
+      // A first copy streams while it's made: what's been encoded plays at once (see StreamFeed).
       try {
-        const path = await api.copy(id, job.file.path, job.file.w, job.file.h, job.file.color, job.size, job.file.duration, job.priority === LATER)
+        const path = await api.copy(
+          id,
+          job.file.path,
+          job.file.w,
+          job.file.h,
+          job.file.color,
+          job.size,
+          job.file.duration,
+          job.priority === LATER,
+          this.first(job) && canStream()
+        )
         // Null: stopped for something more urgent (or while something plays); it waits its turn again.
         if (!path) continue
         this.made.set(job.key, path)

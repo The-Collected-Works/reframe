@@ -23,6 +23,8 @@
   --danger: #ff6b6b;
   /* Snapping guides, drawn over the media. */
   --guide: #ff4f8b;
+  /* What's prepared to play smoothly (a timeline's cache line). */
+  --cached: #4fd18b;
 
   /* Tints instead of strokes: fields and tracks, hover, selected. */
   --tint-1: rgba(255, 255, 255, 0.045);
