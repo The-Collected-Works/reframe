@@ -73,9 +73,10 @@
   let height = $state(0)
   let cursor = $state('default')
   let readout = $state<{ x: number; y: number; text: string } | null>(null)
-  // Another asset starts deselected.
+  // Another asset starts deselected. (By name: the asset object itself is new after every edit.)
+  const name = $derived(asset?.name)
   let selected = $derived.by(() => {
-    void asset?.name
+    void name
     return false
   })
   let hovering = false
@@ -110,7 +111,7 @@
   // Camera: Fit (the framing above, eased) or Manual, wherever you've scrolled, pinched or panned
   // to. A new asset goes back to Fit; in Manual, selecting no longer moves the view.
   let manual = $derived.by((): View | null => {
-    void asset?.name
+    void name
     return null
   })
   // Resizing in Manual keeps the same point centred.

@@ -122,8 +122,10 @@
     interacting = false
     settled++
   }
+  // A new layout goes back to Fit. (By key: the scene object itself is new after every edit.)
+  const sceneKey = $derived(scene.key)
   let manual = $derived.by((): View | null => {
-    void scene.key
+    void sceneKey
     return null
   })
   const tk = $derived(target.k)
