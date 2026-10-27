@@ -90,6 +90,20 @@ describe('moveNode', () => {
     expect(moveNode(root, 'g', 'a', 'top', dirOf, newId).root).toBe(root)
   })
 
+  it('moving one of a pair beside the other reorders them, keeping the pair', () => {
+    // The user's case: two side by side (a group of their own) beside a stack.
+    const root = split('r', 'row', split('g', 'same', slot('a'), slot('b')), split('s', 'col', slot('x'), slot('y')))
+    expect(show(moveNode(root, 'a', 'b', 'right', dirOf, newId).root)).toBe('row(same(b a) col(x y))')
+    expect(show(moveNode(root, 'x', 'y', 'bottom', dirOf, newId).root)).toBe('row(same(a b) col(y x))')
+  })
+
+  it('moved within its group, keeps its share', () => {
+    const root = split('r', 'row', slot('a'), slot('b'), slot('c'))
+    const r = moveNode(root, 'a', 'c', 'right', dirOf, newId)
+    expect(r.born).toBeUndefined()
+    expect(reconcileWeights(root, r.root, { r: { weights: [2, 1, 1] } }, r.born)).toEqual({ r: { weights: [0.25, 0.25, 0.5] } })
+  })
+
   it('moving one of a pair beside the pair goes beside what remains of it', () => {
     const root = split('r', 'row', split('g', 'col', slot('a'), slot('b')), slot('c'))
     expect(show(moveNode(root, 'a', 'g', 'right', dirOf, newId).root)).toBe('row(b a c)')

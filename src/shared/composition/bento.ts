@@ -228,23 +228,25 @@ export const within = (root: BentoNode, outer: string, inner: string): boolean =
   return !!o && !!findNode(o, inner)
 }
 
+/** Stands in for a node being moved, so its group keeps its shape until the node's in its new place. */
+const MOVING = '\u0000moving'
+
 /**
  * Node `id` moved to `side` of node `target` (see `insertBeside`). Moving a node beside itself or
- * into itself changes nothing. If taking it out closes up the split the target was (a group of two),
- * it goes beside what took that split's place.
+ * into itself changes nothing. It's put in its new place before it's taken out of its old one, so
+ * a group only closes up behind it if that leaves it with one child: moving one of a pair beside the
+ * other reorders the pair (it doesn't break it up), and moving one of a pair beside the pair puts it
+ * beside what remains of it. Moved within its own group, it keeps its share of it.
  */
 export function moveNode(root: BentoNode, id: string, target: string, side: Side, dirOf: DirOf, newId: () => string): { root: BentoNode; born?: Born } {
-  if (id === target || within(root, id, target)) return { root }
   const node = findNode(root, id)
-  const rest = node && removeNode(root, id)
-  if (!node || !rest) return { root }
-  let at = target
-  if (!findNode(rest, target)) {
-    const parent = parentOf(root, id)!
-    at = parent.children.find((c) => c.id !== id)!.id
-  }
+  if (!node || id === root.id || id === target || within(root, id, target)) return { root }
+  const marked = mapNode(root, id, () => ({ id: MOVING, item: null }))
   // Directions as they were: the split being moved into hasn't changed shape.
-  return insertBeside(rest, at, side, node, (s) => fixedDir(s) ?? dirOf((findNode(root, s.id) as Split | null) ?? s), newId)
+  const r = insertBeside(marked, target, side, node, (s) => fixedDir(s) ?? dirOf((findNode(root, s.id) as Split | null) ?? s), newId)
+  const next = removeNode(r.root, MOVING)
+  if (!next) return { root }
+  return { root: next, born: parentOf(next, id)?.id === parentOf(root, id)?.id ? undefined : r.born }
 }
 
 /**
@@ -259,14 +261,13 @@ export function moveInto(root: BentoNode, id: string, parent: string, index: num
   const at = into.children.findIndex((c) => c.id === id)
   if (at >= 0 && (index === at || index === at + 1)) return root
   // Mark where it was, put it where it goes, then take the mark out (closing up behind it).
-  const MARK = '\u0000moving'
-  let next = mapNode(root, id, () => ({ id: MARK, item: null }))
+  let next = mapNode(root, id, () => ({ id: MOVING, item: null }))
   next = mapNode(next, parent, (p) => {
     const kids = (p as Split).children
     const i = Math.max(0, Math.min(index, kids.length))
     return { ...p, children: [...kids.slice(0, i), node, ...kids.slice(i)] }
   })
-  return removeNode(next, MARK) ?? root
+  return removeNode(next, MOVING) ?? root
 }
 
 /** Split `id` running the other way (an Auto one, the other way from how it runs now). */
