@@ -1,79 +1,63 @@
-<!-- Play / pause, the time, the timeline with its trim handles, the trimmed length and the volume. -->
+<!--
+  Play / pause, the time, the timeline (with trim handles for a video), how long it runs, and the
+  sound: the one player bar, for a video and for a composition.
+-->
 <script lang="ts">
   import { fmtTime } from '../../lib/format'
   import type { Player } from '../../state/playback.svelte'
-  import type { Asset } from '../../state/library.svelte'
   import { Icon } from '../../ui'
   import Preparing from './Preparing.svelte'
-  import Timeline from './Timeline.svelte'
+  import Timeline, { type Trim } from './Timeline.svelte'
   import Volume from './Volume.svelte'
 
   let {
-    playback,
-    asset,
-    clip,
-    aspect,
-    muted,
-    volume,
-    onVolume,
-    onToggleMute,
-    onPreview,
-    onTrim,
-    onTrimEnd,
+    player,
+    duration,
+    trim,
+    sound,
     preparing,
     cached
   }: {
-    playback: Player
-    asset: Asset
-    clip: { start: number; end: number }
-    /** The artboard's, for trim previews. */
-    aspect: number
-    /** Exported without sound. */
-    muted: boolean
-    /** The preview volume (0..1). */
-    volume: number
-    onVolume: (v: number) => void
-    onToggleMute: () => void
-    /** Draws the frame at `t` into a trim handle's preview. */
-    onPreview: (canvas: HTMLCanvasElement, t: number) => void
-    onTrim: (start: number, end: number) => void
-    onTrimEnd: (start: number, end: number) => void
-    /** Its playback copy being made (or waiting to be): what to say, and how far along. */
+    player: Player
+    /** The timeline's length (seconds): a video's whole file, or a composition's. */
+    duration: number
+    /** A video's trim: what plays, and handles to change it. Without, all of it plays. */
+    trim?: Trim
+    /** The volume, or why there's none (no audio, muted for export, no sound in compositions yet). */
+    sound: { volume: number; onVolume: (v: number) => void; onToggleMute: () => void } | { silent: string }
+    /** Its playback copies being made (or waiting to be): what to say, and how far along. */
     preparing: { label: string; progress: number | null } | null
     /** How far it plays smoothly (seconds), for the timeline's cache line. */
     cached: number
   } = $props()
 
-  const time = $derived(playback.time)
+  const time = $derived(player.time)
+  const start = $derived(trim?.start ?? 0)
+  const end = $derived(trim?.end ?? duration)
 </script>
 
 <div class="player">
   {#if preparing}<Preparing {...preparing} />{/if}
   <!-- Both glyphs stay mounted and crossfade, so the button never pops. -->
-  <button class={['play', { playing: playback.playing, loading: playback.waiting }]} onclick={() => playback.toggle()} title="Play / Pause (Space)">
+  <button class={['play', { playing: player.playing, loading: player.waiting }]} onclick={() => player.toggle()} title="Play / Pause (Space)">
     <span class="glyph play-glyph"><Icon name="play" size={14} /></span>
     <span class="glyph pause-glyph"><Icon name="pause" size={14} /></span>
   </button>
-  <span class="time">{fmtTime(Math.max(0, time - clip.start))}</span>
+  <span class="time">{fmtTime(Math.max(0, time - start))}</span>
   <Timeline
-    duration={asset.duration}
-    start={clip.start}
-    end={clip.end}
+    {duration}
     {time}
-    {aspect}
-    onScrubStart={() => playback.scrubStart()}
-    onSeek={(t) => playback.scrubTo(t)}
-    onScrubEnd={(t) => playback.scrubEnd(t)}
-    {onPreview}
-    {onTrim}
-    {onTrimEnd}
+    {trim}
     {cached}
+    onScrubStart={() => player.scrubStart()}
+    onSeek={(t) => player.scrubTo(t)}
+    onScrubEnd={(t) => player.scrubEnd(t)}
   />
-  <span class="time muted">{fmtTime(clip.end - clip.start)}</span>
-  {#if asset.audio === false || muted}
-    <span class="silent" title={asset.audio === false ? 'No audio track' : 'Audio is muted for export'}><Icon name="volumeOff" /></span>
+  <span class="time muted">{fmtTime(end - start)}</span>
+  {#if 'silent' in sound}
+    <span class="silent" title={sound.silent}><Icon name="volumeOff" /></span>
   {:else}
-    <Volume {volume} onChange={onVolume} {onToggleMute} />
+    <Volume volume={sound.volume} onChange={sound.onVolume} onToggleMute={sound.onToggleMute} />
   {/if}
 </div>
 

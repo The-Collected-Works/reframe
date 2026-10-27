@@ -23,7 +23,6 @@
   import { assetMenu, slotMenu } from '../menus'
   import { composed, quantize, tracksOf } from '../composition'
   import Filmstrip from './Filmstrip.svelte'
-  import CompositionPlayerBar from './CompositionPlayerBar.svelte'
   import CompositionStage from './CompositionStage.svelte'
   import ItemPicker from './ItemPicker.svelte'
   import PlayerBar from './PlayerBar.svelte'
@@ -194,22 +193,32 @@
   <div class="single-fade"></div>
   <div class="single-overlay">
     {#if compositionPlayer && comp?.duration}
-      <CompositionPlayerBar player={compositionPlayer} duration={comp.duration} preparing={compositionPreparing} cached={compositionCached} />
+      <PlayerBar
+        player={compositionPlayer}
+        duration={comp.duration}
+        sound={{ silent: 'Compositions export without sound for now' }}
+        preparing={compositionPreparing}
+        cached={compositionCached}
+      />
     {:else if asset && playback && asset.duration > 0}
       <PlayerBar
-        {playback}
-        {asset}
-        {clip}
-        aspect={board.width / board.height}
-        muted={settings.mute}
-        volume={preview.volume}
-        onVolume={(v) => preview.setVolume(v)}
-        onToggleMute={() => preview.toggleMute()}
-        {onPreview}
+        player={playback}
+        duration={asset.duration}
+        trim={{
+          start: clip.start,
+          end: clip.end,
+          aspect: board.width / board.height,
+          onPreview,
+          onTrim: (start, end) => (trimDraft = { start, end }),
+          onTrimEnd
+        }}
+        sound={asset.audio === false
+          ? { silent: 'No audio track' }
+          : settings.mute
+            ? { silent: 'Audio is muted for export' }
+            : { volume: preview.volume, onVolume: (v) => preview.setVolume(v), onToggleMute: () => preview.toggleMute() }}
         {preparing}
-        cached={asset.kind === 'video' ? copies.ready(asset) : 0}
-        onTrim={(start, end) => (trimDraft = { start, end })}
-        {onTrimEnd}
+        cached={copies.ready(asset)}
       />
     {/if}
     <div class="film-row">

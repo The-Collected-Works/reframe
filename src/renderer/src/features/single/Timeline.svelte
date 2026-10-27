@@ -1,35 +1,44 @@
+<script module lang="ts">
+  /** A video's trim: its handles, and the frame under each as it's dragged. */
+  export interface Trim {
+    start: number
+    end: number
+    /** The artboard's, for the previews. */
+    aspect: number
+    /** Draws the frame at `t` into a handle's preview. */
+    onPreview: (canvas: HTMLCanvasElement, t: number) => void
+    onTrim: (start: number, end: number) => void
+    onTrimEnd: (start: number, end: number) => void
+  }
+</script>
+
 <script lang="ts">
   import { trackPointer } from '../../lib/drag'
   import { fmtTime } from '../../lib/format'
 
   let {
     duration,
-    start,
-    end,
     time,
-    aspect,
+    trim,
     onScrubStart,
     onSeek,
     onScrubEnd,
-    onPreview,
-    onTrim,
-    onTrimEnd,
     cached = duration
   }: {
     duration: number
-    start: number
-    end: number
     time: number
-    aspect: number
+    /** Without one, all of it plays (a composition, say) and there are no handles. */
+    trim?: Trim
     onScrubStart: () => void
     onSeek: (t: number) => void
     onScrubEnd: (t: number) => void
-    onPreview: (canvas: HTMLCanvasElement, t: number) => void
-    onTrim: (start: number, end: number) => void
-    onTrimEnd: (start: number, end: number) => void
-    /** How far it plays smoothly (seconds): its playback copy, as far as it's made so far. */
+    /** How far it plays smoothly (seconds): its playback copies, as far as they're made so far. */
     cached?: number
   } = $props()
+
+  const start = $derived(trim?.start ?? 0)
+  const end = $derived(trim?.end ?? duration)
+  const aspect = $derived(trim?.aspect ?? 1)
 
   let body: HTMLDivElement
   let canvas = $state<HTMLCanvasElement>()
@@ -41,7 +50,7 @@
   const ph = $derived(Math.round(aspect >= 1 ? 150 / aspect : 150))
   const dpr = window.devicePixelRatio || 1
   $effect(() => {
-    if (scrub != null && canvas) onPreview(canvas, scrub)
+    if (scrub != null && canvas) trim?.onPreview(canvas, scrub)
   })
   const pct = (t: number) => `${(t / duration) * 100}%`
   const at = (clientX: number) => {
@@ -70,7 +79,7 @@
         // Last frame that's kept.
         scrub = Math.max(range.start, range.end - 0.04)
       }
-      onTrim(range.start, range.end)
+      trim?.onTrim(range.start, range.end)
     }
     apply(e.clientX)
     trackPointer(e, {
@@ -79,7 +88,7 @@
         active = null
         if (kind === 'seek') return onScrubEnd(seekTo)
         scrub = null
-        onTrimEnd(range.start, range.end)
+        trim?.onTrimEnd(range.start, range.end)
       }
     })
   }
@@ -103,20 +112,20 @@
       <div class="tl-played" style:left={pct(start)} style:width={pct(Math.max(0, time - start))}></div>
     </div>
     <div class="tl-head" style:left={pct(time)}></div>
-    <div
-      class={['tl-handle in', { on: active === 'in' }]}
-      style:left={pct(start)}
-      role="presentation"
-      onpointerdown={(e) => drag(e, 'in')}
-      title="Trim start"
-    ></div>
-    <div
-      class={['tl-handle out', { on: active === 'out' }]}
-      style:left={pct(end)}
-      role="presentation"
-      onpointerdown={(e) => drag(e, 'out')}
-      title="Trim end"
-    ></div>
+    {#if trim}<div
+        class={['tl-handle in', { on: active === 'in' }]}
+        style:left={pct(start)}
+        role="presentation"
+        onpointerdown={(e) => drag(e, 'in')}
+        title="Trim start"
+      ></div>
+      <div
+        class={['tl-handle out', { on: active === 'out' }]}
+        style:left={pct(end)}
+        role="presentation"
+        onpointerdown={(e) => drag(e, 'out')}
+        title="Trim end"
+      ></div>{/if}
     {#if bubble != null}
       <div class="tl-bubble" style:left={pct(bubble)}>{fmtTime(Math.max(0, bubble - start))}</div>
     {/if}
