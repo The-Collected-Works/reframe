@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { slotKey } from '@shared/composition/bento'
+  import { dirsOn, slotKey } from '@shared/composition/bento'
   import { drawFrame } from '@shared/framing/framing'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import {
@@ -31,6 +31,7 @@
   import { project } from '../../state/project.svelte'
   import { selection } from '../../state/selection.svelte'
   import { copies, Player, sizesOf, SOON } from '../../state/playback.svelte'
+  import { storedOutline, storeOutline } from '../../state/prefs'
   import { shell } from '../../state/shell.svelte'
   import { view } from '../../state/view.svelte'
   import { Button } from '../../ui'
@@ -39,6 +40,7 @@
   import { composed, composedWith, quantize, tracksOf } from '../../state/composition'
   import Filmstrip from './Filmstrip.svelte'
   import CompositionStage from './composition/CompositionStage.svelte'
+  import Outline from './composition/Outline.svelte'
   import ItemPicker from './ItemPicker.svelte'
   import PlayerBar from './PlayerBar.svelte'
   import Stage from './Stage.svelte'
@@ -154,6 +156,11 @@
       compositionPlayer = null
     }
   })
+  // A composition's outline, in the panel at the left: open or not (remembered), the row or cell
+  // pointed at (here or on the stage), and a row being dragged (the stage shows where it'd land).
+  let outlineOpen = $state(storedOutline())
+  let structureHover = $state<string | null>(null)
+  let outlineDrag = $state<{ moving: string; into: { parent: string; index: number } | null } | null>(null)
   const choosing = $derived(shell.choosing && comp ? comp.arrangement.cells.find((c) => c.slot.id === shell.choosing) : undefined)
 
   // Space plays and pauses; any arrow steps through the strip. (The stage handles the rest.)
@@ -165,105 +172,145 @@
 </script>
 
 <div class="single">
+  <!-- Where it is, open or closed: the top left (in the panel, or of the viewport with it gone). -->
   {#if comp && compositionKey}
-    <CompositionStage
-      {board}
-      {comp}
-      node={selection.node}
-      nodes={selection.nodes}
-      adjusting={shell.adjusting}
-      player={compositionPlayer}
-      picking={shell.picking}
-      canUngroup={canUngroupNode}
-      canGroup={canGroupNodes}
-      onScale={(k) => (scale = k)}
-      recompose={(root, born) => composedWith(compositionKey, board, root, born)}
-      newId={newSlotId}
-      onSelect={(id) => (selection.node = id)}
-      onToggle={(id) => selection.toggleNode(id)}
-      onAdjust={(slot) => (shell.adjusting = slot)}
-      onEdit={(slot, patch) => project.edit([slotKey(compositionKey, slot)], patch)}
-      onReset={(slot, keys) => project.resetKeys([slotKey(compositionKey, slot)], keys)}
-      onArrange={(split, weights) => project.setSplit(compositionKey, split, { weights })}
-      onEvenOut={evenOut}
-      onAdd={addCell}
-      onMove={moveNode}
-      onMoveInto={moveIntoGroup}
-      onSwap={swapSlots}
-      onRemove={removeNode}
-      onFlip={flipGroup}
-      onUngroup={ungroupNode}
-      onGroup={groupNodes}
-      onChoose={(slot) => {
-        selection.node = slot
-        shell.choosing = slot
-      }}
-      onHold={(slot, hold) => setSlot(slot, { end: hold ? 'hold' : 'loop' })}
-      onMenu={(slot, at) => {
-        const layer = comp.layers.find((l) => l.id === slot)
-        slotMenu(slot, !!layer?.source, layer?.source?.kind === 'video', layer?.end ?? 'loop', at)
-      }}
-      onExit={() => setMode('grid')}
-    />
-  {:else}
-    <Stage
-      {asset}
-      {board}
-      {settings}
-      {playback}
-      start={clip.start}
-      picking={shell.picking}
-      onNeed={(px) => (need = quantize(px))}
-      onEdit={(patch) => asset && project.edit([asset.name], patch)}
-      onSelect={() => asset && !selection.has(asset.name) && selection.set([asset.name])}
-      onReset={(keys) => asset && project.resetKeys([asset.name], keys)}
-      onExit={() => setMode('grid')}
-      onMenu={(at) => asset && assetMenu(asset.name, asset.path, at, true)}
-    />
-  {/if}
-  <div class="single-fade"></div>
-  <div class="single-overlay">
-    {#if compositionPlayer && comp?.duration}
-      <PlayerBar
-        player={compositionPlayer}
-        duration={comp.duration}
-        sound={{ silent: 'Compositions export without sound for now' }}
-        preparing={compositionPreparing}
-        cached={compositionCached}
+    <span class="outline-toggle">
+      <Button
+        variant="icon"
+        icon="panel"
+        iconSize={15}
+        pressed={outlineOpen}
+        title={outlineOpen ? 'Hide the outline' : 'Show the outline'}
+        onclick={() => storeOutline((outlineOpen = !outlineOpen))}
       />
-    {:else if asset && playback && asset.duration > 0}
-      <PlayerBar
-        player={playback}
-        duration={asset.duration}
-        trim={{
-          start: clip.start,
-          end: clip.end,
-          aspect: board.width / board.height,
-          onPreview,
-          onTrim: (start, end) => (trimDraft = { start, end }),
-          onTrimEnd
+    </span>
+  {/if}
+  {#if comp && compositionKey && outlineOpen}
+    <!-- The composition's structure, on the same ground as the viewport. -->
+    <aside class="structure">
+      <Outline
+        root={comp.item.root}
+        dirOf={dirsOn(comp.arrangement)}
+        cellOf={(id) => {
+          const s = comp.layers.find((l) => l.id === id)?.source
+          return s ? { label: s.label, thumb: s.thumb, w: s.w, h: s.h } : null
         }}
-        sound={asset.audio === false
-          ? { silent: 'No audio track' }
-          : settings.mute
-            ? { silent: 'Audio is muted for export' }
-            : { volume: preview.volume, onVolume: (v) => preview.setVolume(v), onToggleMute: () => preview.toggleMute() }}
-        {preparing}
-        cached={copies.ready(asset)}
+        selected={selection.nodes}
+        hover={structureHover}
+        onSelect={(id, add) => {
+          shell.adjusting = null
+          if (add) selection.toggleNode(id)
+          else selection.node = id
+        }}
+        onHover={(id) => (structureHover = id)}
+        onFlip={flipGroup}
+        onLanding={(moving, into) => (outlineDrag = moving ? { moving, into } : null)}
+        onDrop={(moving, into) => moveIntoGroup(moving, into.parent, into.index)}
+      />
+    </aside>
+  {/if}
+  <div class="main">
+    {#if comp && compositionKey}
+      <CompositionStage
+        {board}
+        {comp}
+        node={selection.node}
+        nodes={selection.nodes}
+        adjusting={shell.adjusting}
+        bind:hover={structureHover}
+        {outlineDrag}
+        player={compositionPlayer}
+        picking={shell.picking}
+        canUngroup={canUngroupNode}
+        canGroup={canGroupNodes}
+        onScale={(k) => (scale = k)}
+        recompose={(root, born) => composedWith(compositionKey, board, root, born)}
+        newId={newSlotId}
+        onSelect={(id) => (selection.node = id)}
+        onToggle={(id) => selection.toggleNode(id)}
+        onAdjust={(slot) => (shell.adjusting = slot)}
+        onEdit={(slot, patch) => project.edit([slotKey(compositionKey, slot)], patch)}
+        onReset={(slot, keys) => project.resetKeys([slotKey(compositionKey, slot)], keys)}
+        onArrange={(split, weights) => project.setSplit(compositionKey, split, { weights })}
+        onEvenOut={evenOut}
+        onAdd={addCell}
+        onMove={moveNode}
+        onSwap={swapSlots}
+        onRemove={removeNode}
+        onFlip={flipGroup}
+        onUngroup={ungroupNode}
+        onGroup={groupNodes}
+        onChoose={(slot) => {
+          selection.node = slot
+          shell.choosing = slot
+        }}
+        onHold={(slot, hold) => setSlot(slot, { end: hold ? 'hold' : 'loop' })}
+        onMenu={(slot, at) => {
+          const layer = comp.layers.find((l) => l.id === slot)
+          slotMenu(slot, !!layer?.source, layer?.source?.kind === 'video', layer?.end ?? 'loop', at)
+        }}
+        onExit={() => setMode('grid')}
+      />
+    {:else}
+      <Stage
+        {asset}
+        {board}
+        {settings}
+        {playback}
+        start={clip.start}
+        picking={shell.picking}
+        onNeed={(px) => (need = quantize(px))}
+        onEdit={(patch) => asset && project.edit([asset.name], patch)}
+        onSelect={() => asset && !selection.has(asset.name) && selection.set([asset.name])}
+        onReset={(keys) => asset && project.resetKeys([asset.name], keys)}
+        onExit={() => setMode('grid')}
+        onMenu={(at) => asset && assetMenu(asset.name, asset.path, at, true)}
       />
     {/if}
-    <div class="film-row">
-      <span class="film-count">{index + 1}<span class="muted">{` / ${count}`}</span></span>
-      <Button variant="icon" icon="prev" title={`Previous (${hint(SINGLE.actions.prev)})`} disabled={index <= 0} onclick={() => selection.step(-1)} />
-      <Filmstrip
-        assets={strip}
-        {board}
-        focus={selection.focus}
-        composite={(name) => composed(name, board)}
-        onSelect={(name) => selection.select(name)}
-        onSeen={(a) => prioritize(a.path)}
-      />
-      <Button variant="icon" icon="next" title={`Next (${hint(SINGLE.actions.next)})`} disabled={index >= count - 1} onclick={() => selection.step(1)} />
+    <div class="single-fade"></div>
+    <div class="single-overlay">
+      {#if compositionPlayer && comp?.duration}
+        <PlayerBar
+          player={compositionPlayer}
+          duration={comp.duration}
+          sound={{ silent: 'Compositions export without sound for now' }}
+          preparing={compositionPreparing}
+          cached={compositionCached}
+        />
+      {:else if asset && playback && asset.duration > 0}
+        <PlayerBar
+          player={playback}
+          duration={asset.duration}
+          trim={{
+            start: clip.start,
+            end: clip.end,
+            aspect: board.width / board.height,
+            onPreview,
+            onTrim: (start, end) => (trimDraft = { start, end }),
+            onTrimEnd
+          }}
+          sound={asset.audio === false
+            ? { silent: 'No audio track' }
+            : settings.mute
+              ? { silent: 'Audio is muted for export' }
+              : { volume: preview.volume, onVolume: (v) => preview.setVolume(v), onToggleMute: () => preview.toggleMute() }}
+          {preparing}
+          cached={copies.ready(asset)}
+        />
+      {/if}
+      <div class="film-row">
+        <span class="film-count">{index + 1}<span class="muted">{` / ${count}`}</span></span>
+        <Button variant="icon" icon="prev" title={`Previous (${hint(SINGLE.actions.prev)})`} disabled={index <= 0} onclick={() => selection.step(-1)} />
+        <Filmstrip
+          assets={strip}
+          {board}
+          focus={selection.focus}
+          composite={(name) => composed(name, board)}
+          onSelect={(name) => selection.select(name)}
+          onSeen={(a) => prioritize(a.path)}
+        />
+        <Button variant="icon" icon="next" title={`Next (${hint(SINGLE.actions.next)})`} disabled={index >= count - 1} onclick={() => selection.step(1)} />
+      </div>
     </div>
   </div>
 </div>
@@ -285,6 +332,32 @@
   .single {
     position: absolute;
     inset: 0;
+    display: flex;
+  }
+
+  /* A composition's outline: a panel of its own at the left, on the viewport's own ground. */
+  .structure {
+    flex: none;
+    width: 232px;
+    padding: 44px 8px 12px;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+    background: var(--well);
+    animation: rise-in 300ms var(--ease) 100ms both;
+  }
+
+  /* Everything else: the stage, and the player and filmstrip centred under it. */
+  .main {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .outline-toggle {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 6;
   }
 
   /* Fades the viewport to its background behind the filmstrip, so the strip sits on solid ground. */

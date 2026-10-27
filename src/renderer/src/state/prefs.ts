@@ -61,3 +61,7 @@ export function storedVolume(): number {
   return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.8
 }
 export const storeVolume = (v: number): void => write('reframe.volume', v)
+
+/** The single view's left panel (a composition's outline) open. */
+export const storedOutline = (): boolean => read<unknown>('reframe.outline', true) !== false
+export const storeOutline = (open: boolean): void => write('reframe.outline', open)

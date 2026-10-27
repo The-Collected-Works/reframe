@@ -1,5 +1,5 @@
 <!--
-  A composition's structure as an outline, straight on the viewport beside it: its groups (side by
+  A composition's structure as an outline (in the single view's left panel): its groups (side by
   side, or stacked) and cells, indented under the group they're in. Click a row to select it,
   shift-click to add it to the selection; hovering one shows it on the stage. Drag a row to move it:
   between two rows, it goes there in their group; onto the middle of a group's row, to the end of
@@ -176,17 +176,9 @@
 </div>
 
 <style>
-  /* No panel: rows straight on the viewport, as quiet as the rest of what's around the board. */
   .outline {
-    position: absolute;
-    top: 16px;
-    left: 12px;
-    z-index: 5;
-    width: 208px;
-    max-height: calc(100% - 200px);
-    overflow-y: auto;
+    position: relative;
     outline: none;
-    animation: rise-in 300ms var(--ease) 100ms both;
   }
 
   .row {

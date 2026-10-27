@@ -1,12 +1,12 @@
 <!--
-  The bento composition editor: the composition on its artboard, framed by the camera, with its
-  layers floating at the left.
+  The bento composition editor: the composition on its artboard, framed by the camera. (Its
+  structure is outlined beside it, in the single view's left panel; see Outline.)
   - Click a cell to select it; \ selects the group it's in, Enter what's in a group. The selection
     has a + on each edge, to add a cell there, and a toolbar.
   - Drag a cell (or the selected group, if it's in it) to move it: onto another cell's edge to go
     beside it, onto its middle to swap the two, into the margin to go beside everything. While it's
-    dragged the layout shows where it would land, everything else making room. Dragging a layer
-    shows the same.
+    dragged the layout shows where it would land, everything else making room. Dragging a row in
+    the outline shows the same (`outlineDrag`).
   - Double-click a cell (or Enter) to adjust what it shows, with the same gizmo as a single asset,
     the rest dimmed; Esc, Enter or a click elsewhere is done.
   - Drag a gap to resize the cells either side; double-click it to even them out.
@@ -36,7 +36,6 @@
   import { dropAt, landed, type Landing } from './drop'
   import FloatingBar from './FloatingBar.svelte'
   import { dragGap, gapAt } from './gaps'
-  import Outline from './Outline.svelte'
   import { drawCompositionStage } from './render'
 
   let {
@@ -45,6 +44,8 @@
     node,
     nodes,
     adjusting,
+    hover = $bindable(null),
+    outlineDrag,
     player,
     picking,
     canUngroup,
@@ -61,7 +62,6 @@
     onEvenOut,
     onAdd,
     onMove,
-    onMoveInto,
     onSwap,
     onRemove,
     onFlip,
@@ -80,6 +80,10 @@
     nodes: string[]
     /** The cell whose picture is being adjusted, if any (it's the one selected). */
     adjusting: string | null
+    /** The cell or group pointed at, here or in the outline beside the stage. */
+    hover?: string | null
+    /** A row being dragged in the outline: what, and where it would land (shown here as it would be). */
+    outlineDrag: { moving: string; into: { parent: string; index: number } | null } | null
     /** Its videos' playback (a track per video cell, by slot). */
     player: Player | null
     /** The eyedropper is open: no editing chrome, it needs the exact picture. */
@@ -103,7 +107,6 @@
     onEvenOut: (group: string) => void
     onAdd: (target: string, side: Side) => void
     onMove: (node: string, target: string, side: Side) => void
-    onMoveInto: (node: string, parent: string, index: number) => void
     onSwap: (a: string, b: string) => void
     onRemove: (nodes: string[]) => void
     onFlip: (group: string) => void
@@ -119,12 +122,10 @@
     onExit: () => void
   } = $props()
 
-  // The board placed clear of the layers (left) and the bottom band (player and filmstrip).
+  // The board placed clear of the bottom band (player and filmstrip).
   const MARGIN_X = 48
   const MARGIN_TOP = 48
   const RESERVED = 12 + 64 + 12 + 44 + 12 * 2
-  // The outline at the left: the board starts clear of it.
-  const OUTLINE = 12 + 208 + 32
   const dpr = window.devicePixelRatio || 1
   const TRANSFORM: SettingKey[] = ['zoom', 'scaleX', 'scaleY', 'offsetX', 'offsetY', 'rotation']
   const SIDES: { side: Side; title: string }[] = [
@@ -177,15 +178,17 @@
   let height = $state(0)
   let cursor = $state('default')
   let readout = $state<{ x: number; y: number; text: string } | null>(null)
-  let hover = $state<string | null>(null)
   let hoverGap = $state<Gap | null>(null)
   let busy = $state(false)
   let guides: Guides = NO_GUIDES
 
   // ---- moving a cell (or a layer): where it would land, and the layout as that would leave it
 
-  /** Mid-drag: what's moving, where it would land, and the pointer (stage pixels; not from the layers). */
-  let drag = $state<{ moving: string; landing: Landing | null; at: Point | null } | null>(null)
+  /** Mid-drag: what's moving, where it would land, and the pointer (stage pixels; none from the outline). */
+  let cellDrag = $state<{ moving: string; landing: Landing | null; at: Point | null } | null>(null)
+  const drag = $derived(
+    cellDrag ?? (outlineDrag ? { moving: outlineDrag.moving, at: null, landing: outlineDrag.into && ({ kind: 'into', ...outlineDrag.into } as const) } : null)
+  )
   const preview = $derived.by(() => {
     const l = drag?.landing
     if (!drag || !l || l.kind === 'swap') return null
@@ -224,16 +227,15 @@
     return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), w: lerp(a.w, b.w, t), h: lerp(a.h, b.h, t) }
   }
 
-  // Framing: the board centred clear of the panels, zoomed out while a cell's being adjusted just
+  // Framing: the board centred clear of the bottom band, zoomed out while a cell's being adjusted just
   // enough that its media's corners (the handles) are on screen. Held still while interacting.
   let interacting = false
   let settled = $state(0)
   let held: View = { k: 1, bx: 0, by: 0 }
-  const left = $derived(picking ? MARGIN_X : OUTLINE)
   const target = $derived.by((): View => {
     void settled
     if (interacting) return held
-    const availW = width - left - MARGIN_X
+    const availW = width - MARGIN_X * 2
     const availH = height - MARGIN_TOP - RESERVED
     const fitK = Math.max(0.01, Math.min(availW / board.width, availH / board.height))
     let k = fitK
@@ -243,7 +245,7 @@
       const ey = Math.max(board.height / 2, board.height / 2 - b.y, b.y + b.h - board.height / 2)
       k = Math.max(fitK * 0.45, Math.min(fitK, availW / 2 / ex, availH / 2 / ey))
     }
-    held = { k, bx: left + (availW - board.width * k) / 2, by: MARGIN_TOP + (availH - board.height * k) / 2 }
+    held = { k, bx: MARGIN_X + (availW - board.width * k) / 2, by: MARGIN_TOP + (availH - board.height * k) / 2 }
     return held
   })
   const endInteraction = () => {
@@ -582,14 +584,14 @@
       },
       move: (ev) => {
         const landing = dropAt(root, start, board.width, board.height, toBoard(ev.clientX, ev.clientY), moving)
-        drag = { moving, landing, at: toStage(ev.clientX, ev.clientY) }
+        cellDrag = { moving, landing, at: toStage(ev.clientX, ev.clientY) }
       },
       end: (dragged) => {
         endDrag = null
         busy = false
         cursor = 'default'
         const d = drag?.landing
-        drag = null
+        cellDrag = null
         if (!dragged) return add ? onToggle(id) : onSelect(id)
         if (d?.kind === 'swap') {
           onSwap(moving, d.target)
@@ -699,28 +701,6 @@
   {oncontextmenu}
 >
   <canvas bind:this={canvas} data-eyedropper style:width={`${width}px`} style:height={`${height}px`} style:opacity={zoom.entering ? 0 : 1}></canvas>
-
-  {#if !picking}
-    <Outline
-      {root}
-      {dirOf}
-      cellOf={(id) => {
-        const s = layers.get(id)?.source
-        return s ? { label: s.label, thumb: s.thumb, w: s.w, h: s.h } : null
-      }}
-      selected={nodes}
-      {hover}
-      onSelect={(id, add) => {
-        onAdjust(null)
-        if (add) onToggle(id)
-        else onSelect(id)
-      }}
-      onHover={(id) => (hover = id)}
-      {onFlip}
-      onLanding={(moving, into) => (drag = moving ? { moving, at: null, landing: into && { kind: 'into', ...into } } : null)}
-      onDrop={(moving, into) => onMoveInto(moving, into.parent, into.index)}
-    />
-  {/if}
 
   {#each empties as e (e.id)}
     {#if e.at.w > 40 && e.at.h > 32}

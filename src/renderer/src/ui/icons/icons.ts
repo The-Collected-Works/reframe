@@ -25,6 +25,7 @@ import {
   ArrowLeftRight,
   Equal,
   Group,
+  PanelLeft,
   Ungroup,
   CornerLeftUp,
   LayoutPanelLeft,
@@ -103,6 +104,7 @@ export const ICONS = {
   flipDir: ArrowLeftRight,
   evenOut: Equal,
   group: Group,
+  panel: PanelLeft,
   ungroup: Ungroup,
   parent: CornerLeftUp,
   choose: ImagePlus
