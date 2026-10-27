@@ -19,9 +19,9 @@ class View {
   /** Folded away in the grid, with everything inside. Remembered per project folder. */
   collapsed = $state.raw<string[]>([])
 
-  // Edits count only when the filter looks at them (Adjusted, Excluded from export), so dragging a
+  // Edits count only when a filter looks at them (Adjusted, Excluded from export), so dragging a
   // slider never re-sorts anything.
-  private edits = $derived(this.prefs.filter === 'adjusted' || this.prefs.filter === 'excluded' ? project.board : null)
+  private edits = $derived(this.prefs.filters.some((f) => f === 'adjusted' || f === 'excluded') ? project.board : null)
   /** The folder tree the grid shows, and the visible assets in on-screen order (see tree.ts). */
   readonly grid = $derived(gridLayout(items.all, this.prefs, this.collapsed, library.skipped, this.edits))
 
@@ -32,7 +32,8 @@ class View {
 
   /** Changed from the defaults (anything filtered, sorted differently, or folded). */
   get changed(): boolean {
-    return this.collapsed.length > 0 || (Object.keys(VIEW_DEFAULTS) as (keyof ViewPrefs)[]).some((k) => this.prefs[k] !== VIEW_DEFAULTS[k])
+    const { filters, ...rest } = this.prefs
+    return this.collapsed.length > 0 || filters.length > 0 || (Object.keys(rest) as (keyof typeof rest)[]).some((k) => rest[k] !== VIEW_DEFAULTS[k])
   }
 
   /** A newly opened folder: the grid, with that folder's folds. */

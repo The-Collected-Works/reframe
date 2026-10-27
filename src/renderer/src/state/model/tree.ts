@@ -1,6 +1,6 @@
 import { resolveSettings } from '@shared/layout'
 import type { Artboard, SkippedFolder } from '@shared/types'
-import type { ViewPrefs } from '../prefs'
+import { FILTER_GROUPS, type FilterKey, type ViewPrefs } from '../prefs'
 import type { Entry } from './items'
 import { hasOverrides } from './project'
 
@@ -50,9 +50,9 @@ export type GridLayout = { tree: FolderNode[]; visible: Entry[]; sectioned: bool
  * all follow. `board` is only given when the filter looks at edits.
  */
 export function gridLayout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skipped: SkippedFolder[], board: Artboard | null): GridLayout {
-  const { filter, sort, group } = prefs
-  const pass = (a: Entry): boolean => {
-    switch (filter) {
+  const { filters, sort, group } = prefs
+  const is = (a: Entry, f: FilterKey): boolean => {
+    switch (f) {
       // The folder's own files; the variants made from them; compositions.
       case 'sources':
         return a.kind !== 'composition' && !a.source
@@ -68,10 +68,11 @@ export function gridLayout(all: Entry[], prefs: ViewPrefs, collapsed: string[], 
         return !!board && hasOverrides(board, a.name)
       case 'excluded':
         return !!board && resolveSettings(board, a.name).skip
-      default:
-        return true
     }
   }
+  // Each group with a filter on narrows what shows to the items any of its filters on takes in.
+  const groups = FILTER_GROUPS.map((g) => g.filter((f) => filters.includes(f))).filter((g) => g.length)
+  const pass = (a: Entry) => groups.every((g) => g.some((f) => is(a, f)))
   // A variant sorts as its file does (it has the file's kind and date), then after it, by name.
   const home = (a: Entry) => a.source ?? a.name
   const byName = (a: Entry, b: Entry) => natural(baseName(home(a)), baseName(home(b))) || natural(folderOf(home(a)), folderOf(home(b)))

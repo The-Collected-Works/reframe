@@ -1,16 +1,28 @@
 /** What's remembered per user (in local storage): view options, folded folders, preview volume. */
 
 export type SortKey = 'name' | 'date' | 'type'
-export type FilterKey = 'all' | 'sources' | 'variants' | 'compositions' | 'images' | 'videos' | 'adjusted' | 'excluded'
+export type FilterKey = 'sources' | 'variants' | 'compositions' | 'images' | 'videos' | 'adjusted' | 'excluded'
+
+/**
+ * Filters in groups: what an item is, what's in it, what's been done to it. Within a group they add
+ * up (images and videos); across groups each narrows the others (variants that are videos).
+ */
+export const FILTER_GROUPS: FilterKey[][] = [
+  ['sources', 'variants', 'compositions'],
+  ['images', 'videos'],
+  ['adjusted', 'excluded']
+]
+
 export interface ViewPrefs {
-  filter: FilterKey
+  /** Showing only these (see FILTER_GROUPS); none: everything. */
+  filters: FilterKey[]
   sort: SortKey
   /** Sections per folder; off, one continuous grid. */
   group: boolean
   /** File names under thumbnails. */
   names: boolean
 }
-export const VIEW_DEFAULTS: ViewPrefs = { filter: 'all', sort: 'name', group: true, names: true }
+export const VIEW_DEFAULTS: ViewPrefs = { filters: [], sort: 'name', group: true, names: true }
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -29,14 +41,16 @@ function write(key: string, value: unknown): void {
   }
 }
 
-const FILTERS: FilterKey[] = ['all', 'sources', 'variants', 'compositions', 'images', 'videos', 'adjusted', 'excluded']
+const FILTERS = FILTER_GROUPS.flat()
 const SORTS: SortKey[] = ['name', 'date', 'type']
 
 /** Stored view options, each checked (a value from another version falls back to the default). */
 export function storedView(): ViewPrefs {
-  const v = read<Partial<ViewPrefs>>('reframe.view', {})
+  const v = read<Partial<ViewPrefs> & { filter?: string }>('reframe.view', {})
+  // One filter at a time, before 0.6 ("all", or one of them).
+  const filters = Array.isArray(v.filters) ? v.filters : v.filter ? [v.filter] : []
   return {
-    filter: FILTERS.includes(v.filter as FilterKey) ? (v.filter as FilterKey) : VIEW_DEFAULTS.filter,
+    filters: filters.filter((f, i): f is FilterKey => FILTERS.includes(f as FilterKey) && filters.indexOf(f) === i),
     sort: SORTS.includes(v.sort as SortKey) ? (v.sort as SortKey) : VIEW_DEFAULTS.sort,
     group: typeof v.group === 'boolean' ? v.group : VIEW_DEFAULTS.group,
     names: typeof v.names === 'boolean' ? v.names : VIEW_DEFAULTS.names
