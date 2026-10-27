@@ -1,24 +1,29 @@
 import { untrack } from 'svelte'
 import { cubicOut } from 'svelte/easing'
 import { Tween } from 'svelte/motion'
-import type { Clip } from '@shared/types'
-import type { Asset } from '../../state/library.svelte'
+import type { Track } from '../../lib/playback/playback'
 import { Player } from '../../state/playback.svelte'
 import { scroll } from './context'
 
 const SCROLL_SETTLE = 250
 const DWELL = 150
-/** The preview's one track. */
-const TRACK = 'hover'
+
+/** What a thumbnail plays: its tracks, looping round `length` seconds. */
+export interface Playable {
+  tracks: Track[]
+  length: number
+  /** Play a file itself while its copy is being made (one video, yes; a composition's several, no). */
+  originals: boolean
+}
 
 /**
- * A video thumbnail playing in place while hovered, through the playback engine (one track: the
- * video's trim, looping, from its smallest copy, or one being made, or the file meanwhile). A hover
- * becomes a preview only once the pointer has rested on it and the grid has stopped scrolling
- * (thumbnails sliding under a still pointer mid-scroll shouldn't each start a video). It starts on
- * the frame the thumbnail shows and fades in only once it has a frame of its own, so there's no
- * jump or blank flash either way; leaving holds the last frame and fades back. Create it while a
- * component initialises.
+ * A thumbnail playing in place while hovered, through the playback engine: a video (its trim,
+ * looping) or a composition (each of its videos in its cell). Copies come in the smallest size, or
+ * as they're made. A hover becomes a preview only once the pointer has rested on it and the grid
+ * has stopped scrolling (thumbnails sliding under a still pointer mid-scroll shouldn't each start
+ * playing). It starts on the frame the thumbnail shows and fades in only once it has a frame of its
+ * own, so there's no jump or blank flash either way; leaving holds the last frame and fades back.
+ * Create it while a component initialises.
  */
 export class HoverPreview {
   hovering = $state(false)
@@ -31,7 +36,7 @@ export class HoverPreview {
   private held = false
 
   /** `enabled`: the grid is showing and the eyedropper isn't (it needs the exact thumbnail). */
-  constructor(asset: () => Asset, clip: () => Clip | undefined, enabled: () => boolean, redraw: () => void) {
+  constructor(playable: () => Playable | null, enabled: () => boolean, redraw: () => void) {
     $effect(() => {
       if (!this.hovering) return void (this.ready = false)
       const since = performance.now()
@@ -61,7 +66,7 @@ export class HoverPreview {
       const p = this.incoming
       if (!p) return
       void p.version
-      if (!p.frame(TRACK)) return
+      if (!untrack(playable)?.tracks.some((t) => p.frame(t.id))) return
       untrack(() => {
         if (this.shown && this.shown !== p) this.shown.destroy()
         this.shown = p
@@ -71,23 +76,16 @@ export class HoverPreview {
       })
     })
 
+    // Whether there's anything to play (what, changing with every edit, goes to the player as it is).
+    const something = $derived(!!playable()?.tracks.length)
     $effect(() => {
-      const a = asset()
-      if (!this.ready || !enabled() || a.kind !== 'video' || !a.w) return
+      if (!this.ready || !enabled() || !something) return
       const p = untrack(
         () =>
           new Player({
-            tracks: () => {
-              const c = clip()
-              const start = c?.start ?? 0
-              const length = Math.max(0.05, (c?.end ?? a.duration) - start)
-              return [{ id: TRACK, file: a, start, length, end: 'loop', need: 0 }]
-            },
-            range: () => {
-              const c = clip()
-              return { start: 0, end: Math.max(0.05, (c?.end ?? a.duration) - (c?.start ?? 0)) }
-            },
-            originals: true,
+            tracks: () => playable()?.tracks ?? [],
+            range: () => ({ start: 0, end: playable()?.length ?? 0 }),
+            originals: untrack(playable)?.originals ?? false,
             autoplay: true
           })
       )
@@ -107,9 +105,14 @@ export class HoverPreview {
     })
   }
 
-  /** What to draw over the thumbnail (at `fade`), if anything. */
-  get picture(): CanvasImageSource | null {
-    return this.shown?.frame(TRACK) ?? null
+  /** Whether a preview is showing (also while it fades out): draw `frame`s over the thumbnail at `fade`. */
+  get showing(): boolean {
+    return !!this.shown
+  }
+
+  /** What to draw for track `id` now, if it has anything. */
+  frame(id: string): CanvasImageSource | null {
+    return this.shown?.frame(id) ?? null
   }
 
   /**

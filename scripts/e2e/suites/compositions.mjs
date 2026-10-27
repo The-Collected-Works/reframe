@@ -34,6 +34,31 @@ export default {
       }
     ],
     [
+      'a hovered composition plays in its thumbnail, and goes back to it after',
+      async ({ app }) => {
+        const canvas = '.cell[data-name^="~"] canvas'
+        const still = () =>
+          app.eval(`(() => {
+            const d = document.querySelector('${canvas}').getContext('2d').getImageData(0, 0, 200, 200).data
+            let h = 0
+            for (let i = 0; i < d.length; i += 7) h = (h * 31 + d[i]) | 0
+            return h
+          })()`)
+        await app.key('Escape')
+        // The pointer's still where the first thumbnail was (the composition's, now): off it first.
+        await app.hover(5, 5)
+        await sleep(1200)
+        const before = await still()
+        const p = await app.point('.cell[data-name^="~"] .frame')
+        await app.hover(p.x, p.y)
+        await sleep(2000)
+        assert.ok((await app.pictures(canvas, 1500)) >= 10, 'pictures while hovered')
+        await app.hover(5, 5)
+        await sleep(1200)
+        assert.equal(await still(), before, 'the thumbnail again')
+      }
+    ],
+    [
       'plays every cell',
       async ({ app }) => {
         await app.clickOn('.cell[data-name^="~"] .frame')

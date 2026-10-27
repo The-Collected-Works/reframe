@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'
-  import { drawComposition } from '@shared/composition/compose'
+  import { drawComposition, type Layer, type LayerPicture } from '@shared/composition/compose'
   import { drawFrame, resolveSettings } from '@shared/layout'
   import { visibility } from '../../lib/attach'
   import { trackPointer } from '../../lib/drag'
@@ -17,10 +17,11 @@
   import { hasOverrides } from '../../state/model/project'
   import { folderOf } from '../../state/model/tree'
   import { Dot, Icon, Ring } from '../../ui'
-  import { thumbnail } from '../composition'
+  import { thumbnail, tracksOf } from '../composition'
   import { dragOffset, NO_GUIDES, type Guides } from '../snapping'
+  import type { Asset } from '../../state/library.svelte'
   import { useGrid } from './context'
-  import { HoverPreview } from './preview.svelte'
+  import { HoverPreview, type Playable } from './preview.svelte'
 
   let { entry, width }: { entry: Entry; width: number } = $props()
   const g = useGrid()
@@ -42,9 +43,18 @@
   let canvas: HTMLCanvasElement
   // Drawn at least once with the thumbnail: it fades in (and view transitions know it has pixels).
   let ready = $state(false)
+  /** The video's own track, for its hover preview. */
+  const VIDEO = 'video'
+  // On hover: a video's trim, or a composition's videos (each sized to its cell here).
+  const playable = $derived.by((): Playable | null => {
+    if (comp) return comp.duration > 0 ? { tracks: tracksOf(comp, k * (window.devicePixelRatio || 1)), length: comp.duration, originals: false } : null
+    if (asset.kind !== 'video' || !asset.w) return null
+    const start = clip?.start ?? 0
+    const length = Math.max(0.05, (clip?.end ?? asset.duration) - start)
+    return { tracks: [{ id: VIDEO, file: asset, start, length, end: 'loop', need: 0 }], length, originals: true }
+  })
   const preview = new HoverPreview(
-    () => asset,
-    () => clip,
+    () => playable,
     () => g.previews,
     () => draw()
   )
@@ -69,26 +79,39 @@
     if (asset.thumb || comp) ready = true
     const ctx = canvas.getContext('2d')!
     const kk = k * dpr
+    const fade = preview.fade.current
+    const live = fade > 0 && preview.showing
+    // Something playing is drawn on its own, then laid over the thumbnail. Fading it in directly
+    // would also fade in its background and darken the blend mid-way.
+    const over = (paint: (c: OffscreenCanvasRenderingContext2D) => void) => {
+      if (!layer || layer.width !== pw || layer.height !== ph) layer = new OffscreenCanvas(pw, ph)
+      const lc = layer.getContext('2d')!
+      lc.clearRect(0, 0, pw, ph)
+      paint(lc)
+      ctx.globalAlpha = fade
+      ctx.drawImage(layer, 0, 0)
+      ctx.globalAlpha = 1
+    }
     if (comp) {
-      drawComposition(ctx, comp, kk, thumbnail, EMPTY)
-      drawn = key
+      // Each cell's video where it's playing, its thumbnail where it isn't (yet).
+      const playing = (l: Layer<Asset>): LayerPicture | null => {
+        const f = live ? preview.frame(l.id) : null
+        return f && l.source ? { src: f, sw: l.source.w, sh: l.source.h, settings: l.settings } : thumbnail(l)
+      }
+      if (live && fade >= 1) drawComposition(ctx, comp, kk, playing, EMPTY)
+      else {
+        drawComposition(ctx, comp, kk, thumbnail, EMPTY)
+        if (live) over((c) => drawComposition(c, comp, kk, playing, EMPTY))
+      }
+      drawn = live ? '' : key
       return
     }
-    const fade = preview.fade.current
-    const video = fade > 0 ? preview.picture : null
+    const video = live ? preview.frame(VIDEO) : null
     if (video && fade >= 1) {
       drawFrame(ctx, video, asset.w, asset.h, board.width, board.height, settings, kk)
     } else {
       drawFrame(ctx, asset.thumb, asset.w, asset.h, board.width, board.height, settings, kk)
-      if (video) {
-        // Compose the video frame on its own, then lay it over the thumbnail. Fading drawFrame
-        // directly would also fade in its background fill and darken the blend mid-way.
-        if (!layer || layer.width !== pw || layer.height !== ph) layer = new OffscreenCanvas(pw, ph)
-        drawFrame(layer.getContext('2d')!, video, asset.w, asset.h, board.width, board.height, settings, kk)
-        ctx.globalAlpha = fade
-        ctx.drawImage(layer, 0, 0)
-        ctx.globalAlpha = 1
-      }
+      if (video) over((c) => drawFrame(c, video, asset.w, asset.h, board.width, board.height, settings, kk))
     }
     const g = guides
     if (g.x.length || g.y.length) {
@@ -194,8 +217,8 @@
     style:height={`${height}px`}
     {onpointerdown}
     ondblclick={g.open}
-    onpointerenter={asset.kind === 'video' ? () => (preview.hovering = true) : undefined}
-    onpointerleave={asset.kind === 'video' ? () => (preview.hovering = false) : undefined}
+    onpointerenter={playable ? () => (preview.hovering = true) : undefined}
+    onpointerleave={playable ? () => (preview.hovering = false) : undefined}
   >
     <canvas bind:this={canvas} data-eyedropper data-ready={ready || undefined} style:width={`${width}px`} style:height={`${height}px`}></canvas>
     {#if !comp && !asset.thumb && !asset.error}<div class="cell-loading"></div>{/if}
