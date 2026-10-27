@@ -100,12 +100,17 @@ export function bitmapProxies(wants: () => ProxyWant[]): { get(key: string): Ima
         const s = edge / Math.max(w.asset.w, w.asset.h)
         loadStill(w.asset)
           .then((blob) =>
-            createImageBitmap(blob, { resizeWidth: Math.max(1, Math.round(w.asset.w * s)), resizeHeight: Math.max(1, Math.round(w.asset.h * s)), resizeQuality: 'high' })
+            createImageBitmap(blob, {
+              resizeWidth: Math.max(1, Math.round(w.asset.w * s)),
+              resizeHeight: Math.max(1, Math.round(w.asset.h * s)),
+              resizeQuality: 'high'
+            })
           )
           .then((bitmap) => {
             // Still wanted, and bigger than what's there: only ever grown.
             const now = made.get(w.key)
-            if (alive && current.get(w.key) && fileOf(current.get(w.key)!) === file && (now?.file !== file || now.edge < edge)) set(w.key, { file, edge, bitmap })
+            if (alive && current.get(w.key) && fileOf(current.get(w.key)!) === file && (now?.file !== file || now.edge < edge))
+              set(w.key, { file, edge, bitmap })
             else bitmap.close()
           })
           .catch(() => {})
