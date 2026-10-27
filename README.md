@@ -40,6 +40,13 @@ npm run dev        # Linux/macOS/Windows: opens in the local Electron
 npm run dev:win    # from WSL: opens as a native Windows window, with hot reload from WSL
 ```
 
+```sh
+npm test           # unit tests (the playback engine, compositions)
+npm run e2e        # builds, then drives the app over the DevTools protocol on generated media
+```
+
+`npm run e2e` makes its test media with the bundled ffmpeg (once, kept in the system temp folder under `reframe-e2e/media`), runs each suite on a fresh copy with a throwaway profile, and cleans up after itself. On Linux it runs in a virtual display (`xvfb-run`) so no window appears; `E2E_SHOW=1` shows it. `node scripts/e2e/run.mjs grid` runs one suite (`grid`, `single`, `compositions`).
+
 `dev:win` keeps Windows copies of Electron and ffmpeg in `%LOCALAPPDATA%\Reframe-dev`. Both have to live on the Windows drive: Chromium won't start its GPU process from a `\\wsl.localhost` path, and launching ffmpeg from there takes about 1.4s instead of about 3ms. Dev builds use their own profile (`Reframe Dev`), so they can run alongside the packaged app.
 
 ### Code layout

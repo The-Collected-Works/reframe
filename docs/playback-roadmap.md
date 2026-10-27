@@ -96,19 +96,9 @@ Done on 2026-10-26. Copies and posters are named by the file's size and a hash o
 **Now:** zoomed in beyond 1920, a paused frame is decoded from the 4K original by ffmpeg on the CPU (~0.3–1s).
 **Do:** add `-hwaccel auto` to `grabFrame`, or make a full-resolution all-intra copy only when someone zooms that far.
 
-### 8. Commit the test harness
+### 8. Commit the test harness (done)
 
-The measurements above came from scripts that drive the built app over the Chrome DevTools protocol. They lived in a scratch folder and weren't committed. Rebuilding them as `scripts/e2e/` with one command would catch regressions like the rescan bug in `4a90136`. How they worked:
-
-- **Launch:** run Windows Electron (`%LOCALAPPDATA%\Reframe-dev\electron-45.0.0\electron.exe`) on `\\wsl.localhost\<distro>\…\out\main\index.js` with `<folder> --user-data-dir=<throwaway profile> --remote-debugging-port=9333 --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling`. Without the last three flags, a window behind others gets throttled and the numbers are meaningless.
-- **Run the driver on the Windows side,** so it can reach `127.0.0.1:9333`: run the same `electron.exe` with `ELECTRON_RUN_AS_NODE=1`. From WSL, pass variables through `WSLENV`. Node 24's built-in `fetch` and `WebSocket` are all the driver needs.
-- **Drive the page** with `Input.dispatchMouseEvent`, `Input.dispatchKeyEvent` and `Runtime.evaluate`. Capture screenshots with `Page.captureScreenshot`. Watch `Runtime.exceptionThrown` and console errors, and grep the main process's stderr for `Error occurred in handler`.
-- **"Distinct pictures/s":** each animation frame, draw `.stage canvas` into a 48×27 `OffscreenCanvas`, hash the pixels, and count changes per second. Page fps is the plain `requestAnimationFrame` rate.
-- **Test media:**
-  - `ffmpeg -f lavfi -i "testsrc2=s=3840x2160:r=60:d=12" -c:v libx264 -preset ultrafast -b:v 80M -g 250` mimics the captures;
-  - a red-then-blue clip (`color=c=red:d=0.5` concatenated with `color=c=blue`) checks thumbnails show the frame playback starts on;
-  - copying a new file into the folder mid-run triggers a rescan.
-- **Clean up afterwards:** the test profile and media go in `%TEMP%`, so delete them and check no `electron.exe` with the profile's path is left running.
+Done on 2026-10-26, as `npm run e2e` (`scripts/e2e/`): it builds, makes its test media with the bundled ffmpeg, and drives the app over the DevTools protocol with real input events. There are three suites: the grid, the single view (playback in every codec, scrubbing, trimming, the gizmo, export), and compositions. It runs on Linux (in `xvfb-run`) and should run as is on Windows and macOS (it launches the platform's Electron from `node_modules`). Not yet in it: the 4K timing numbers above (it has `Page.pictures()` for pictures per second, but its media is small), and driving a Windows Electron from WSL.
 
 ## Other open threads
 

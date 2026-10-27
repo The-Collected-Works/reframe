@@ -17,6 +17,7 @@
     "build": "electron-vite build",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
+    "e2e": "electron-vite build && node scripts/e2e/run.mjs",
     "start": "electron-vite preview",
     "postinstall": "node node_modules/electron/install.js && node node_modules/ffmpeg-static/install.js",
     "dist:win": "node scripts/fetch-ffmpeg.mjs win x64 && electron-vite build && electron-builder --win --x64 --publish never",

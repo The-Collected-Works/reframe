@@ -47,10 +47,26 @@
     if (Number.isFinite(v)) onChange(clampv(v))
     draft = null
   }
+  // Dragging the label scrubs the value. Let go, a drag would land as a click on the label and focus
+  // the field (it's a <label>), so ⌘/Ctrl+Z would go to the field instead of undoing the drag; a
+  // plain click still focuses it.
+  let dragged = false
   const scrub = (e: PointerEvent) => {
     if (e.button !== 0) return
     const start = value
-    trackPointer(e, { move: (ev) => onChange(clampv(start + (ev.clientX - e.clientX) * step * (ev.shiftKey ? 10 : 1))) })
+    dragged = false
+    // Captured from the press (the label's small): a move of a couple of pixels makes it a drag.
+    trackPointer(e, {
+      move: (ev) => {
+        if (Math.abs(ev.clientX - e.clientX) >= 2) dragged = true
+        onChange(clampv(start + (ev.clientX - e.clientX) * step * (ev.shiftKey ? 10 : 1)))
+      }
+    })
+  }
+  const onclick = (e: MouseEvent) => {
+    if (!dragged) return
+    dragged = false
+    e.preventDefault()
   }
   const onkeydown = (e: KeyboardEvent) => {
     const input = e.target as HTMLInputElement
@@ -68,7 +84,7 @@
 </script>
 
 <label class="num" style={width ? `width: ${width}px` : undefined} {...middleReset(onReset && (() => ((draft = null), onReset())))}>
-  {#if label}<span class="num-label" role="presentation" onpointerdown={scrub}>{label}</span>{/if}
+  {#if label}<span class="num-label" role="presentation" onpointerdown={scrub} {onclick}>{label}</span>{/if}
   <input
     value={draft ?? String(round(value, step))}
     oninput={(e) => (draft = e.currentTarget.value)}
