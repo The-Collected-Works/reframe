@@ -140,7 +140,7 @@ export async function slotMenu(slot: string, filled: boolean, video: boolean, en
     { id: 'bottom', label: 'Add Cell Below', icon: 'plus' },
     ...(video ? [{ separator: true }, { id: 'hold', label: 'Hold Last Frame When Shorter', icon: 'pause' as const, checked: end === 'hold' }] : []),
     { separator: true },
-    { id: 'parent', label: 'Select Its Group', icon: 'parent', shortcut: hint(COMPOSITION_EDITOR.actions.deselect) },
+    { id: 'parent', label: 'Select Its Group', icon: 'parent', shortcut: hint(COMPOSITION_EDITOR.actions.parent) },
     { id: 'remove', label: 'Remove Cell', icon: 'trash', shortcut: hint(COMPOSITION_EDITOR.actions.remove), danger: true }
   ])
   if (id === 'choose') shell.choosing = slot

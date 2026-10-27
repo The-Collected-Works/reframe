@@ -76,12 +76,13 @@ export const SINGLE = keymap({
 export const COMPOSITION_EDITOR = keymap({
   title: 'Composition editor',
   actions: {
-    adjust: { keys: 'enter', label: 'Adjust what the selected cell shows (again: done)' },
-    deselect: { keys: 'escape', label: 'Done adjusting; else the group around, then nothing' },
+    adjust: { keys: 'enter', label: "A cell: adjust what it shows (again: done). A group: select what's in it" },
+    parent: { keys: '\\', label: 'Select the group around the selection' },
+    deselect: { keys: 'escape', label: 'Done adjusting; else deselect' },
     remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Remove the cell or group' }
   },
   notes: [
-    { keys: 'Click', label: 'Select a cell; again, its group' },
+    { keys: 'Click', label: 'Select a cell (or click its layer)' },
     { keys: 'Drag a cell', label: 'Move it: onto an edge, beside; onto the middle, swap' },
     { keys: 'Double-click a cell', label: 'Adjust what it shows (drag, scale, rotate)' },
     { keys: '+', label: 'Add a cell on that side of the selection' },

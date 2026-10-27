@@ -135,8 +135,8 @@ export default {
           await app.clickOn(`.add.${side}`)
           await sleep(300)
         }
-        // Esc steps out: the cell, its column, the whole layout, then nothing.
-        for (let i = 0; i < 3; i++) await app.key('Escape')
+        // Esc: nothing selected.
+        await app.key('Escape')
         await sleep(300)
         assert.equal(await outline(app), 'Side by side 2 | ·Stacked 3 | ··Empty | ··Empty | ··Empty | ·h264.mp4')
       }
@@ -184,16 +184,25 @@ export default {
       }
     ],
     [
-      'Esc selects the group around a cell, then nothing; Delete removes; double-click adjusts',
+      '\\ selects the group around a cell, Enter what is in it; Delete removes; double-click adjusts',
       async ({ app }) => {
         const top = await app.eval(
           `(() => { const b = document.querySelectorAll('.choose')[0].getBoundingClientRect(); return { x: b.left + b.width / 2 + 60, y: b.top + b.height / 2 } })()`
         )
         await app.click(top.x, top.y)
         await sleep(200)
-        await app.key('Escape')
+        // Clicking it again keeps it selected.
+        await app.click(top.x, top.y)
+        await sleep(200)
+        assert.match(await outline(app), /··Empty\* \| ··Empty \| ··Empty \|/)
+        await app.key('\\')
         await sleep(200)
         assert.match(await outline(app), /Stacked 3\*/)
+        await app.key('Enter')
+        await sleep(200)
+        assert.match(await outline(app), /··Empty\* \|/)
+        await app.key('\\')
+        await sleep(200)
         await app.key('Delete')
         await sleep(300)
         assert.equal(await outline(app), 'h264.mp4')

@@ -1,8 +1,8 @@
 <!--
   The bento composition editor: the composition on its artboard, framed by the camera, with its
   layers floating at the left.
-  - Click a cell to select it; again, the group it's in. The selection has a + on each edge, to add
-    a cell there, and a toolbar.
+  - Click a cell to select it; \ selects the group it's in, Enter what's in a group. The selection
+    has a + on each edge, to add a cell there, and a toolbar.
   - Drag a cell (or the selected group, if it's in it) to move it: onto another cell's edge to go
     beside it, onto its middle to swap the two, into the margin to go beside everything. While it's
     dragged the layout shows where it would land, everything else making room. Dragging a layer
@@ -416,11 +416,15 @@
     zoomIn: () => zoomView(1.25, width / 2, height / 2),
     zoomOut: () => zoomView(0.8, width / 2, height / 2)
   })
-  // Esc steps out: done adjusting, then the group around the selection, then nothing (before the
-  // app's Esc goes back to the grid).
+  // \ steps out to the group around the selection; Enter steps into a group (or adjusts a cell).
+  // Esc is done adjusting, then deselects (before the app's Esc goes back to the grid).
   useKeymap(COMPOSITION_EDITOR, {
-    adjust: { when: () => !!layers.get(node ?? '')?.source, run: () => adjust(adjusting ? null : node) },
-    deselect: { when: () => !!node || !!adjusting, run: () => (adjusting ? adjust(null) : onSelect(parent?.id ?? null)) },
+    adjust: {
+      when: () => !!selectedNode && (isSplit(selectedNode) || !!layers.get(selectedNode.id)?.source),
+      run: () => (selectedNode && isSplit(selectedNode) ? onSelect(selectedNode.children[0].id) : adjust(adjusting ? null : node))
+    },
+    parent: { when: () => !!parent, run: () => parent && onSelect(parent.id) },
+    deselect: { when: () => !!node || !!adjusting, run: () => (adjusting ? adjust(null) : onSelect(null)) },
     remove: { when: () => !!node && !adjusting, run: () => node && onRemove(node) }
   })
 
@@ -532,8 +536,7 @@
   }
 
   /**
-   * A press on a cell: a click selects it (again, the group around it; inside the selected group,
-   * that cell); a drag moves it (or the selected group, if it's in it, unless that's everything),
+   * A press on a cell: a click selects it; a drag moves it (or the selected group, if it's in it, unless that's everything),
    * the layout making room wherever it would land.
    */
   function pressCell(e: PointerEvent, id: string) {
@@ -542,8 +545,6 @@
     // Where it lands is found on the layout as the drag began, so cells making room don't move the
     // target out from under the pointer.
     const start = arrangement
-    // A double-click's second press: the double-click adjusts, the selection stays.
-    const second = e.detail > 1
     endDrag = trackPointer(e, {
       slop: 4,
       start: () => {
@@ -560,7 +561,7 @@
         cursor = 'default'
         const d = drag?.landing
         drag = null
-        if (!dragged) return second ? undefined : onSelect(node === id ? (parent?.id ?? id) : id)
+        if (!dragged) return onSelect(id)
         if (d?.kind === 'swap') {
           onSwap(moving, d.target)
           // What was dragged is there now: keep it selected.
@@ -759,7 +760,7 @@
           variant="icon"
           icon="parent"
           iconSize={15}
-          title={`Select the group it's in (${hint(COMPOSITION_EDITOR.actions.deselect)})`}
+          title={`Select the group it's in (${hint(COMPOSITION_EDITOR.actions.parent)})`}
           onclick={() => onSelect(parent.id)}
         />
       {/if}
