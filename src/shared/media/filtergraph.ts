@@ -1,6 +1,6 @@
 import { inColor, OUT_COLOR, OUT_TAGS } from './color'
 import { blurPlacement, bounds, computePlacement, quarterTurns, rasterPlan, rotatedPlan } from '../framing/framing'
-import type { CompositionExportJob, VideoExportJob } from '../types'
+import type { CompositionExportJob, GifOptions, VideoExportJob } from '../types'
 
 const hex = (c: string): string => '0x' + c.replace('#', '').slice(0, 6).padEnd(6, '0')
 const rgb = (c: string): [number, number, number] => {
@@ -116,4 +116,16 @@ export function compositionArgs(job: CompositionExportJob, layer: string, cells:
   args.push('-filter_complex', graph, '-map', '[v]', '-an', '-t', duration)
   args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', String(job.crf), '-pix_fmt', 'yuv420p', ...OUT_TAGS, '-movflags', '+faststart', output)
   return args
+}
+
+/**
+ * ffmpeg arguments for a GIF made from an export's MP4 (written first, nearly lossless): fewer frames,
+ * scaled down, in 256 colours chosen for this clip, favouring what moves. Ordered dithering keeps
+ * still areas still from frame to frame, so only what changes is stored again. Loops forever.
+ */
+export function gifArgs(input: string, output: string, gif: GifOptions): string[] {
+  const graph =
+    `[0:v]fps=${gif.fps},scale=${gif.width}:-1:flags=lanczos:in_color_matrix=bt709:in_range=tv,format=rgb24,split[a][b];` +
+    `[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle[v]`
+  return ['-hide_banner', '-y', '-nostats', '-progress', 'pipe:1', '-i', input, '-filter_complex', graph, '-map', '[v]', '-an', '-loop', '0', output]
 }

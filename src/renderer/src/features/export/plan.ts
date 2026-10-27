@@ -1,6 +1,6 @@
 import { compose, drawComposition, type Composition, type LayerPicture } from '@shared/composition/compose'
 import { drawFrame, resolveSettings } from '@shared/framing/framing'
-import type { Artboard, Clip, ColorMeta, CropSettings, ExportPrefs, LayerJob, ProjectFile } from '@shared/types'
+import type { Artboard, Clip, ColorMeta, CropSettings, ExportPrefs, GifOptions, LayerJob, ProjectFile } from '@shared/types'
 import { api } from '../../lib/bridge'
 import { join } from '../../lib/paths'
 import { loadImage, videoInfo } from '../../lib/media'
@@ -72,7 +72,7 @@ export function plan(
         composition = { comp, clips: { ...file.clips } }
         kind = shown.some((l) => l.source!.kind === 'video') ? 'video' : 'image'
       }
-      const ext = kind === 'video' ? 'mp4' : prefs.imageFormat
+      const ext = kind === 'video' ? prefs.videoFormat : prefs.imageFormat
       // Subfolders are mirrored under the artboard's folder ("Square/Shoot A/clip.mp4"); a variant
       // goes beside its file, under its own name.
       const dir = folderOf(entry.source ?? entry.name)
@@ -155,9 +155,14 @@ export async function renderVideo(item: Item, prefs: ExportPrefs, cancelled: () 
     settings: item.settings,
     clip: item.clip,
     duration,
-    crf: prefs.videoCrf
+    crf: prefs.videoCrf,
+    gif: gifOf(item.board, prefs)
   })
 }
+
+/** As a GIF, if that's the format: as wide as asked, never wider than the artboard. */
+const gifOf = (board: Artboard, prefs: ExportPrefs): GifOptions | undefined =>
+  prefs.videoFormat === 'gif' ? { width: Math.min(prefs.gifWidth || board.width, board.width), fps: prefs.gifFps } : undefined
 
 /**
  * A composition with video in it: the renderer draws everything that doesn't move into one layer (the
@@ -214,6 +219,7 @@ async function renderCompositionVideo(item: Item, prefs: ExportPrefs, cancelled:
     cells: layers,
     duration: comp.duration,
     fps: Math.min(60, Math.round(fps * 1000) / 1000 || 30),
-    crf: prefs.videoCrf
+    crf: prefs.videoCrf,
+    gif: gifOf(item.board, prefs)
   })
 }

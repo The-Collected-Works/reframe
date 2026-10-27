@@ -4,8 +4,8 @@ import { promises as fs, type Stats } from 'node:fs'
 import { constants as os, setPriority } from 'node:os'
 import { join } from 'node:path'
 import { inColor, OUT_TAGS, parseColor } from '@shared/media/color'
-import { compositionArgs, videoArgs } from '@shared/media/filtergraph'
-import type { ColorMeta, CompositionExportJob, PosterResult, VideoExportJob } from '@shared/types'
+import { compositionArgs, gifArgs, videoArgs } from '@shared/media/filtergraph'
+import type { ColorMeta, CompositionExportJob, GifOptions, PosterResult, VideoExportJob } from '@shared/types'
 import { contentHash, writeJsonAtomic } from './fsutil'
 
 // Runs inside the media worker (see worker.ts); the main process passes these in.
@@ -67,7 +67,14 @@ export async function exportVideo(job: VideoExportJob, onProgress: (p: number) =
   const part = partOf(job.output)
   partFiles.add(part)
   try {
-    await encode(videoArgs({ ...job, output: part }), (job.clip.end ?? job.duration) - job.clip.start, onProgress)
+    const quiet = job.gif ? { ...job, settings: { ...job.settings, mute: true } } : job
+    await encodeAs(
+      job.gif,
+      part,
+      (out, crf) => videoArgs({ ...quiet, output: out, crf: crf ?? job.crf }),
+      (job.clip.end ?? job.duration) - job.clip.start,
+      onProgress
+    )
     await fs.rename(part, job.output)
     onProgress(1)
   } finally {
@@ -77,6 +84,30 @@ export async function exportVideo(job: VideoExportJob, onProgress: (p: number) =
 }
 
 const partOf = (output: string) => output.replace(/(\.[^./\\]+)?$/, '.part$1')
+
+/**
+ * Encodes `seconds` of output into `part` with `args(output, crf?)`. A GIF is encoded as a nearly
+ * lossless MP4 first (so it's framed and composited exactly as one), then made from that.
+ */
+async function encodeAs(
+  gif: GifOptions | undefined,
+  part: string,
+  args: (output: string, crf?: number) => string[],
+  seconds: number,
+  onProgress: (p: number) => void
+): Promise<void> {
+  if (!gif) return encode(args(part), seconds, onProgress)
+  const mp4 = part.replace(/\.gif$/, '.mp4')
+  partFiles.add(mp4)
+  try {
+    await encode(args(mp4, 10), seconds, (p) => onProgress(p * 0.7))
+    if (exportCancelled) throw new Error('cancelled')
+    await encode(gifArgs(mp4, part, gif), seconds, (p) => onProgress(0.7 + p * 0.3))
+  } finally {
+    partFiles.delete(mp4)
+    await fs.rm(mp4, { force: true })
+  }
+}
 
 /** Runs one export encode of `seconds` of output, reporting progress through it (0..1). */
 async function encode(args: string[], seconds: number, onProgress: (p: number) => void): Promise<void> {
@@ -142,7 +173,7 @@ export async function exportComposition(job: CompositionExportJob, onProgress: (
       before += c.length
     }
     if (exportCancelled) throw new Error('cancelled')
-    await encode(compositionArgs(job, layer, cells, part), job.duration, step(job.duration))
+    await encodeAs(job.gif, part, (out, crf) => compositionArgs({ ...job, crf: crf ?? job.crf }, layer, cells, out), job.duration, step(job.duration))
     await fs.rename(part, job.output)
     onProgress(1)
   } finally {

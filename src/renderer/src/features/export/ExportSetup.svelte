@@ -1,4 +1,4 @@
-<!-- What to export and how: where to, which artboards, which assets, and image and video quality. -->
+<!-- What to export and how: where to, which artboards, which assets, and image and video formats. -->
 <script lang="ts">
   import type { Artboard, ExportPrefs } from '@shared/types'
   import { Button, Checkbox, Field, Segmented, Slider } from '../../ui'
@@ -45,6 +45,9 @@
     { value: 'medium', label: 'Medium', crf: 20 },
     { value: 'small', label: 'Small', crf: 26 }
   ]
+  // Email is usually 600 wide; fewer pixels and frames make a much smaller GIF.
+  const GIF_WIDTHS = [400, 600, 800]
+  const GIF_FPS = [10, 15, 24]
   const crfKey = $derived(QUALITY.reduce((best, q) => (Math.abs(q.crf - prefs.videoCrf) < Math.abs(best.crf - prefs.videoCrf) ? q : best)).value)
 </script>
 
@@ -104,13 +107,41 @@
 {/if}
 
 {#if videos}
-  <Field label="Video · MP4">
-    <Segmented
-      value={crfKey}
-      options={QUALITY.map((q) => ({ value: q.value, label: q.label }))}
-      onChange={(v) => onPrefs({ videoCrf: QUALITY.find((q) => q.value === v)!.crf })}
-    />
+  <Field label="Videos">
+    <div class="inline">
+      <Segmented
+        value={prefs.videoFormat}
+        options={[
+          { value: 'mp4', label: 'MP4' },
+          { value: 'gif', label: 'GIF', title: 'Silent, looping and smaller: for email and the web' }
+        ]}
+        onChange={(videoFormat) => onPrefs({ videoFormat })}
+      />
+      {#if prefs.videoFormat === 'mp4'}
+        <Segmented
+          value={crfKey}
+          options={QUALITY.map((q) => ({ value: q.value, label: q.label }))}
+          onChange={(v) => onPrefs({ videoCrf: QUALITY.find((q) => q.value === v)!.crf })}
+        />
+      {/if}
+    </div>
   </Field>
+  {#if prefs.videoFormat === 'gif'}
+    <Field label="GIF width and frame rate">
+      <div class="inline">
+        <Segmented
+          value={String(prefs.gifWidth)}
+          options={[...GIF_WIDTHS.map((w) => ({ value: String(w), label: String(w) })), { value: '0', label: 'Full', title: 'As wide as the artboard' }]}
+          onChange={(w) => onPrefs({ gifWidth: Number(w) })}
+        />
+        <Segmented
+          value={String(prefs.gifFps)}
+          options={GIF_FPS.map((f) => ({ value: String(f), label: `${f} fps` }))}
+          onChange={(f) => onPrefs({ gifFps: Number(f) })}
+        />
+      </div>
+    </Field>
+  {/if}
 {/if}
 
 <style>

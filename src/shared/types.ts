@@ -116,6 +116,10 @@ export interface ExportPrefs {
   imageQuality: number
   /** x264 CRF, lower is better. */
   videoCrf: number
+  videoFormat: 'mp4' | 'gif'
+  /** A GIF's width at most (0: the artboard's), and its frame rate. */
+  gifWidth: number
+  gifFps: number
 }
 
 export interface ProjectFile {
@@ -180,6 +184,15 @@ export interface VideoExportJob {
   clip: Clip
   duration: number
   crf: number
+  /** Written as a GIF (the output's a .gif), not an MP4. */
+  gif?: GifOptions
+}
+
+/** A GIF's size and smoothness: fewer pixels and frames make a smaller file. */
+export interface GifOptions {
+  /** Pixels wide; its height follows. */
+  width: number
+  fps: number
 }
 
 /** One video cell of a composition export, framed into its rectangle like an artboard of that size. */
@@ -214,6 +227,7 @@ export interface CompositionExportJob {
   duration: number
   fps: number
   crf: number
+  gif?: GifOptions
 }
 
 export interface ExportProgress {

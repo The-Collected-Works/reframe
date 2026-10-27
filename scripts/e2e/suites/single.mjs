@@ -159,6 +159,29 @@ export default {
         for (const f of files) assert.deepEqual([probe(join(dir, f)).width, probe(join(dir, f)).height], [1080, 1080], f)
         await app.key('Escape')
       }
+    ],
+    [
+      'exports videos as GIFs, 600 wide by default',
+      async ({ app, folder }) => {
+        await app.waitFor(`!document.querySelector('[role=dialog]')`, 5000, 'the dialog closed')
+        await app.clickOn('.tools .primary')
+        await app.waitFor(`document.querySelector('[role=dialog]')`)
+        const button = (label) => `[...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
+        await app.eval(`${button('GIF')}.click()`)
+        await app.waitFor(`!!${button('600')}`, 3000, 'the GIF options')
+        await app.eval(`${button('Export')}.click()`)
+        await app.waitFor(`/exported/.test(document.querySelector('.overall-meta')?.textContent ?? '')`, 120000, 'the export')
+        const dir = join(folder, 'export', 'Square')
+        const gifs = readdirSync(dir).filter((f) => f.endsWith('.gif'))
+        assert.deepEqual(gifs.sort(), ['h264.gif', 'hevc.gif', 'prores.gif', 'vp9.gif'])
+        for (const f of gifs) {
+          const info = probe(join(dir, f))
+          assert.deepEqual([info.width, info.height], [600, 600], f)
+          assert.ok(info.duration > 0.5, `${f} moves (${info.duration}s)`)
+        }
+        assert.ok(!readdirSync(dir).some((f) => f.includes('.part')), 'no working files left')
+        await app.key('Escape')
+      }
     ]
   ]
 }
