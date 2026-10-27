@@ -79,16 +79,19 @@ export const COMPOSITION_EDITOR = keymap({
     adjust: { keys: 'enter', label: "A cell: adjust what it shows (again: done). A group: select what's in it" },
     parent: { keys: '\\', label: 'Select the group around the selection' },
     deselect: { keys: 'escape', label: 'Done adjusting; else deselect' },
-    remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Remove the cell or group' }
+    group: { keys: 'mod+g', label: 'Group the selection' },
+    ungroup: { keys: 'mod+shift+g', label: 'Ungroup' },
+    remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Remove the selection' }
   },
   notes: [
-    { keys: 'Click', label: 'Select a cell (or click its layer)' },
+    { keys: 'Click', label: 'Select a cell (or click it in the outline)' },
+    { keys: 'shift+Click', label: 'Add to the selection, or take out of it' },
     { keys: 'Drag a cell', label: 'Move it: onto an edge, beside; onto the middle, swap' },
     { keys: 'Double-click a cell', label: 'Adjust what it shows (drag, scale, rotate)' },
     { keys: '+', label: 'Add a cell on that side of the selection' },
     { keys: 'Drag a gap', label: 'Resize the cells either side (this artboard)' },
     { keys: 'Double-click a gap', label: 'Make the cells it divides equal' },
-    { keys: 'Drag a layer', label: 'Reorder it, or move it into another group' },
+    { keys: 'Drag in the outline', label: 'Reorder, or move into another group' },
     { keys: 'alt', label: 'No snapping', section: 'While dragging' }
   ]
 })

@@ -1,6 +1,7 @@
 <!--
-  A composition's layers, floating over the stage: its groups (side by side, or stacked) and cells
-  as an outline. Click a row to select it; hovering one shows it on the stage. Drag a row to move it:
+  A composition's structure as an outline, straight on the viewport beside it: its groups (side by
+  side, or stacked) and cells, indented under the group they're in. Click a row to select it,
+  shift-click to add it to the selection; hovering one shows it on the stage. Drag a row to move it:
   between two rows, it goes there in their group; onto the middle of a group's row, to the end of
   that group. The stage shows where it would land while it's dragged (`onLanding`). Takes props.
 -->
@@ -21,7 +22,6 @@
   type Into = { parent: string; index: number }
 
   let {
-    open = $bindable(true),
     root,
     dirOf,
     cellOf,
@@ -33,15 +33,14 @@
     onLanding,
     onDrop
   }: {
-    /** Showing its rows (else just its title). */
-    open?: boolean
     root: BentoNode
     /** Which way each group runs on this artboard (Auto ones as they're placed). */
     dirOf: DirOf
     cellOf: (slot: string) => CellInfo | null
-    selected: string | null
+    selected: string[]
     hover: string | null
-    onSelect: (id: string) => void
+    /** A row clicked; `add`: shift-click, adding it to the selection (or taking it out). */
+    onSelect: (id: string, add: boolean) => void
     onHover: (id: string | null) => void
     onFlip: (group: string) => void
     /** Mid-drag: where row `moving` would land (null: nowhere). */
@@ -49,6 +48,7 @@
     onDrop: (moving: string, into: Into) => void
   } = $props()
 
+  const INDENT = 14
   let list = $state<HTMLDivElement>()
 
   type Row = { node: BentoNode; depth: number; parent: string | null; index: number }
@@ -62,7 +62,7 @@
     return out
   })
 
-  // Dragging a row: which one, where it would land, and where the line showing that goes.
+  // Dragging a row: which one, and where the line showing where it lands goes.
   let dragging = $state<string | null>(null)
   let marker = $state<{ y: number; depth: number; into: string | null } | null>(null)
 
@@ -77,19 +77,22 @@
       const row = rows[Number(el.dataset.row)]
       if (within(root, moving, row.node.id)) return null
       const u = (clientY - r.top) / r.height
-      const y = (before: boolean) => (before ? r.top : r.bottom) - top
       // The middle of a group's row: to its end.
       if (isSplit(row.node) && ((u > 0.3 && u < 0.7) || !row.parent))
         return { into: { parent: row.node.id, index: row.node.children.length }, marker: { y: 0, depth: row.depth, into: row.node.id } }
       if (!row.parent) return null
       const before = u < 0.5
-      return { into: { parent: row.parent, index: row.index + (before ? 0 : 1) }, marker: { y: y(before), depth: row.depth, into: null } }
+      return {
+        into: { parent: row.parent, index: row.index + (before ? 0 : 1) },
+        marker: { y: (before ? r.top : r.bottom) - top, depth: row.depth, into: null }
+      }
     }
     return null
   }
 
   function press(e: PointerEvent, id: string) {
     if (e.button !== 0) return
+    const add = e.shiftKey || e.metaKey || e.ctrlKey
     let into: Into | null = null
     trackPointer(e, {
       slop: 4,
@@ -104,7 +107,7 @@
         dragging = null
         marker = null
         onLanding(null, null)
-        if (!dragged) return onSelect(id)
+        if (!dragged) return onSelect(id, add)
         if (into) onDrop(id, into)
       }
     })
@@ -115,7 +118,7 @@
     (c: CellInfo | null): Attachment<HTMLCanvasElement> =>
     (canvas) => {
       const dpr = window.devicePixelRatio || 1
-      const size = 22 * dpr
+      const size = 16 * dpr
       canvas.width = canvas.height = size
       const ctx = canvas.getContext('2d')!
       ctx.clearRect(0, 0, size, size)
@@ -125,118 +128,82 @@
     }
 </script>
 
-<div class={['layers', { closed: !open }]} role="presentation" onpointerdown={(e) => e.stopPropagation()} onwheel={(e) => e.stopPropagation()}>
-  <button class="head" onclick={() => (open = !open)} title={open ? 'Hide the layers' : 'Show the layers'}>
-    <span>Layers</span>
-    <span class={['chev', { open }]}><Icon name="chevronDown" size={13} /></span>
-  </button>
-  {#if open}
-    <div class="list" role="tree" tabindex="-1" bind:this={list} onpointerleave={() => onHover(null)}>
-      {#each rows as row, i (row.node.id)}
-        {@const node = row.node}
-        {@const cell = isSplit(node) ? null : cellOf(node.id)}
-        <div
-          class={['row', { on: node.id === selected, hovered: node.id === hover, moving: dragging === node.id, into: marker?.into === node.id }]}
-          role="treeitem"
-          aria-selected={node.id === selected}
-          tabindex="-1"
-          data-row={i}
-          style:padding-left={`${6 + row.depth * 14}px`}
-          onpointerdown={(e) => press(e, node.id)}
-          onpointerenter={() => !dragging && onHover(node.id)}
+<div
+  class="outline"
+  role="tree"
+  tabindex="-1"
+  aria-label="Structure"
+  bind:this={list}
+  onpointerdown={(e) => e.stopPropagation()}
+  onwheel={(e) => e.stopPropagation()}
+  onpointerleave={() => onHover(null)}
+>
+  {#each rows as row, i (row.node.id)}
+    {@const node = row.node}
+    {@const cell = isSplit(node) ? null : cellOf(node.id)}
+    <div
+      class={['row', { on: selected.includes(node.id), hovered: node.id === hover, moving: dragging === node.id, into: marker?.into === node.id }]}
+      role="treeitem"
+      aria-selected={selected.includes(node.id)}
+      tabindex="-1"
+      data-row={i}
+      style:padding-left={`${4 + row.depth * INDENT}px`}
+      onpointerdown={(e) => press(e, node.id)}
+      onpointerenter={() => !dragging && onHover(node.id)}
+    >
+      <!-- A faint line down each level it's inside. -->
+      {#each { length: row.depth } as _, d (d)}<span class="guide" style:left={`${11 + d * INDENT}px`}></span>{/each}
+      {#if isSplit(node)}
+        <button
+          class="dir"
+          title={dirOf(node) === 'row' ? 'Side by side: click to stack them' : 'Stacked: click to put them side by side'}
+          onpointerdown={(e) => e.stopPropagation()}
+          onclick={() => onFlip(node.id)}
         >
-          {#if isSplit(node)}
-            <button
-              class="dir"
-              title={dirOf(node) === 'row' ? 'Side by side: click to stack them' : 'Stacked: click to put them side by side'}
-              onpointerdown={(e) => e.stopPropagation()}
-              onclick={() => onFlip(node.id)}
-            >
-              <Icon name={dirOf(node) === 'row' ? 'splitRow' : 'splitCol'} size={13} />
-            </button>
-            <span class="name">{dirOf(node) === 'row' ? 'Side by side' : 'Stacked'}</span>
-            {#if !node.dir}<span class="auto" title="Follows each artboard's shape">Auto</span>{/if}
-            <span class="count">{node.children.length}</span>
-          {:else}
-            <canvas class="thumb" {@attach thumb(cell)}></canvas>
-            <span class={['name', { empty: !node.item }]}>{node.item ? (cell?.label ?? '…') : 'Empty'}</span>
-          {/if}
-        </div>
-      {/each}
-      {#if marker && !marker.into}
-        <div class="marker" style:top={`${marker.y - 1}px`} style:left={`${6 + marker.depth * 14}px`}></div>
+          <Icon name={dirOf(node) === 'row' ? 'splitRow' : 'splitCol'} size={13} />
+        </button>
+        <span class="name group">{dirOf(node) === 'row' ? 'Side by side' : 'Stacked'}</span>
+        {#if !node.dir}<span class="auto" title="Follows each artboard's shape">auto</span>{/if}
+      {:else}
+        <canvas class="thumb" {@attach thumb(cell)}></canvas>
+        <span class={['name', { empty: !node.item }]}>{node.item ? (cell?.label ?? '…') : 'Empty'}</span>
       {/if}
     </div>
+  {/each}
+  {#if marker && !marker.into}
+    <div class="marker" style:top={`${marker.y - 1}px`} style:left={`${4 + marker.depth * INDENT}px`}></div>
   {/if}
 </div>
 
 <style>
-  .layers {
+  /* No panel: rows straight on the viewport, as quiet as the rest of what's around the board. */
+  .outline {
     position: absolute;
-    top: 12px;
+    top: 16px;
     left: 12px;
     z-index: 5;
-    width: 220px;
-    max-height: calc(100% - 190px);
-    display: flex;
-    flex-direction: column;
-    border-radius: 12px;
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-filter);
-    box-shadow: var(--glass-shadow);
-    overflow: hidden;
+    width: 208px;
+    max-height: calc(100% - 200px);
+    overflow-y: auto;
+    outline: none;
     animation: rise-in 300ms var(--ease) 100ms both;
   }
 
-  .layers.closed {
-    width: 120px;
-  }
-
-  .head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 34px;
-    padding: 0 10px 0 12px;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-  }
-
-  .head:hover {
-    color: var(--text);
-  }
-
-  .chev {
-    display: grid;
-    transform: rotate(-90deg);
-    transition: transform var(--t-med) var(--ease);
-  }
-
-  .chev.open {
-    transform: none;
-  }
-
-  .list {
-    position: relative;
-    overflow-y: auto;
-    padding: 0 6px 6px;
-  }
-
   .row {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
-    height: 30px;
+    gap: 7px;
+    height: 26px;
     padding-right: 8px;
-    border-radius: 7px;
+    border-radius: 6px;
     color: var(--muted);
     font-size: 12px;
-    cursor: grab;
+    cursor: default;
     user-select: none;
     transition:
       background-color var(--t-fast) var(--ease),
+      color var(--t-fast) var(--ease),
       opacity var(--t-fast) var(--ease);
   }
 
@@ -251,12 +218,21 @@
   }
 
   .row.moving {
-    opacity: 0.4;
+    opacity: 0.35;
   }
 
   /* Dropping into this group: it lights up. */
   .row.into {
     box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+
+  .guide {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--line);
+    pointer-events: none;
   }
 
   .name {
@@ -265,6 +241,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .name.group {
+    flex: none;
   }
 
   .name.empty {
@@ -276,49 +256,36 @@
     flex: none;
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
-    margin-left: -2px;
-    border-radius: 5px;
-    color: var(--muted);
+    width: 16px;
+    height: 20px;
+    border-radius: 4px;
+    color: var(--faint);
     cursor: pointer;
+    transition: color var(--t-fast) var(--ease);
   }
 
-  .dir:hover {
-    color: var(--accent);
-    background: var(--tint-2);
-  }
-
+  .dir:hover,
   .row.on .dir {
     color: var(--accent);
   }
 
   .auto {
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: var(--tint-2);
     color: var(--faint);
     font-size: 10px;
   }
 
-  .count {
-    color: var(--faint);
-    font-variant-numeric: tabular-nums;
-  }
-
   .thumb {
     flex: none;
-    width: 22px;
-    height: 22px;
-    border-radius: 4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
     background: var(--tint-2);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   }
 
   /* Where a dragged row would go: a line between rows, indented to its group. */
   .marker {
     position: absolute;
-    right: 6px;
+    right: 4px;
     height: 2px;
     border-radius: 1px;
     background: var(--accent);

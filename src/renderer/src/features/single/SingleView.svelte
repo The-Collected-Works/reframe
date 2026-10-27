@@ -10,9 +10,11 @@
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import {
     addCell,
+    canGroupNodes,
     canUngroupNode,
     evenOut,
     flipGroup,
+    groupNodes,
     moveIntoGroup,
     moveNode,
     removeNode,
@@ -168,14 +170,17 @@
       {board}
       {comp}
       node={selection.node}
+      nodes={selection.nodes}
       adjusting={shell.adjusting}
       player={compositionPlayer}
       picking={shell.picking}
       canUngroup={canUngroupNode}
+      canGroup={canGroupNodes}
       onScale={(k) => (scale = k)}
       recompose={(root, born) => composedWith(compositionKey, board, root, born)}
       newId={newSlotId}
       onSelect={(id) => (selection.node = id)}
+      onToggle={(id) => selection.toggleNode(id)}
       onAdjust={(slot) => (shell.adjusting = slot)}
       onEdit={(slot, patch) => project.edit([slotKey(compositionKey, slot)], patch)}
       onReset={(slot, keys) => project.resetKeys([slotKey(compositionKey, slot)], keys)}
@@ -188,6 +193,7 @@
       onRemove={removeNode}
       onFlip={flipGroup}
       onUngroup={ungroupNode}
+      onGroup={groupNodes}
       onChoose={(slot) => {
         selection.node = slot
         shell.choosing = slot

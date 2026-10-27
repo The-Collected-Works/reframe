@@ -8,15 +8,15 @@ import { launch } from '../app.mjs'
 import { sleep } from '../cdp.mjs'
 import { probe } from '../media.mjs'
 
-/** The open composition's structure, as its layers panel shows it (· for each level in; * selected). */
+/** The open composition's structure, as the outline beside it shows it (· for each level in; * selected). */
 const outline = (app) =>
   app.eval(
-    `[...document.querySelectorAll('.layers .row')].map((l) => '·'.repeat((parseInt(l.style.paddingLeft) - 6) / 14) + l.textContent.replace(/\\s+/g, ' ').trim() + (l.classList.contains('on') ? '*' : '')).join(' | ')`
+    `[...document.querySelectorAll('.outline .row')].map((l) => '·'.repeat((parseInt(l.style.paddingLeft) - 4) / 14) + l.textContent.replace(/\\s+/g, ' ').trim() + (l.classList.contains('on') ? '*' : '')).join(' | ')`
   )
 /** The middle of the layers panel's row `i`. */
 const row = (app, i) =>
   app.eval(
-    `(() => { const r = document.querySelectorAll('.layers .row')[${i}].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, h: r.height } })()`
+    `(() => { const r = document.querySelectorAll('.outline .row')[${i}].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, h: r.height } })()`
   )
 const names = (app) => app.eval(`[...document.querySelectorAll('.cell')].map((c) => c.querySelector('.cell-name')?.textContent.trim())`)
 
@@ -127,7 +127,7 @@ export default {
         })()`)
         await app.click(p.x, p.y)
         await app.key('e')
-        await app.waitFor(`document.querySelector('.layers')`, 5000, 'the composition editor')
+        await app.waitFor(`document.querySelector('.outline')`, 5000, 'the composition editor')
         await sleep(1500)
         const c = await app.point('.stage canvas', 0.5, 0.45)
         await app.click(c.x, c.y)
@@ -138,7 +138,7 @@ export default {
         // Esc: nothing selected.
         await app.key('Escape')
         await sleep(300)
-        assert.equal(await outline(app), 'Side by side 2 | ·Stacked 3 | ··Empty | ··Empty | ··Empty | ·h264.mp4')
+        assert.equal(await outline(app), 'Side by side | ·Stacked | ··Empty | ··Empty | ··Empty | ·h264.mp4')
       }
     ],
     [
@@ -153,10 +153,10 @@ export default {
         await app.drag(big.x, big.y, to.x, to.y, { steps: 12 })
         await sleep(400)
         // It stays selected.
-        assert.equal(await outline(app), 'Stacked 4 | ·h264.mp4* | ·Empty | ·Empty | ·Empty')
+        assert.equal(await outline(app), 'Stacked | ·h264.mp4* | ·Empty | ·Empty | ·Empty')
         await app.key('z', 'ctrl')
         await sleep(300)
-        assert.equal((await outline(app)).replaceAll('*', ''), 'Side by side 2 | ·Stacked 3 | ··Empty | ··Empty | ··Empty | ·h264.mp4')
+        assert.equal((await outline(app)).replaceAll('*', ''), 'Side by side | ·Stacked | ··Empty | ··Empty | ··Empty | ·h264.mp4')
         await app.key('Escape')
       }
     ],
@@ -168,18 +168,49 @@ export default {
         const to = await row(app, 1)
         await app.drag(from.x, from.y, to.x, to.y - to.h * 0.4, { steps: 12 })
         await sleep(400)
-        assert.equal(await outline(app), 'Side by side 2 | ·h264.mp4* | ·Stacked 3 | ··Empty | ··Empty | ··Empty')
+        assert.equal(await outline(app), 'Side by side | ·h264.mp4* | ·Stacked | ··Empty | ··Empty | ··Empty')
         // Into the middle of the column's row: the end of the column.
         const a = await row(app, 1)
         const b = await row(app, 2)
         await app.drag(a.x, a.y, b.x, b.y, { steps: 12 })
         await sleep(400)
-        assert.equal(await outline(app), 'Stacked 4 | ·Empty | ·Empty | ·Empty | ·h264.mp4*')
+        assert.equal(await outline(app), 'Stacked | ·Empty | ·Empty | ·Empty | ·h264.mp4*')
         await app.key('z', 'ctrl')
         await sleep(200)
         await app.key('z', 'ctrl')
         await sleep(300)
-        assert.equal((await outline(app)).replaceAll('*', ''), 'Side by side 2 | ·Stacked 3 | ··Empty | ··Empty | ··Empty | ·h264.mp4')
+        assert.equal((await outline(app)).replaceAll('*', ''), 'Side by side | ·Stacked | ··Empty | ··Empty | ··Empty | ·h264.mp4')
+        await app.key('Escape')
+      }
+    ],
+    [
+      'groups two of a group into a group of their own, running the same way',
+      async ({ app }) => {
+        // An empty cell left of the video, then both selected (shift-click its row).
+        const v = await row(app, 5)
+        await app.click(v.x, v.y)
+        await app.clickOn('.add.left')
+        await sleep(300)
+        const r = await row(app, 6)
+        await app.mouse('mouseMoved', r.x, r.y, { button: 'none' })
+        await app.mouse('mousePressed', r.x, r.y, { buttons: 1, clickCount: 1, modifiers: 8 })
+        await app.mouse('mouseReleased', r.x, r.y, { buttons: 0, clickCount: 1, modifiers: 8 })
+        await sleep(200)
+        assert.match(await app.eval(`document.querySelector('.bar .label')?.textContent ?? ''`), /2 selected/)
+        await app.key('g', 'ctrl')
+        await sleep(300)
+        assert.equal(await outline(app), 'Side by side | ·Stacked | ··Empty | ··Empty | ··Empty | ·Side by side* | ··Empty | ··h264.mp4')
+        // And back: ungrouped, then the cell gone.
+        await app.key('g', 'ctrl+shift')
+        await sleep(300)
+        assert.equal((await outline(app)).replaceAll('*', ''), 'Side by side | ·Stacked | ··Empty | ··Empty | ··Empty | ·Empty | ·h264.mp4')
+        await app.key('z', 'ctrl')
+        await sleep(200)
+        await app.key('z', 'ctrl')
+        await sleep(200)
+        await app.key('z', 'ctrl')
+        await sleep(300)
+        assert.equal((await outline(app)).replaceAll('*', ''), 'Side by side | ·Stacked | ··Empty | ··Empty | ··Empty | ·h264.mp4')
         await app.key('Escape')
       }
     ],
@@ -197,7 +228,7 @@ export default {
         assert.match(await outline(app), /··Empty\* \| ··Empty \| ··Empty \|/)
         await app.key('\\')
         await sleep(200)
-        assert.match(await outline(app), /Stacked 3\*/)
+        assert.match(await outline(app), /Stacked\*/)
         await app.key('Enter')
         await sleep(200)
         assert.match(await outline(app), /··Empty\* \|/)

@@ -92,6 +92,9 @@ export interface Arrangement {
  */
 export const autoDir = (r: Rect): Dir => (r.w > r.h ? 'row' : 'col')
 
+/** A split's own direction, if it has one (not Auto, nor the same as the split around it). */
+export const fixedDir = (s: Split): Dir | undefined => (s.dir === 'row' || s.dir === 'col' ? s.dir : undefined)
+
 const validWeights = (w: number[] | undefined, n: number): w is number[] => !!w && w.length === n && w.every((x) => x > 0 && Number.isFinite(x))
 
 /** The shares a split gives its children on an artboard: set there, or equal. */
@@ -114,7 +117,7 @@ export function arrange(
 ): Arrangement {
   const out: Arrangement = { cells: [], dividers: [], splits: new Map() }
   const pad = Math.max(0, Math.min(composition.padding, W / 2 - 1, H / 2 - 1))
-  const place = (n: BentoNode, r: Rect) => {
+  const place = (n: BentoNode, r: Rect, around?: Dir) => {
     if (!isSplit(n)) {
       const x0 = Math.round(r.x)
       const y0 = Math.round(r.y)
@@ -122,7 +125,7 @@ export function arrange(
       return
     }
     const set = splits?.[n.id]
-    const dir = n.dir ?? set?.dir ?? autoDir(r)
+    const dir = fixedDir(n) ?? (n.dir === 'same' ? around : undefined) ?? set?.dir ?? autoDir(r)
     const shares = sharesOf(n, set)
     const along = dir === 'row' ? r.w : r.h
     const gap = Math.max(0, Math.min(composition.gap, (along - n.children.length) / Math.max(1, n.children.length - 1)))
@@ -144,7 +147,7 @@ export function arrange(
       }
     })
     out.splits.set(n.id, { rect: r, dir, shares, rects })
-    n.children.forEach((c, i) => place(c, rects[i]))
+    n.children.forEach((c, i) => place(c, rects[i], dir))
   }
   place(composition.root, { x: pad, y: pad, w: W - pad * 2, h: H - pad * 2 })
   return out
@@ -166,7 +169,7 @@ export type DirOf = (split: Split) => Dir
 export const dirsOn =
   (placed: Arrangement): DirOf =>
   (s) =>
-    s.dir ?? placed.splits.get(s.id)?.dir ?? 'row'
+    fixedDir(s) ?? placed.splits.get(s.id)?.dir ?? 'row'
 
 /** A node added beside another takes half of that one's share (see `reconcileWeights`). */
 export interface Born {
@@ -201,17 +204,18 @@ export function insertBeside(
 
 /**
  * The tree without node `id` (null: it was the whole tree). A split left with one child gives way
- * to it; and where that leaves a split inside one running the same way (both set), the inner one's
- * children join the outer.
+ * to it (a split running the same way as it, taking its direction); and where that leaves a split
+ * inside one running the same way (both set, or the inner one `same`), the inner one's children
+ * join the outer.
  */
 export function removeNode(root: BentoNode, id: string): BentoNode | null {
   if (root.id === id) return null
   const parent = parentOf(root, id)!
   const rest = parent.children.filter((c) => c.id !== id)
   if (rest.length > 1) return mapNode(root, parent.id, (p) => ({ ...p, children: rest }))
-  const only = rest[0]
+  const only = isSplit(rest[0]) && rest[0].dir === 'same' ? withDir(rest[0], parent.dir) : rest[0]
   const grand = parentOf(root, parent.id)
-  if (grand && isSplit(only) && only.dir && only.dir === grand.dir) {
+  if (grand && isSplit(only) && only.dir && (only.dir === 'same' || only.dir === grand.dir)) {
     const i = grand.children.findIndex((c) => c.id === parent.id)
     return mapNode(root, grand.id, (g) => ({ ...g, children: [...grand.children.slice(0, i), ...only.children, ...grand.children.slice(i + 1)] }))
   }
@@ -240,7 +244,7 @@ export function moveNode(root: BentoNode, id: string, target: string, side: Side
     at = parent.children.find((c) => c.id !== id)!.id
   }
   // Directions as they were: the split being moved into hasn't changed shape.
-  return insertBeside(rest, at, side, node, (s) => (s.dir ? s.dir : dirOf((findNode(root, s.id) as Split | null) ?? s)), newId)
+  return insertBeside(rest, at, side, node, (s) => fixedDir(s) ?? dirOf((findNode(root, s.id) as Split | null) ?? s), newId)
 }
 
 /**
@@ -270,13 +274,35 @@ export function flipSplit(root: BentoNode, id: string, dirOf: DirOf): BentoNode 
   return mapNode(root, id, (s) => (isSplit(s) ? { ...s, dir: dirOf(s) === 'row' ? 'col' : 'row' } : s))
 }
 
+/** Split `s` running `dir` (undefined: Auto). */
+function withDir(s: Split, dir: Split['dir']): Split {
+  const { dir: _old, ...rest } = s
+  return dir ? { ...rest, dir } : rest
+}
+
 /** Split `id` running `dir` (undefined: Auto). */
-export function setSplitDir(root: BentoNode, id: string, dir: Dir | undefined): BentoNode {
-  return mapNode(root, id, (s) => {
-    if (!isSplit(s)) return s
-    const { dir: _old, ...rest } = s
-    return dir ? { ...rest, dir } : rest
-  })
+export function setSplitDir(root: BentoNode, id: string, dir: Split['dir']): BentoNode {
+  return mapNode(root, id, (s) => (isSplit(s) ? withDir(s, dir) : s))
+}
+
+/** Whether nodes `ids` can be grouped: two or more, all in one group, and not all of it. */
+export function canGroup(root: BentoNode, ids: string[]): boolean {
+  const parent = ids.length > 1 ? parentOf(root, ids[0]) : null
+  return !!parent && new Set(ids).size === ids.length && ids.length < parent.children.length && ids.every((id) => parentOf(root, id)?.id === parent.id)
+}
+
+/**
+ * Nodes `ids` grouped (see `canGroup`): a new split, running the same way as the one they're in,
+ * in the place of the first of them, holding them all in their order there.
+ */
+export function group(root: BentoNode, ids: string[], newId: () => string): { root: BentoNode; id?: string } {
+  if (!canGroup(root, ids)) return { root }
+  const parent = parentOf(root, ids[0])!
+  const members = new Set(ids)
+  const at = parent.children.findIndex((c) => members.has(c.id))
+  const g: Split = { id: newId(), dir: 'same', children: parent.children.filter((c) => members.has(c.id)) }
+  const children = parent.children.flatMap((c, i) => (i === at ? [g] : members.has(c.id) ? [] : [c]))
+  return { root: mapNode(root, parent.id, (p) => ({ ...p, children })), id: g.id }
 }
 
 /** Whether split `id` can be dissolved into the split around it (they run the same way). */
@@ -297,8 +323,8 @@ export function ungroup(root: BentoNode, id: string, dirOf: DirOf): BentoNode {
 
 /**
  * One artboard's proportions carried from tree `before` to tree `after`: each split's children keep
- * their shares; a split that took a child's place (wrapping it) takes its share; one whose children
- * were spread into its parent shares its share among them as they were; a node `born` beside
+ * their shares; a split that took children's places (wrapping one, or grouping several) takes their
+ * shares, and they keep theirs in it; one whose children were spread into its parent shares its share among them as they were; a node `born` beside
  * another takes half of that one's share. Splits that are gone are dropped.
  */
 export function reconcileWeights(
@@ -320,6 +346,12 @@ export function reconcileWeights(
   const out: Record<string, SplitArrangement> = {}
   for (const s of splitsOf(after)) {
     const was = set[s.id]
+    // A new group of nodes that were already here: they keep their proportions in it.
+    if (!was && !share.has(s.id)) {
+      const ws = s.children.map((c) => share.get(c.id) ?? 0)
+      if (ws.every((w) => w > 0) && ws.some((w) => Math.abs(w - ws[0]) > 1e-9)) out[s.id] = { weights: ws }
+      continue
+    }
     if (!was) continue
     const { weights: _w, ...rest } = was
     if (!was.weights) {
@@ -331,11 +363,12 @@ export function reconcileWeights(
       if (born && c.id === born.id) return (share.get(born.from) ?? 0) / 2
       if (born && c.id === born.from) return (share.get(c.id) ?? 0) / 2
       if (share.has(c.id)) return share.get(c.id)
-      // A new split, in the place of a child this split had: that child's share.
+      // A new split, in the place of children this split had (wrapping one, or grouping several):
+      // their shares.
       if (isSplit(c)) {
         const had = (findNode(before, s.id) as Split | null)?.children.map((x) => x.id) ?? []
-        const took = c.children.find((x) => had.includes(x.id))
-        if (took) return share.get(took.id)
+        const took = c.children.filter((x) => had.includes(x.id))
+        if (took.length) return took.reduce((sum, x) => sum + (share.get(x.id) ?? 0), 0)
       }
       return undefined
     }

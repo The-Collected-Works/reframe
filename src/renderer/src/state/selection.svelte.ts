@@ -8,18 +8,34 @@ class Selection {
   names = $state.raw<string[]>([])
   focus = $state.raw<string | null>(null)
   private index = $derived(new Set(this.names))
-  private nodeIn = $state.raw<{ composition: string; id: string } | null>(null)
+  private nodesIn = $state.raw<{ composition: string; ids: string[] } | null>(null)
 
   /**
-   * With a composition in focus, the part of it selected: a cell or a group of them (none: the
-   * composition itself).
+   * With a composition in focus, the parts of it selected: cells or groups of them (none: the
+   * composition itself). The last is the one the editor's chrome is for (see `node`).
    */
+  get nodes(): string[] {
+    return this.nodesIn && this.nodesIn.composition === this.focus ? this.nodesIn.ids : []
+  }
+
+  set nodes(ids: string[]) {
+    this.nodesIn = ids.length && this.focus ? { composition: this.focus, ids } : null
+  }
+
+  /** The part of the composition in focus selected (the last, with several). Setting it selects just it. */
   get node(): string | null {
-    return this.nodeIn && this.nodeIn.composition === this.focus ? this.nodeIn.id : null
+    const ids = this.nodes
+    return ids[ids.length - 1] ?? null
   }
 
   set node(id: string | null) {
-    this.nodeIn = id && this.focus ? { composition: this.focus, id } : null
+    this.nodes = id ? [id] : []
+  }
+
+  /** A part of the composition added to the selection, or taken out of it (shift-click). */
+  toggleNode(id: string): void {
+    const ids = this.nodes
+    this.nodes = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
   }
 
   has(name: string): boolean {

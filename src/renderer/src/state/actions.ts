@@ -1,4 +1,5 @@
 import {
+  canGroup,
   canUngroup,
   findNode,
   flipSplit,
@@ -12,9 +13,10 @@ import {
   ungroup as ungroupTree,
   type Dir,
   type Side,
-  moveInto
+  moveInto,
+  group as groupTree
 } from '@shared/composition/bento'
-import type { CropSettings, FolderScan, Slot, SettingKey } from '@shared/types'
+import type { BentoNode, CropSettings, FolderScan, Slot, SettingKey } from '@shared/types'
 import { api } from '../lib/bridge'
 import { hint } from '../lib/keymap.svelte'
 import { fmtSize, plural } from '../lib/format'
@@ -316,11 +318,29 @@ export function moveIntoGroup(id: string, parent: string, index: number): void {
   selection.node = id
 }
 
-/** Removes a cell or a group (the selection, unless given); its group closes up behind it. */
-export function removeNode(id = selection.node): void {
-  if (!id) return
-  restructure((root) => ({ root: removeTreeNode(root, id) }))
+/** Removes cells or groups (the selection, unless given); their groups close up behind them. */
+export function removeNode(ids: string | string[] = selection.nodes): void {
+  const gone = typeof ids === 'string' ? [ids] : ids
+  if (!gone.length) return
+  restructure((root) => ({ root: gone.reduce<BentoNode | null>((r, id) => (r && findNode(r, id) ? removeTreeNode(r, id) : r), root) }))
   selection.node = null
+}
+
+/** Whether cells or groups can be grouped: two or more, all in one group, not all of it. */
+export function canGroupNodes(ids: string[]): boolean {
+  const root = treeOf()
+  return !!root && canGroup(root, ids)
+}
+
+/** Cells or groups put in a group of their own (running the same way as the one they're in), selected. */
+export function groupNodes(ids: string[] = selection.nodes): void {
+  let made: string | undefined
+  restructure((root) => {
+    const r = groupTree(root, ids, model.newSlotId)
+    made = r.id
+    return { root: r.root }
+  })
+  if (made) selection.node = made
 }
 
 /** The group around the selection selected instead (none around it: the composition). */
@@ -335,8 +355,8 @@ export function flipGroup(id: string): void {
   restructure((root, dirOf) => ({ root: flipSplit(root, id, dirOf) }))
 }
 
-/** A group's direction (null: Auto, following each artboard's shape). */
-export function setGroupDir(id: string, dir: Dir | null): void {
+/** A group's direction (null: Auto, following each artboard's shape; `same`: as the group around it). */
+export function setGroupDir(id: string, dir: Dir | 'same' | null): void {
   restructure((root) => ({ root: setSplitDir(root, id, dir ?? undefined) }))
 }
 

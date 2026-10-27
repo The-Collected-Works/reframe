@@ -22,8 +22,8 @@ export interface CompositionFrame<S extends LayerSource = LayerSource> {
   chrome: boolean
   /** The cells' corner radius, artboard pixels (outlines follow it). */
   radius: number
-  /** What's selected: a cell, or a group (with its members, outlined faintly). */
-  selection: { rect: Rect; group: boolean; members: Rect[] } | null
+  /** What's selected: a cell, or a group (with its members, outlined faintly); with several, the rest (`more`). */
+  selection: { rect: Rect; group: boolean; members: Rect[]; more: Rect[] } | null
   /** The cell under the pointer. */
   hover: Rect | null
   /** The gap under the pointer (it can be dragged): a grip on it. */
@@ -152,8 +152,10 @@ export function drawCompositionStage<S extends LayerSource>(ctx: CanvasRendering
     ctx.lineWidth = 2 * dpr
     ctx.shadowColor = accent
     ctx.shadowBlur = 8 * dpr
-    outline(sel.rect, (sel.group ? 3 : 1.5) * dpr)
-    ctx.stroke()
+    for (const r of [sel.rect, ...sel.more]) {
+      outline(r, (sel.group ? 3 : 1.5) * dpr)
+      ctx.stroke()
+    }
     ctx.shadowBlur = 0
   }
 

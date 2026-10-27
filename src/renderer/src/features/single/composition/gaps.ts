@@ -11,6 +11,14 @@ import type { Guides } from '@shared/framing/snapping'
 const GRAB = 5
 /** Smallest a cell can be dragged to, in artboard pixels. */
 const MIN = 16
+/** Fractions of its group a gap snaps to, as everything before it. */
+const FRACTIONS: [number, string][] = [
+  [1 / 2, '½'],
+  [1 / 3, '⅓'],
+  [2 / 3, '⅔'],
+  [1 / 4, '¼'],
+  [3 / 4, '¾']
+]
 
 /** The gap under `pt`, if any. */
 export function gapAt(arrangement: Arrangement, pt: { x: number; y: number }, k: number): Gap | null {
@@ -29,8 +37,9 @@ export function gapAt(arrangement: Arrangement, pt: { x: number; y: number }, k:
 /**
  * New shares for the split a gap belongs to, with the gap's middle dragged to `pos` (x for a gap
  * between side-by-side cells, y between stacked ones). Only the two either side change. Snaps to
- * an even split, to either side's content fitting its cell without cropping (`aspect`: the
- * content's width over height, or null), and into line with other gaps; `free` turns that off.
+ * an even split, to everything before it taking ½, ⅓, ¼ (and so on) of the group, to either side's
+ * content fitting its cell without cropping (`aspect`: the content's width over height, or null),
+ * and into line with other gaps; `free` turns that off.
  */
 export function dragGap(
   arrangement: Arrangement,
@@ -60,6 +69,9 @@ export function dragGap(
   const room = (row ? split.rect.w : split.rect.h) - gap * (n - 1)
   candidates.push({ len: both / 2, label: 'Even' })
   candidates.push({ len: room / n, label: 'Even' })
+  // Everything before the gap taking a simple fraction of the group (½ beside a stack of three).
+  const before = start - (row ? split.rect.x : split.rect.y) - gap * i
+  for (const [f, label] of FRACTIONS) candidates.push({ len: room * f - before, label })
   const ra = aspect(i)
   const rb = aspect(i + 1)
   if (ra) candidates.push({ len: row ? across(a) * ra : across(a) / ra, label: 'Fits' })

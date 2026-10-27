@@ -24,6 +24,7 @@ import {
   Pause,
   ArrowLeftRight,
   Equal,
+  Group,
   Ungroup,
   CornerLeftUp,
   LayoutPanelLeft,
@@ -101,6 +102,7 @@ export const ICONS = {
   frameMode: Crop,
   flipDir: ArrowLeftRight,
   evenOut: Equal,
+  group: Group,
   ungroup: Ungroup,
   parent: CornerLeftUp,
   choose: ImagePlus

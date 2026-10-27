@@ -36,21 +36,24 @@
   import { dropAt, landed, type Landing } from './drop'
   import FloatingBar from './FloatingBar.svelte'
   import { dragGap, gapAt } from './gaps'
-  import LayersPanel from './LayersPanel.svelte'
+  import Outline from './Outline.svelte'
   import { drawCompositionStage } from './render'
 
   let {
     board,
     comp,
     node,
+    nodes,
     adjusting,
     player,
     picking,
     canUngroup,
+    canGroup,
     recompose,
     newId,
     onScale,
     onSelect,
+    onToggle,
     onAdjust,
     onEdit,
     onReset,
@@ -63,6 +66,7 @@
     onRemove,
     onFlip,
     onUngroup,
+    onGroup,
     onChoose,
     onHold,
     onMenu,
@@ -70,8 +74,10 @@
   }: {
     board: Artboard
     comp: Composed
-    /** What's selected: a cell or a group (its id in the tree). */
+    /** What's selected: a cell or a group (its id in the tree); with several, the last of `nodes`. */
     node: string | null
+    /** Everything selected (shift-click adds). */
+    nodes: string[]
     /** The cell whose picture is being adjusted, if any (it's the one selected). */
     adjusting: string | null
     /** Its videos' playback (a track per video cell, by slot). */
@@ -79,6 +85,7 @@
     /** The eyedropper is open: no editing chrome, it needs the exact picture. */
     picking: boolean
     canUngroup: (group: string) => boolean
+    canGroup: (nodes: string[]) => boolean
     /** The composition as it would be with tree `root` on this artboard (to show a drag before it's let go). */
     recompose: (root: BentoNode, born?: Born) => Composed | null
     /** A new node id (for the group a drag would make, in its preview). */
@@ -86,6 +93,8 @@
     /** Device pixels per artboard pixel on screen (so how sharp a copy each cell plays from). */
     onScale?: (scale: number) => void
     onSelect: (node: string | null) => void
+    /** Added to the selection, or taken out of it. */
+    onToggle: (node: string) => void
     onAdjust: (slot: string | null) => void
     onEdit: (slot: string, patch: Partial<CropSettings>) => void
     onReset: (slot: string, keys: SettingKey[]) => void
@@ -96,9 +105,11 @@
     onMove: (node: string, target: string, side: Side) => void
     onMoveInto: (node: string, parent: string, index: number) => void
     onSwap: (a: string, b: string) => void
-    onRemove: (node: string) => void
+    onRemove: (nodes: string[]) => void
     onFlip: (group: string) => void
     onUngroup: (group: string) => void
+    /** Nodes put in a group of their own (see `canGroup`). */
+    onGroup: (nodes: string[]) => void
     /** Choose what a cell shows. */
     onChoose: (slot: string) => void
     /** A video cell holding its last frame when it's shorter than the composition (or looping). */
@@ -112,7 +123,8 @@
   const MARGIN_X = 48
   const MARGIN_TOP = 48
   const RESERVED = 12 + 64 + 12 + 44 + 12 * 2
-  const LAYERS = 12 + 220 + 32
+  // The outline at the left: the board starts clear of it.
+  const OUTLINE = 12 + 208 + 32
   const dpr = window.devicePixelRatio || 1
   const TRANSFORM: SettingKey[] = ['zoom', 'scaleX', 'scaleY', 'offsetX', 'offsetY', 'rotation']
   const SIDES: { side: Side; title: string }[] = [
@@ -134,6 +146,7 @@
 
   /** What's selected, and the group it's in. */
   const selectedNode = $derived(node ? findNode(root, node) : null)
+  const multi = $derived(nodes.length > 1)
   const parent = $derived(node ? parentOf(root, node) : null)
 
   // ---- adjusting what a cell shows
@@ -162,7 +175,6 @@
   let canvas: HTMLCanvasElement
   let width = $state(0)
   let height = $state(0)
-  let layersOpen = $state(true)
   let cursor = $state('default')
   let readout = $state<{ x: number; y: number; text: string } | null>(null)
   let hover = $state<string | null>(null)
@@ -217,7 +229,7 @@
   let interacting = false
   let settled = $state(0)
   let held: View = { k: 1, bx: 0, by: 0 }
-  const left = $derived(layersOpen && !picking ? LAYERS : MARGIN_X)
+  const left = $derived(picking ? MARGIN_X : OUTLINE)
   const target = $derived.by((): View => {
     void settled
     if (interacting) return held
@@ -294,6 +306,7 @@
     view: cam.current,
     board,
     node,
+    nodes,
     framing,
     picking,
     busy,
@@ -320,6 +333,13 @@
     // A cell where it's drawn right now; a group where it's going.
     const at = (id: string) => placedAt(id) ?? rectOf(id, f.shown.arrangement)
     const sel = f.node && !d ? findNode(root, f.node) : null
+    // With several selected, the rest outlined as well.
+    const more = d
+      ? []
+      : f.nodes
+          .filter((id) => id !== f.node)
+          .map(at)
+          .filter((r): r is Rect => !!r)
     const selRect = sel ? at(sel.id) : null
     const moving = d ? findNode(root, d.moving) : null
     const ghostRect = d ? rectOf(d.moving) : null
@@ -336,9 +356,14 @@
       radius: comp.item.radius,
       selection:
         sel && selRect
-          ? { rect: selRect, group: isSplit(sel), members: isSplit(sel) ? sel.children.map((c) => at(c.id)).filter((r): r is Rect => !!r) : [] }
+          ? {
+              rect: selRect,
+              group: isSplit(sel) && !more.length,
+              members: isSplit(sel) && !more.length ? sel.children.map((c) => at(c.id)).filter((r): r is Rect => !!r) : [],
+              more
+            }
           : null,
-      hover: f.hover && f.hover !== f.node && !d && !fr ? at(f.hover) : null,
+      hover: f.hover && !f.nodes.includes(f.hover) && !d && !fr ? at(f.hover) : null,
       hoverGap: f.hoverGap && !fr && !d ? { rect: f.hoverGap.rect, dir: f.hoverGap.dir } : null,
       structure: d ? [...f.shown.arrangement.splits].filter(([id]) => id !== f.shown.item.root.id).map(([, s]) => s.rect) : [],
       placeholder: d?.landing ? at(d.landing.kind === 'swap' ? d.landing.target : d.moving) : null,
@@ -424,8 +449,10 @@
       run: () => (selectedNode && isSplit(selectedNode) ? onSelect(selectedNode.children[0].id) : adjust(adjusting ? null : node))
     },
     parent: { when: () => !!parent, run: () => parent && onSelect(parent.id) },
+    group: { when: () => canGroup(nodes), run: () => onGroup(nodes) },
+    ungroup: { when: () => !multi && !!selectedNode && canUngroup(selectedNode.id), run: () => node && onUngroup(node) },
     deselect: { when: () => !!node || !!adjusting, run: () => (adjusting ? adjust(null) : onSelect(null)) },
-    remove: { when: () => !!node && !adjusting, run: () => node && onRemove(node) }
+    remove: { when: () => !!nodes.length && !adjusting, run: () => onRemove(nodes) }
   })
 
   /** Drags the view; a click that never moves calls `onClick` instead. */
@@ -536,11 +563,13 @@
   }
 
   /**
-   * A press on a cell: a click selects it; a drag moves it (or the selected group, if it's in it, unless that's everything),
-   * the layout making room wherever it would land.
+   * A press on a cell: a click selects it (shift-click adds it to the selection, or takes it out); a
+   * drag moves it (or the selected group, if it's in it, unless that's everything), the layout
+   * making room wherever it would land.
    */
   function pressCell(e: PointerEvent, id: string) {
-    const inGroup = !!selectedNode && isSplit(selectedNode) && selectedNode.id !== root.id && within(root, selectedNode.id, id)
+    const add = e.shiftKey || e.metaKey || e.ctrlKey
+    const inGroup = !multi && !!selectedNode && isSplit(selectedNode) && selectedNode.id !== root.id && within(root, selectedNode.id, id)
     const moving = inGroup ? node! : id
     // Where it lands is found on the layout as the drag began, so cells making room don't move the
     // target out from under the pointer.
@@ -561,7 +590,7 @@
         cursor = 'default'
         const d = drag?.landing
         drag = null
-        if (!dragged) return onSelect(id)
+        if (!dragged) return add ? onToggle(id) : onSelect(id)
         if (d?.kind === 'swap') {
           onSwap(moving, d.target)
           // What was dragged is there now: keep it selected.
@@ -636,15 +665,20 @@
 
   // What floats over the canvas, in stage pixels (following the camera).
   const quiet = $derived(picking || !!drag || busy)
-  const selectedRect = $derived(selectedNode ? rectOf(selectedNode.id) : null)
+  /** Around everything selected. */
+  const selectedRect = $derived.by((): Rect | null => {
+    const rs = nodes.map((id) => rectOf(id)).filter((r): r is Rect => !!r)
+    if (!rs.length) return null
+    const x = Math.min(...rs.map((r) => r.x))
+    const y = Math.min(...rs.map((r) => r.y))
+    return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }
+  })
   const sel = $derived(selectedRect && !quiet ? onScreen(selectedRect, cam.current) : null)
   const empties = $derived(quiet || adjusting ? [] : comp.layers.filter((l) => !l.source).map((l) => ({ id: l.id, at: onScreen(l.rect, cam.current) })))
   const selLayer = $derived(selectedNode && !isSplit(selectedNode) ? layers.get(selectedNode.id) : undefined)
   const groupLabel = $derived(
     selectedNode && isSplit(selectedNode) ? `${dirOf(selectedNode) === 'row' ? 'Side by side' : 'Stacked'} · ${selectedNode.children.length}` : ''
   )
-  /** The middle of the space the board's centred in. */
-  const centre = $derived((left + width - MARGIN_X) / 2)
 </script>
 
 <div
@@ -667,19 +701,19 @@
   <canvas bind:this={canvas} data-eyedropper style:width={`${width}px`} style:height={`${height}px`} style:opacity={zoom.entering ? 0 : 1}></canvas>
 
   {#if !picking}
-    <LayersPanel
-      bind:open={layersOpen}
+    <Outline
       {root}
       {dirOf}
       cellOf={(id) => {
         const s = layers.get(id)?.source
         return s ? { label: s.label, thumb: s.thumb, w: s.w, h: s.h } : null
       }}
-      selected={node}
+      selected={nodes}
       {hover}
-      onSelect={(id) => {
+      onSelect={(id, add) => {
         onAdjust(null)
-        onSelect(id)
+        if (add) onToggle(id)
+        else onSelect(id)
       }}
       onHover={(id) => (hover = id)}
       {onFlip}
@@ -703,7 +737,29 @@
     {/if}
   {/each}
 
-  {#if sel && selectedNode && !adjusting}
+  {#if sel && multi}
+    <FloatingBar at={sel} stageWidth={width}>
+      <span class="label">{nodes.length} selected</span>
+      <Button
+        icon="group"
+        iconSize={14}
+        disabled={!canGroup(nodes)}
+        title={canGroup(nodes)
+          ? `Group them, running the same way as the group they're in (${hint(COMPOSITION_EDITOR.actions.group)})`
+          : 'Only cells or groups in the same group, and not all of it, can be grouped'}
+        onclick={() => onGroup(nodes)}>Group</Button
+      >
+      <span class="sep"></span>
+      <Button
+        variant="icon"
+        icon="trash"
+        iconSize={14}
+        tone="danger"
+        title={`Remove them (${hint(COMPOSITION_EDITOR.actions.remove)})`}
+        onclick={() => onRemove(nodes)}
+      />
+    </FloatingBar>
+  {:else if sel && selectedNode && !adjusting}
     <!-- A + on each edge of the selection: a new cell there. -->
     {#each SIDES as s (s.side)}
       <button
@@ -731,7 +787,13 @@
         />
         <Button variant="icon" icon="evenOut" iconSize={15} title="Make them equal (on this artboard)" onclick={() => onEvenOut(selectedNode.id)} />
         {#if canUngroup(selectedNode.id)}
-          <Button variant="icon" icon="ungroup" iconSize={15} title="Ungroup: spread them into the group around" onclick={() => onUngroup(selectedNode.id)} />
+          <Button
+            variant="icon"
+            icon="ungroup"
+            iconSize={15}
+            title={`Ungroup: spread them into the group around (${hint(COMPOSITION_EDITOR.actions.ungroup)})`}
+            onclick={() => onUngroup(selectedNode.id)}
+          />
         {/if}
       {:else}
         <Button icon="choose" iconSize={14} onclick={() => onChoose(selectedNode.id)}>{selLayer?.source ? 'Replace…' : 'Choose…'}</Button>
@@ -770,7 +832,7 @@
         iconSize={14}
         tone="danger"
         title={`Remove ${isSplit(selectedNode) ? 'the group' : 'the cell'} (${hint(COMPOSITION_EDITOR.actions.remove)})`}
-        onclick={() => onRemove(selectedNode.id)}
+        onclick={() => onRemove([selectedNode.id])}
       />
     </FloatingBar>
   {/if}
@@ -783,10 +845,6 @@
       >
       <Button variant="primary" title={`Done (${hint(COMPOSITION_EDITOR.actions.adjust)})`} onclick={() => adjust(null)}>Done</Button>
     </FloatingBar>
-  {/if}
-
-  {#if !node && !picking && !drag}
-    <div class="hint" style:left={`${centre}px`}>Click a cell to select it · drag to move it · double-click to adjust what it shows</div>
   {/if}
 
   <button class="zoom-chip" title={manual ? `Fit to view (${hint(SINGLE.actions.fit)})` : 'Fit'} onpointerdown={(e) => e.stopPropagation()} onclick={fitView}>
@@ -860,21 +918,6 @@
     transform: translate(-50%, -50%) scale(1.2);
     background: var(--accent);
     color: #fff;
-  }
-
-  .hint {
-    position: absolute;
-    top: 12px;
-    transform: translateX(-50%);
-    padding: 6px 12px;
-    border-radius: 13px;
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-filter);
-    color: var(--muted);
-    font-size: 11px;
-    white-space: nowrap;
-    pointer-events: none;
-    animation: rise-in 300ms var(--ease) 400ms both;
   }
 
   /* Floating glass over the media. */

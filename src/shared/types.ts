@@ -51,12 +51,13 @@ export interface Slot {
 }
 
 /**
- * In a bento: its children side by side (`row`) or stacked (`col`). Without a direction (Auto), it
- * runs whichever way suits the space it gets on each artboard.
+ * In a bento: its children side by side (`row`) or stacked (`col`), or the same way as the split
+ * around it (`same`: a group made inside another). Without a direction (Auto), it runs whichever way
+ * suits the space it gets on each artboard.
  */
 export interface Split {
   id: string
-  dir?: 'row' | 'col'
+  dir?: 'row' | 'col' | 'same'
   children: BentoNode[]
 }
 

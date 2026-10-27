@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'
-  import { findNode, isSplit, slotsOf } from '@shared/composition/bento'
+  import { findNode, isSplit, parentOf, slotsOf } from '@shared/composition/bento'
   import { DEFAULT_SETTINGS, normDeg, resolveSettings } from '@shared/framing/framing'
   import type { CropSettings, FitMode, CompositionItem, SettingKey } from '@shared/types'
   import { fmtSize, fmtTime, plural } from '../../lib/format'
@@ -258,7 +258,7 @@
         onResetArrangement={() => compositions.forEach((k) => project.resetSplits(k))}
         onPick={pickBackground}
       />
-      {#if group}<CompositionGroup {group} onDir={setGroupDir} onEvenOut={evenOut} />{/if}
+      {#if group}<CompositionGroup {group} nested={!!comp && parentOf(comp.item.root, group.id) !== null} onDir={setGroupDir} onEvenOut={evenOut} />{/if}
     </div>
     <footer class="insp-foot">
       <div class="spacer"></div>

@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { BentoNode, Split } from '../types'
 import {
   arrange,
+  canGroup,
   canUngroup,
   dirsOn,
+  fixedDir,
   flipSplit,
+  group,
   insertBeside,
   moveInto,
   moveNode,
@@ -18,12 +21,12 @@ import {
 /** A tree as text: slots by id, splits as row(…) / col(…) / auto(…). */
 const show = (n: BentoNode): string => ('children' in n ? `${n.dir ?? 'auto'}(${n.children.map(show).join(' ')})` : n.id)
 const slot = (id: string): BentoNode => ({ id, item: null })
-const split = (id: string, dir: 'row' | 'col' | undefined, ...children: BentoNode[]): Split => ({ id, ...(dir ? { dir } : {}), children })
+const split = (id: string, dir: Split['dir'], ...children: BentoNode[]): Split => ({ id, ...(dir ? { dir } : {}), children })
 
 let n = 0
 const newId = () => `s${++n}`
 /** Directions as set, Auto splits running as rows. */
-const dirOf: DirOf = (s) => s.dir ?? 'row'
+const dirOf: DirOf = (s) => fixedDir(s) ?? 'row'
 
 describe('insertBeside', () => {
   it('builds three stacked beside a big one, a cell at a time', () => {
@@ -109,6 +112,42 @@ describe('direction and grouping', () => {
     expect(ungroup(across, 'g', dirOf)).toBe(across)
   })
 
+  it('groups some of a split, running the same way, where the first of them was', () => {
+    n = 0
+    const root = split('r', 'row', slot('a'), slot('b'), split('c', 'col', slot('x'), slot('y')))
+    expect(canGroup(root, ['b', 'a'])).toBe(true)
+    const r = group(root, ['b', 'a'], newId)
+    expect(show(r.root)).toBe('row(same(a b) col(x y))')
+    expect(r.id).toBe('s1')
+    expect(show(group(root, ['a', 'c'], newId).root)).toBe('row(same(a col(x y)) b)')
+  })
+
+  it("won't group one node, all of a split, or nodes from different splits", () => {
+    const root = split('r', 'row', slot('a'), slot('b'), split('c', 'col', slot('x'), slot('y')))
+    expect(canGroup(root, ['a'])).toBe(false)
+    expect(canGroup(root, ['a', 'b', 'c'])).toBe(false)
+    expect(canGroup(root, ['a', 'x'])).toBe(false)
+    expect(group(root, ['a', 'x'], newId).root).toBe(root)
+  })
+
+  it('a group running the same way follows the split around it, wherever that runs', () => {
+    const inner = { id: 'g', dir: 'same' as const, children: [slot('a'), slot('b')] }
+    const root = split('r', undefined, inner, slot('c'))
+    const layout = { root, gap: 0, padding: 0 }
+    // Its own shape would stack it on the wide artboard (500×500 of 1000×500), and not on the tall one.
+    expect(dirsOn(arrange(layout, 1000, 500))(inner)).toBe('row')
+    expect(dirsOn(arrange(layout, 500, 1000))(inner)).toBe('col')
+  })
+
+  it('a group running the same way takes the direction of the split it replaces, or joins the one around', () => {
+    const lone = split('r', 'col', { id: 'g', dir: 'same', children: [slot('a'), slot('b')] }, slot('c'))
+    expect(show(removeNode(lone, 'c')!)).toBe('col(a b)')
+    const nested = split('o', 'row', split('r', 'col', { id: 'g', dir: 'same', children: [slot('a'), slot('b')] }, slot('c')), slot('d'))
+    expect(show(removeNode(nested, 'c')!)).toBe('row(col(a b) d)')
+    const joins = split('o', 'row', split('r', 'same', { id: 'g', dir: 'same', children: [slot('a'), slot('b')] }, slot('c')), slot('d'))
+    expect(show(removeNode(joins, 'c')!)).toBe('row(a b d)')
+  })
+
   it("an Auto split's direction comes from where it's placed", () => {
     const root = split('r', undefined, slot('a'), slot('b'))
     const layout = { root, gap: 0, padding: 0 }
@@ -141,6 +180,13 @@ describe('reconcileWeights', () => {
     const before = split('r', 'row', split('g', 'row', slot('a'), slot('b')), slot('c'))
     const after = ungroup(before, 'g', dirOf)
     expect(reconcileWeights(before, after, { r: { weights: [1, 1] }, g: { weights: [1, 3] } })).toEqual({ r: { weights: [0.125, 0.375, 0.5] } })
+  })
+
+  it('a group made of some of a split takes their shares, and they keep theirs in it', () => {
+    n = 0
+    const before = split('r', 'row', slot('a'), slot('b'), slot('c'))
+    const after = group(before, ['a', 'b'], newId).root
+    expect(reconcileWeights(before, after, { r: { weights: [1, 3, 4] } })).toEqual({ r: { weights: [0.5, 0.5] }, s1: { weights: [0.125, 0.375] } })
   })
 
   it('leaves alone what had no proportions set', () => {
