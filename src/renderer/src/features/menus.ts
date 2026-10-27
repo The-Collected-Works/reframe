@@ -3,7 +3,7 @@ import { resolveSettings } from '@shared/layout'
 import { api, mac, win } from '../lib/bridge'
 import { fmtSize } from '../lib/format'
 import { hint } from '../lib/keymap.svelte'
-import { inside } from '../lib/paths'
+import { inside, join } from '../lib/paths'
 import {
   addToComposition,
   clearCache,
@@ -45,13 +45,19 @@ export async function openFolderMenu(at: { x: number; y: number }): Promise<void
   const dir = library.dir
   if (!dir) return
   const size = await api.cacheSize().catch(() => 0)
+  // Where exports go: chosen in the export dialog, or by default a folder inside this one (there
+  // once Reframe has written to it, and marked as its output).
+  const output = project.file.export.dir ?? join(dir, 'export')
+  const exported = !!project.file.export.dir || library.skipped.some((f) => f.reason === 'export' && f.path === 'export')
   const id = await showMenu(at.x, at.y, [
     { id: 'open', label: openLabel, icon: 'reveal' },
+    { id: 'output', label: 'Open Output Folder', icon: 'export', enabled: exported },
     { separator: true },
     // Thumbnails and playback copies, for every folder: made again as they're needed.
     { id: 'clear', label: size > 0 ? `Clear Cache · ${fmtSize(size)}` : 'Clear Cache', icon: 'trash', enabled: size > 0 }
   ])
   if (id === 'open') api.reveal(dir)
+  else if (id === 'output') api.reveal(output)
   else if (id === 'clear') clearCache()
 }
 

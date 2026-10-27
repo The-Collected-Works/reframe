@@ -60,7 +60,7 @@
     <div
       class="grid-section excluded"
       role="presentation"
-      title={`${excluded.reason === 'export' ? 'Reframe’s exports, left out of the project' : 'Excluded from the project'}. Right-click to include it`}
+      title="Excluded from the project. Right-click to include it"
       onpointerdown={(e) => e.stopPropagation()}
       oncontextmenu={(e) => {
         e.preventDefault()
@@ -68,7 +68,7 @@
       }}
     >
       {@render folderName(excluded.path)}
-      <Tag variant="note">{excluded.reason === 'export' ? 'Exports' : 'Excluded'}</Tag>
+      <Tag variant="note">Excluded</Tag>
     </div>
   </div>
 {:else}

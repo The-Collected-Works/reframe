@@ -117,7 +117,9 @@ export function gridLayout(all: Entry[], prefs: ViewPrefs, collapsed: string[], 
     const folder = folderOf(home(a))
     ;(folder ? ensure(folder) : top).assets.push(a)
   }
-  for (const f of skipped) ensure(f.path).excluded = f
+  // Folders excluded by hand stay as a bar (to include again); Reframe's own output doesn't show at
+  // all (the folder button's menu opens it).
+  for (const f of skipped) if (f.reason === 'excluded') ensure(f.path).excluded = f
   const roots = [...nodes.values()].filter((n) => !n.folder.includes('/'))
   const finish = (n: FolderNode): number => {
     n.assets.sort(cmp)
