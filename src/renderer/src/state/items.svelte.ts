@@ -35,16 +35,26 @@ class Items {
     return e && this.with(e)
   }
 
+  /** The last asset made for each entry, and what from (see `with`). */
+  private made = new WeakMap<Entry, { meta: AssetMeta | undefined; frame: ImageBitmap | undefined; asset: Asset }>()
+
   /**
    * An item with what's been loaded about its file. A video's thumbnail is the frame playback starts
    * on: its first, or once loaded, a trimmed one's start (see Starts).
+   *
+   * The same object for as long as nothing it's made from changes, so whatever reads an asset only
+   * runs again when that asset does (not on every edit to the project).
    */
   with(e: Entry): Asset {
-    const a = withMeta(e, this.meta(e))
-    if (e.kind !== 'video') return a
-    const at = project.file.clips[e.name]?.start ?? 0
+    const meta = this.meta(e)
+    const at = e.kind === 'video' ? (project.file.clips[e.name]?.start ?? 0) : 0
     const frame = at > 0 ? starts.get({ path: e.path, mtime: e.mtime, at }) : undefined
-    return frame ? { ...a, thumb: frame, thumbAt: at } : { ...a, thumbAt: 0 }
+    const last = this.made.get(e)
+    if (last && last.meta === meta && last.frame === frame) return last.asset
+    const a = withMeta(e, meta)
+    const asset = e.kind !== 'video' ? a : frame ? { ...a, thumb: frame, thumbAt: at } : { ...a, thumbAt: 0 }
+    this.made.set(e, { meta, frame, asset })
+    return asset
   }
 }
 
