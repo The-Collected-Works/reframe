@@ -1,6 +1,6 @@
 import { inColor, OUT_COLOR, OUT_TAGS } from './color'
 import { blurPlacement, bounds, computePlacement, quarterTurns, rasterPlan, rotatedPlan } from '../framing/framing'
-import type { CompositionExportJob, GifOptions, VideoExportJob } from '../types'
+import type { CompositionExportJob, GifDither, GifOptions, VideoExportJob } from '../types'
 
 const hex = (c: string): string => '0x' + c.replace('#', '').slice(0, 6).padEnd(6, '0')
 const rgb = (c: string): [number, number, number] => {
@@ -118,14 +118,19 @@ export function compositionArgs(job: CompositionExportJob, layer: string, cells:
   return args
 }
 
+/** Each dither as paletteuse's: ordered (Bayer) only, the smaller its scale the stronger. */
+const DITHER: Record<GifDither, string> = { none: 'none', light: 'bayer:bayer_scale=3', strong: 'bayer:bayer_scale=1' }
+
 /**
- * ffmpeg arguments for a GIF made from an export's MP4 (written first, nearly lossless): fewer frames,
- * scaled down, in 256 colours chosen for this clip, favouring what moves. Ordered dithering keeps
- * still areas still from frame to frame, so only what changes is stored again. Loops forever.
+ * ffmpeg arguments for a GIF made from an export's MP4 (written first, nearly lossless): grain smoothed
+ * out over time if asked, fewer frames, scaled down, in colours chosen for this clip, favouring what
+ * moves. A GIF stores again only what changed since the last frame, so what keeps still areas still
+ * keeps it small: less grain, and ordered dithering (error diffusion's pattern shifts every frame,
+ * which can triple the size). Loops forever.
  */
 export function gifArgs(input: string, output: string, gif: GifOptions): string[] {
   const graph =
-    `[0:v]fps=${gif.fps},scale=${gif.width}:-1:flags=lanczos:in_color_matrix=bt709:in_range=tv,format=rgb24,split[a][b];` +
-    `[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle[v]`
+    `[0:v]${gif.denoise ? 'hqdn3d=3:3:24:24,' : ''}fps=${gif.fps},scale=${gif.width}:-1:flags=lanczos:in_color_matrix=bt709:in_range=tv,format=rgb24,split[a][b];` +
+    `[a]palettegen=max_colors=${gif.colors}:stats_mode=diff[p];[b][p]paletteuse=dither=${DITHER[gif.dither]}:diff_mode=rectangle[v]`
   return ['-hide_banner', '-y', '-nostats', '-progress', 'pipe:1', '-i', input, '-filter_complex', graph, '-map', '[v]', '-an', '-loop', '0', output]
 }

@@ -162,7 +162,15 @@ export async function renderVideo(item: Item, prefs: ExportPrefs, cancelled: () 
 
 /** As a GIF, if that's the format: as wide as asked, never wider than the artboard. */
 const gifOf = (board: Artboard, prefs: ExportPrefs): GifOptions | undefined =>
-  prefs.videoFormat === 'gif' ? { width: Math.min(prefs.gifWidth || board.width, board.width), fps: prefs.gifFps } : undefined
+  prefs.videoFormat === 'gif'
+    ? {
+        width: Math.min(prefs.gifWidth || board.width, board.width),
+        fps: prefs.gifFps,
+        colors: prefs.gifColors,
+        dither: prefs.gifDither,
+        denoise: prefs.gifDenoise
+      }
+    : undefined
 
 /**
  * A composition with video in it: the renderer draws everything that doesn't move into one layer (the

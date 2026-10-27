@@ -20,7 +20,18 @@ export function emptyProject(): ProjectFile {
     version: 1,
     artboards: [newBoard('Square', 1080, 1080)],
     clips: {},
-    export: { dir: null, imageFormat: 'png', imageQuality: 0.92, videoCrf: 18, videoFormat: 'mp4', gifWidth: 600, gifFps: 15 },
+    export: {
+      dir: null,
+      imageFormat: 'png',
+      imageQuality: 0.92,
+      videoCrf: 18,
+      videoFormat: 'mp4',
+      gifWidth: 600,
+      gifFps: 15,
+      gifColors: 128,
+      gifDither: 'light',
+      gifDenoise: true
+    },
     items: {},
     files: {}
   }

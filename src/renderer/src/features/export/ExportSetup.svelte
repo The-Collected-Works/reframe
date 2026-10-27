@@ -1,6 +1,6 @@
 <!-- What to export and how: where to, which artboards, which assets, and image and video formats. -->
 <script lang="ts">
-  import type { Artboard, ExportPrefs } from '@shared/types'
+  import type { Artboard, ExportPrefs, GifDither } from '@shared/types'
   import { Button, Checkbox, Field, Segmented, Slider } from '../../ui'
 
   export type Scope = 'all' | 'visible' | 'selected'
@@ -48,6 +48,13 @@
   // Email is usually 600 wide; fewer pixels and frames make a much smaller GIF.
   const GIF_WIDTHS = [400, 600, 800]
   const GIF_FPS = [10, 15, 24]
+  // Fewer colours is the surest saving; dithering hides the bands that leaves, for a little size.
+  const GIF_COLORS = [256, 128, 64, 32]
+  const GIF_DITHER: { value: GifDither; label: string; title: string }[] = [
+    { value: 'none', label: 'None', title: 'Flat colours: smallest, but gradients show bands' },
+    { value: 'light', label: 'Light', title: 'A fine pattern softens bands in gradients' },
+    { value: 'strong', label: 'Strong', title: 'Smoothest gradients with few colours, with a visible pattern' }
+  ]
   const crfKey = $derived(QUALITY.reduce((best, q) => (Math.abs(q.crf - prefs.videoCrf) < Math.abs(best.crf - prefs.videoCrf) ? q : best)).value)
 </script>
 
@@ -140,6 +147,20 @@
           onChange={(f) => onPrefs({ gifFps: Number(f) })}
         />
       </div>
+    </Field>
+    <Field label="GIF colours and dithering">
+      <div class="inline">
+        <Segmented
+          value={String(prefs.gifColors)}
+          options={GIF_COLORS.map((c) => ({ value: String(c), label: String(c) }))}
+          onChange={(c) => onPrefs({ gifColors: Number(c) })}
+        />
+        <Segmented value={prefs.gifDither} options={GIF_DITHER} onChange={(gifDither) => onPrefs({ gifDither })} />
+      </div>
+      <Checkbox checked={prefs.gifDenoise} onChange={(gifDenoise) => onPrefs({ gifDenoise })}>
+        <span>Reduce grain</span>
+        <span class="muted small">Much smaller from filmed footage</span>
+      </Checkbox>
     </Field>
   {/if}
 {/if}

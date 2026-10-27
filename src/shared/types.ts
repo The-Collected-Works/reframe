@@ -120,6 +120,10 @@ export interface ExportPrefs {
   /** A GIF's width at most (0: the artboard's), and its frame rate. */
   gifWidth: number
   gifFps: number
+  /** A GIF's colours, at most, and how it hides the steps between them; and whether grain is smoothed out. */
+  gifColors: number
+  gifDither: GifDither
+  gifDenoise: boolean
 }
 
 export interface ProjectFile {
@@ -188,12 +192,20 @@ export interface VideoExportJob {
   gif?: GifOptions
 }
 
-/** A GIF's size and smoothness: fewer pixels and frames make a smaller file. */
+/** A GIF's size and look: fewer pixels, frames and colours, and less grain, make a smaller file. */
 export interface GifOptions {
   /** Pixels wide; its height follows. */
   width: number
   fps: number
+  /** Colours, at most (up to 256). */
+  colors: number
+  dither: GifDither
+  /** Smooth grain and noise out over time, so still areas stay still from frame to frame. */
+  denoise: boolean
 }
+
+/** How strongly a fine pattern of colours stands in for the ones a GIF hasn't: none shows bands. */
+export type GifDither = 'none' | 'light' | 'strong'
 
 /** One video cell of a composition export, framed into its rectangle like an artboard of that size. */
 export interface LayerJob {
