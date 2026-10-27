@@ -200,7 +200,8 @@
   const targets = $derived(new Map(shown.layers.map((l) => [l.id, l.rect])))
   let from = new Map<string, Rect>()
   let to = new Map<string, Rect>()
-  let gapDragging = false
+  /** The gap being dragged: cells follow it exactly (no gliding), and so does its grip. */
+  let draggedGap = $state<Gap | null>(null)
   const sameRect = (a: Rect | undefined, b: Rect) => !!a && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h
   $effect.pre(() => {
     const next = targets
@@ -209,7 +210,7 @@
       const first = !to.size
       from = new Map([...to.keys()].map((id) => [id, placedAt(id)!]))
       to = next
-      if (first || gapDragging || reducedMotion()) return void glide.set(1, { duration: 0 })
+      if (first || draggedGap || reducedMotion()) return void glide.set(1, { duration: 0 })
       glide.set(0, { duration: 0 })
       glide.set(1)
     })
@@ -301,6 +302,7 @@
     busy,
     hover,
     hoverGap,
+    draggedGap,
     drag,
     // A new frame to show, or the clock moving (paused, the exact frames are for one time only).
     frames: player?.version,
@@ -335,6 +337,9 @@
     // A small card of it: its shape, its longer side 88px at most.
     const ghostScale = ghostRect ? Math.min(88 / Math.max(ghostRect.w, ghostRect.h), f.view.k * 0.5) : 0
     const fr = f.framing
+    // The gap's grip: where the gap being dragged is now, or the one pointed at.
+    const g = f.draggedGap
+    const grip = g ? (f.shown.arrangement.dividers.find((x) => x.split === g.split && x.index === g.index) ?? null) : f.hoverGap
     drawCompositionStage(canvas.getContext('2d')!, {
       view: f.view,
       dpr,
@@ -353,7 +358,7 @@
             }
           : null,
       hover: f.hover && !f.nodes.includes(f.hover) && !d && !fr ? at(f.hover) : null,
-      hoverGap: f.hoverGap && !fr && !d ? { rect: f.hoverGap.rect, dir: f.hoverGap.dir } : null,
+      hoverGap: grip && !fr && !d ? { rect: grip.rect, dir: grip.dir, active: !!f.draggedGap } : null,
       structure: d ? [...f.shown.arrangement.splits].filter(([id]) => id !== f.shown.item.root.id).map(([, s]) => s.rect) : [],
       placeholder: d?.landing ? at(d.landing.kind === 'swap' ? d.landing.target : d.moving) : null,
       ghost:
@@ -487,7 +492,9 @@
       end: () => {
         endDrag = null
         busy = false
-        gapDragging = false
+        draggedGap = null
+        // Pointed at again once the pointer moves.
+        hoverGap = null
         endInteraction()
         guides = NO_GUIDES
         readout = null
@@ -541,7 +548,7 @@
     const aspect = aspectsOf(gap)
     // From the arrangement as the drag starts: the gap's split keeps its place while its shares change.
     const start = arrangement
-    gapDragging = true
+    draggedGap = gap
     follow(e, (x, y, m) => {
       const pt = toBoard(x, y)
       const res = dragGap(start, gap, gap.dir === 'row' ? pt.x : pt.y, k, aspect, m.altKey)

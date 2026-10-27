@@ -26,8 +26,8 @@ export interface CompositionFrame<S extends LayerSource = LayerSource> {
   selection: { rect: Rect; group: boolean; members: Rect[]; more: Rect[] } | null
   /** The cell under the pointer. */
   hover: Rect | null
-  /** The gap under the pointer (it can be dragged): a grip on it. */
-  hoverGap: { rect: Rect; dir: 'row' | 'col' } | null
+  /** The gap under the pointer (it can be dragged), or being dragged (`active`): a grip on it. */
+  hoverGap: { rect: Rect; dir: 'row' | 'col'; active?: boolean } | null
   /** Mid-drag: the groups (faintly), where it would land, and it, under the pointer. */
   structure: Rect[]
   placeholder: Rect | null
@@ -121,7 +121,7 @@ export function drawCompositionStage<S extends LayerSource>(ctx: CanvasRendering
     const g = f.hoverGap.rect
     const cx = ox + (g.x + g.w / 2) * kk
     const cy = oy + (g.y + g.h / 2) * kk
-    const long = Math.min(36 * dpr, (f.hoverGap.dir === 'row' ? g.h : g.w) * kk * 0.6)
+    const long = Math.min((f.hoverGap.active ? 48 : 36) * dpr, (f.hoverGap.dir === 'row' ? g.h : g.w) * kk * 0.6)
     const [w, h] = f.hoverGap.dir === 'row' ? [4 * dpr, long] : [long, 4 * dpr]
     ctx.fillStyle = accent
     ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
