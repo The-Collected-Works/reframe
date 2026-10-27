@@ -1,4 +1,4 @@
-import { resolveSettings } from '@shared/layout'
+import { resolveSettings } from '@shared/framing/framing'
 import type { Artboard, Clip, CropSettings, ExportPrefs, CompositionItem, ProjectFile, SettingKey, SplitArrangement } from '@shared/types'
 import { History } from './history.svelte'
 import { withComposition, withSplit } from './model/items'

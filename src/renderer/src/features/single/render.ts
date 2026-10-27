@@ -1,8 +1,8 @@
 import { drawComposition, type Composition, type Layer, type LayerPicture, type LayerSource } from '@shared/composition/compose'
-import { computeLayout, corners, drawFrame, type Placement, type Rect } from '@shared/layout'
+import { computePlacement, corners, drawFrame, type Placement, type Rect } from '@shared/framing/framing'
 import type { Artboard, CropSettings } from '@shared/types'
 import { themeColor } from '../../lib/theme'
-import type { Guides } from '../snapping'
+import type { Guides } from '@shared/framing/snapping'
 import type { View } from './camera.svelte'
 
 const HANDLE = 4.5
@@ -35,7 +35,7 @@ export function drawStage(ctx: CanvasRenderingContext2D, f: Frame): void {
   const oy = view.by * dpr
   const W = board.width
   const H = board.height
-  const p = f.sw ? computeLayout(W, H, f.sw, f.sh, settings) : null
+  const p = f.sw ? computePlacement(W, H, f.sw, f.sh, settings) : null
 
   // Overflow outside the board, faintly.
   if (source && p && f.active) {

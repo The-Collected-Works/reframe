@@ -1,4 +1,4 @@
-import type { Artboard, CropSettings } from './types'
+import type { Artboard, CropSettings } from '../types'
 
 export const DEFAULT_SETTINGS: CropSettings = {
   fit: 'fill',
@@ -67,7 +67,7 @@ function trig(deg: number): { c: number; s: number } {
 }
 
 /** Where the media lands on the artboard, in artboard pixels. */
-export function computeLayout(W: number, H: number, sw: number, sh: number, s: CropSettings): Placement {
+export function computePlacement(W: number, H: number, sw: number, sh: number, s: CropSettings): Placement {
   const { c, s: n } = trig(s.rotation)
   // Rotated bounding box of the unscaled source.
   const bbw = sw * c + sh * n
@@ -153,9 +153,9 @@ export function fromLocal(p: Placement, l: Point): Point {
 }
 
 /** Cover placement for the blurred background, oversized so blur edges stay outside the board. */
-export function blurLayout(W: number, H: number, sw: number, sh: number, blur: number, rotation: number): Placement {
+export function blurPlacement(W: number, H: number, sw: number, sh: number, blur: number, rotation: number): Placement {
   const m = blur * 2
-  const p = computeLayout(W + m * 2, H + m * 2, sw, sh, { ...DEFAULT_SETTINGS, rotation })
+  const p = computePlacement(W + m * 2, H + m * 2, sw, sh, { ...DEFAULT_SETTINGS, rotation })
   return { ...p, cx: W / 2, cy: H / 2 }
 }
 
@@ -262,10 +262,10 @@ export function drawFrame(ctx: Ctx, src: CanvasImageSource | null, sw: number, s
   if (src) {
     if (s.bg === 'blur') {
       ctx.filter = s.blur > 0 ? `blur(${s.blur * k}px)` : 'none'
-      drawPlaced(ctx, src, blurLayout(W, H, sw, sh, s.blur, s.rotation), k, s.flipX, s.flipY)
+      drawPlaced(ctx, src, blurPlacement(W, H, sw, sh, s.blur, s.rotation), k, s.flipX, s.flipY)
       ctx.filter = 'none'
     }
-    drawPlaced(ctx, src, computeLayout(W, H, sw, sh, s), k, s.flipX, s.flipY)
+    drawPlaced(ctx, src, computePlacement(W, H, sw, sh, s), k, s.flipX, s.flipY)
   }
   ctx.restore()
 }

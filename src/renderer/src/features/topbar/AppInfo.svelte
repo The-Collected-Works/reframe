@@ -3,7 +3,7 @@
   import { version } from '../../../../../package.json'
   import { chips } from '../../lib/keymap.svelte'
   import { Button, Kbd, Popover } from '../../ui'
-  import { KEYMAPS } from '../keymaps'
+  import { KEYMAPS } from '../../config/keymaps'
 
   // Each keymap's actions and unsectioned notes, then its notes under their own sub-headings.
   const sections = KEYMAPS.map((m) => {

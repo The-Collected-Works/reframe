@@ -1,5 +1,5 @@
 import type { Dir } from '@shared/composition/bento'
-import { resolveSettings } from '@shared/layout'
+import { resolveSettings } from '@shared/framing/framing'
 import { api, mac, win } from '../lib/bridge'
 import { fmtSize } from '../lib/format'
 import { hint } from '../lib/keymap.svelte'
@@ -33,7 +33,7 @@ import { selection } from '../state/selection.svelte'
 import { shell } from '../state/shell.svelte'
 import { view } from '../state/view.svelte'
 import { showMenu, type ContextMenuItem } from '../ui'
-import { GLOBAL, GRID, COMPOSITION_EDITOR } from './keymaps'
+import { GLOBAL, GRID, COMPOSITION_EDITOR } from '../config/keymaps'
 
 /** The right-click menus: on items (grid and single view), composition cells, artboard tabs, and folder headers. */
 

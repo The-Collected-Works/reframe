@@ -24,9 +24,6 @@ import { baseName, folderOf } from './tree'
 
 export const isVirtual = (key: string): boolean => key.startsWith('~')
 
-/** Each type of composition, as it's called on screen. */
-export const COMPOSITION_TYPES: Record<CompositionItem['type'], string> = { bento: 'Bento' }
-
 /** A row in the library: a file, a variant of one, or a composition. */
 export interface Entry {
   /** Its key: a file's name (its path from the open folder), or a variant's or composition's key. */

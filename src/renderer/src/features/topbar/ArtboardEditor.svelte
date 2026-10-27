@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
   import type { Artboard } from '@shared/types'
-  import { PRESETS } from '../../state/model/project'
+  import { PRESETS } from '../../config/presets'
   import { Button, MenuSeparator, NumberField, Popover } from '../../ui'
 
   type Patch = Partial<Pick<Artboard, 'width' | 'height'>>

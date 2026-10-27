@@ -1,4 +1,4 @@
-import type { ColorMeta } from './types'
+import type { ColorMeta } from '../types'
 
 const MATRIX: [RegExp, ColorMeta['matrix']][] = [
   [/bt709/, 'bt709'],

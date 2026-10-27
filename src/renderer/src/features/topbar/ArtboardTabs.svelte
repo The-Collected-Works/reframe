@@ -12,7 +12,7 @@
   import { hint } from '../../lib/keymap.svelte'
   import { reducedMotion } from '../../lib/motion'
   import { Icon } from '../../ui'
-  import { GLOBAL } from '../keymaps'
+  import { GLOBAL } from '../../config/keymaps'
   import ArtboardEditor from './ArtboardEditor.svelte'
 
   type Patch = Partial<Pick<Artboard, 'name' | 'width' | 'height'>>

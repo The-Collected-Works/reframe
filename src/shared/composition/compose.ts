@@ -1,4 +1,4 @@
-import { drawFrame, resolveSettings, type Rect } from '../layout'
+import { drawFrame, resolveSettings, type Rect } from '../framing/framing'
 import type { Artboard, CompositionItem, CropSettings } from '../types'
 import { arrange, slotKey, type Arrangement } from './bento'
 

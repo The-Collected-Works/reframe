@@ -7,16 +7,16 @@
 <script lang="ts">
   import { findNode, isSplit, type Gap } from '@shared/composition/bento'
   import type { Layer, LayerPicture } from '@shared/composition/compose'
-  import { bounds, computeLayout, type Placement, type Point } from '@shared/layout'
+  import { bounds, computePlacement, type Placement, type Point } from '@shared/framing/framing'
   import type { Artboard, CropSettings, SettingKey } from '@shared/types'
   import { trackPointer } from '../../lib/drag'
   import type { Asset } from '../../state/library.svelte'
   import type { Player } from '../../state/playback.svelte'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { Icon } from '../../ui'
-  import { COMPOSITION_EDITOR, SINGLE } from '../keymaps'
-  import type { Composed } from '../composition'
-  import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
+  import { COMPOSITION_EDITOR, SINGLE } from '../../config/keymaps'
+  import type { Composed } from '../../state/composition'
+  import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '@shared/framing/snapping'
   import { camera, type View } from './camera.svelte'
   import { dragGap, gapAt } from './gaps'
   import { dragTo, hitTest, type DragStart, type Mode } from './gizmo'
@@ -83,7 +83,7 @@
     if (!cell) return null
     const c = layers.get(cell.slot.id)
     const a = c?.source
-    const local = a?.w ? computeLayout(cell.rect.w, cell.rect.h, a.w, a.h, c!.settings) : null
+    const local = a?.w ? computePlacement(cell.rect.w, cell.rect.h, a.w, a.h, c!.settings) : null
     return { cell, asset: a, settings: c!.settings, local, placement: local ? onBoard(local, cell.rect) : null }
   })
   const onBoard = (p: Placement, r: { x: number; y: number }): Placement => ({ ...p, cx: p.cx + r.x, cy: p.cy + r.y })

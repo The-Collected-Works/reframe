@@ -1,4 +1,4 @@
-import type { MediaKind } from './types'
+import type { MediaKind } from '../types'
 
 /** Every format Reframe opens: what kind of asset it is, and the type it's served as. */
 const FORMATS: Record<string, { kind: MediaKind; mime: string }> = {

@@ -13,7 +13,7 @@
   import { shell } from '../../state/shell.svelte'
   import { view } from '../../state/view.svelte'
   import { Button, Segmented, Slider } from '../../ui'
-  import { GLOBAL } from '../keymaps'
+  import { GLOBAL } from '../../config/keymaps'
   import { boardMenu, openFolderMenu } from '../menus'
   import AddArtboard from './AddArtboard.svelte'
   import AppInfo from './AppInfo.svelte'

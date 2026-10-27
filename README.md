@@ -51,17 +51,32 @@ npm run e2e        # builds, then drives the app over the DevTools protocol on g
 
 ### Code layout
 
-The renderer (`src/renderer/src`) is Svelte 5:
+The code is in layers. Each may import only from the layers before it in this table (`src/layers.test.ts` checks, as part of `npm test`):
 
-- `state/`: app state as small stores by concern (`library`, `project` with its undo history, `view`, `selection`, `shell`, `preview`). `actions.ts` holds anything that spans several of them; `model/` is plain data helpers.
-- `ui/`: the UI kit (buttons, fields, menus, popovers, dialogs, the colour picker, the eyedropper), exported from `ui/index.ts`. Nothing in it knows about app state; it takes props and reports through callbacks.
-- `features/`: the app's screens (top bar, grid, single view, inspector, export). Each feature's root component is its only connection to state; the parts inside it take props.
-- `features/keymaps.ts`: every keyboard shortcut. The app runs them and the shortcuts panel lists them, so new ones go here.
-- `lib/`: plumbing with no app state (the bridge to the main process, media loading, drag tracking, motion).
-- `lib/playback/`: the playback engine everything that plays video uses (the single view, compositions, hover previews), in plain TypeScript with unit tests (`npm test`). A `Playback` is one clock and any number of tracks; each track's pictures come from a `Clip`, fed from playback copies sized to what's on screen (`Copies`: small, every frame a keyframe, made by the media worker for every video ahead of time, what's open first, and kept between sessions), and from the exact frame when the clock stops. Sound plays from the original file, apart from the pictures. `state/playback.svelte.ts` is the one place it meets Svelte: the app's copy store and `Player`, a playback with reactive outputs. See `docs/playback-roadmap.md`.
+| Layer | What it is | May import |
+|---|---|---|
+| `src/shared/` | The domain core, plain TypeScript, used by both processes | nothing outside it |
+| `src/main/`, `src/preload/` | The main process: folders, ffmpeg, exports, updates | `shared` |
+| `renderer/src/lib/` | Engines and plumbing that know nothing of the app | `shared` |
+| `renderer/src/ui/` | The UI kit | `shared`, `lib` |
+| `renderer/src/config/` | Static app data that several layers read | `shared`, `lib` |
+| `renderer/src/state/` | App state, actions, and where engines meet it | the above |
+| `renderer/src/features/` | The screens and tools | the above |
+| `renderer/src/` (root) | `App.svelte` and `main.ts`, wiring it all up | everything |
+
+What's in each:
+
+- `shared/`:
+  - `framing/`: how an asset sits in a frame (`framing.ts`: placement, drawing, settings) and snapping it to edges and centres (`snapping.ts`).
+  - `composition/`: compositions. `compose()` turns one into layers (each with its source, place, framing and timing) that the grid, the editor, playback and export all work from, so what's previewed is what's exported. Each type places its layers its own way; so far there's `bento` (cells in a tree of splits).
+  - `media/`: file types, colour handling, and the ffmpeg arguments export uses.
+  - `types.ts`: the data both processes share (projects, artboards, items, export jobs, the bridge's API).
+- `lib/`: the bridge to the main process, media loading, drag tracking, motion, the keymap engine; and `playback/`, the playback engine everything that plays video uses (the single view, compositions, hover previews), with unit tests. A `Playback` is one clock and any number of tracks; each track's pictures come from a `Clip`, fed from playback copies sized to what's on screen (`Copies`: small, every frame a keyframe, made for every video ahead of time, a few at once, what's open first, and kept between sessions), and from the exact frame when the clock stops. See `docs/playback-roadmap.md`.
+- `ui/`: buttons, fields, menus, popovers, dialogs, the colour picker, the eyedropper, exported from `ui/index.ts`. Nothing in it knows about app state; it takes props and reports through callbacks.
+- `config/`: plain data read across layers: every keyboard shortcut (`keymaps.ts`: the app runs them and the shortcuts panel lists them), artboard presets, view filters, composition types. Config is static: no state, nothing that reads the project. Something only one module uses stays in that module.
+- `state/`: small stores by concern (`library`, `project` with its undo history, `view`, `selection`, `shell`, `preview`), `actions.ts` for anything that spans several, `model/` for plain data helpers, and where engines meet app state: `playback.svelte.ts` (the copy store and `Player`, a playback with reactive outputs) and `composition.ts` (a composition as the app shows it).
+- `features/`: the top bar, grid, single view, inspector and export. Each feature's root component is its only connection to state; the parts inside it take props.
 - `styles/`: theme tokens, base element styles, a few utility classes and shared keyframes. Everything else is scoped to its component.
-
-The main process (`src/main`) scans folders, runs ffmpeg and writes exports. `src/shared` is what both sides use: the crop geometry (`layout.ts`), and compositions (`composition/`). `compose()` turns a composition into layers (each with its source, place, framing and timing) that the grid, the editor, playback and export all work from, so what's previewed is what's exported. Each type of composition places its layers its own way; so far there's `bento` (cells in a tree of splits).
 
 ## Build
 

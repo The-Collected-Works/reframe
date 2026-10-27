@@ -1,17 +1,8 @@
 /** What's remembered per user (in local storage): view options, folded folders, preview volume. */
 
-export type SortKey = 'name' | 'date' | 'type'
-export type FilterKey = 'sources' | 'variants' | 'compositions' | 'images' | 'videos' | 'adjusted' | 'excluded'
+import { FILTER_GROUPS, type FilterKey } from '../config/filters'
 
-/**
- * Filters in groups: what an item is, what's in it, what's been done to it. Within a group they add
- * up (images and videos); across groups each narrows the others (variants that are videos).
- */
-export const FILTER_GROUPS: FilterKey[][] = [
-  ['sources', 'variants', 'compositions'],
-  ['images', 'videos'],
-  ['adjusted', 'excluded']
-]
+export type SortKey = 'name' | 'date' | 'type'
 
 export interface ViewPrefs {
   /** Showing only these (see FILTER_GROUPS); none: everything. */

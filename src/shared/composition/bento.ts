@@ -1,4 +1,4 @@
-import type { Rect } from '../layout'
+import type { Rect } from '../framing/framing'
 import type { CompositionItem, BentoNode, Slot, Split, SplitArrangement } from '../types'
 
 /**

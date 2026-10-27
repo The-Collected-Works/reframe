@@ -4,7 +4,8 @@
   hiding something. Right-click the button to reset.
 -->
 <script lang="ts">
-  import { FILTER_GROUPS, type FilterKey, type SortKey, type ViewPrefs } from '../../state/prefs'
+  import { FILTER_GROUPS, FILTER_LABELS, type FilterKey } from '../../config/filters'
+  import type { SortKey, ViewPrefs } from '../../state/prefs'
   import { Button, MenuItem, MenuLabel, MenuSeparator, Popover, showMenu } from '../../ui'
 
   let {
@@ -25,15 +26,6 @@
     onReset: () => void
   } = $props()
 
-  const LABELS: Record<FilterKey, string> = {
-    sources: 'Source files',
-    variants: 'Variants',
-    compositions: 'Compositions',
-    images: 'Images',
-    videos: 'Videos',
-    adjusted: 'Adjusted',
-    excluded: 'Excluded from export'
-  }
   // Showing everything (All): every eye open, greyed. Otherwise on is lit, off is greyed and shut.
   const eye = (f: FilterKey) =>
     !prefs.filters.length
@@ -50,7 +42,7 @@
   ]
 
   let open = $state(false)
-  const showing = $derived(prefs.filters.map((f) => LABELS[f].toLowerCase()).join(', '))
+  const showing = $derived(prefs.filters.map((f) => FILTER_LABELS[f].toLowerCase()).join(', '))
 </script>
 
 <div class="anchor">
@@ -75,7 +67,7 @@
       {#each FILTER_GROUPS as group, i (i)}
         <div class="filter-gap"></div>
         {#each group as f (f)}
-          <MenuItem indicator={eye(f)} onclick={() => toggle(f)}>{LABELS[f]}</MenuItem>
+          <MenuItem indicator={eye(f)} onclick={() => toggle(f)}>{FILTER_LABELS[f]}</MenuItem>
         {/each}
       {/each}
       <MenuSeparator />

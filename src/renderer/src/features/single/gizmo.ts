@@ -1,6 +1,6 @@
-import { bounds, computeLayout, corners, fromLocal, quarterTurns, toLocal, type Placement, type Point } from '@shared/layout'
+import { bounds, computePlacement, corners, fromLocal, quarterTurns, toLocal, type Placement, type Point } from '@shared/framing/framing'
 import type { Artboard, CropSettings } from '@shared/types'
-import { dragOffset, NO_GUIDES, rotateAbout, snapAngle, snapScale, snapZoom, withPivot, ZOOM_MAX, ZOOM_MIN, type Guides } from '../snapping'
+import { dragOffset, NO_GUIDES, rotateAbout, snapAngle, snapScale, snapZoom, withPivot, ZOOM_MAX, ZOOM_MIN, type Guides } from '@shared/framing/snapping'
 
 /**
  * The transform gizmo in the single view, as plain geometry: what's under the pointer, and what a
@@ -94,7 +94,7 @@ export function dragTo(d: DragStart, pt: Point, mods: Modifiers): { patch: Parti
   const { mode, start, sw, sh, k } = d
   const W = d.board.width
   const H = d.board.height
-  const p0 = computeLayout(W, H, sw, sh, start)
+  const p0 = computePlacement(W, H, sw, sh, start)
   if (mode.kind === 'move') {
     const r = dragOffset(start, W, H, sw, sh, pt.x - d.at.x, pt.y - d.at.y, 6 / k, { shift: mods.shift, alt: mods.alt || mods.mod })
     return { patch: r.patch, guides: r.guides }

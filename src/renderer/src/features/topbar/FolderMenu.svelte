@@ -6,7 +6,7 @@
   import { hint } from '../../lib/keymap.svelte'
   import { basename, samePath } from '../../lib/paths'
   import { Icon, MenuItem, MenuLabel, MenuSeparator, Popover } from '../../ui'
-  import { GLOBAL } from '../keymaps'
+  import { GLOBAL } from '../../config/keymaps'
 
   let {
     dir,

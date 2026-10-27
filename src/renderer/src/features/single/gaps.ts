@@ -1,6 +1,6 @@
 import type { Gap, Arrangement } from '@shared/composition/bento'
-import type { Rect } from '@shared/layout'
-import type { Guides } from '../snapping'
+import type { Rect } from '@shared/framing/framing'
+import type { Guides } from '@shared/framing/snapping'
 
 /**
  * Dragging the gap between two cells (or two groups of cells) in the composition editor, as plain

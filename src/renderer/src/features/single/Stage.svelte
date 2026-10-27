@@ -5,14 +5,14 @@
 -->
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { bounds, computeLayout, type Point } from '@shared/layout'
+  import { bounds, computePlacement, type Point } from '@shared/framing/framing'
   import type { Artboard, CropSettings, SettingKey } from '@shared/types'
   import { trackPointer } from '../../lib/drag'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { loadStill } from '../../lib/media'
   import type { Asset } from '../../state/library.svelte'
-  import { SINGLE } from '../keymaps'
-  import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
+  import { SINGLE } from '../../config/keymaps'
+  import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '@shared/framing/snapping'
   import { camera, type View } from './camera.svelte'
   import { dragTo, hitTest, type DragStart } from './gizmo'
   import type { Player } from '../../state/playback.svelte'
@@ -65,7 +65,7 @@
   const RESERVED = 12 + 64 + 12 + 44 + 12 * 2
   const dpr = window.devicePixelRatio || 1
 
-  const placement = $derived(asset?.w ? computeLayout(board.width, board.height, asset.w, asset.h, settings) : null)
+  const placement = $derived(asset?.w ? computePlacement(board.width, board.height, asset.w, asset.h, settings) : null)
 
   let stage: HTMLDivElement
   let canvas: HTMLCanvasElement

@@ -1,6 +1,6 @@
 import { inColor, OUT_COLOR, OUT_TAGS } from './color'
-import { blurLayout, bounds, computeLayout, quarterTurns, rasterPlan, rotatedPlan } from './layout'
-import type { CompositionExportJob, VideoExportJob } from './types'
+import { blurPlacement, bounds, computePlacement, quarterTurns, rasterPlan, rotatedPlan } from '../framing/framing'
+import type { CompositionExportJob, VideoExportJob } from '../types'
 
 const hex = (c: string): string => '0x' + c.replace('#', '').slice(0, 6).padEnd(6, '0')
 const rgb = (c: string): [number, number, number] => {
@@ -29,11 +29,11 @@ function filterGraph(job: VideoExportJob): string {
   if (q == null) {
     // Arbitrary angle: crop the visible region, scale, rotate with alpha, overlay.
     const { srcWidth: sw, srcHeight: sh } = job
-    const placed = computeLayout(W, H, sw, sh, s)
+    const placed = computePlacement(W, H, sw, sh, s)
     const plan = rotatedPlan(W, H, sw, sh, placed)
     let bg: string
     if (s.bg === 'blur') {
-      const bl = blurLayout(W, H, sw, sh, s.blur, s.rotation)
+      const bl = blurPlacement(W, H, sw, sh, s.blur, s.rotation)
       const blur = s.blur > 0 ? `,gblur=sigma=${s.blur}` : ''
       bg = `scale=${Math.round(bl.w)}:${Math.round(bl.h)}:flags=bicubic,rotate=a=${bl.rot}:ow=${W}:oh=${H}:c=black${blur}`
     } else {
@@ -54,7 +54,7 @@ function filterGraph(job: VideoExportJob): string {
   const norm = `${base}${TRANSPOSE[q] ? ',' + TRANSPOSE[q] : ''}`
   // Transposing swaps the media's own axes, so its stretch swaps with them.
   const flat = { ...s, rotation: 0, scaleX: odd ? s.scaleY : s.scaleX, scaleY: odd ? s.scaleX : s.scaleY }
-  const plan = rasterPlan(W, H, sw, sh, bounds(computeLayout(W, H, sw, sh, flat)))
+  const plan = rasterPlan(W, H, sw, sh, bounds(computePlacement(W, H, sw, sh, flat)))
   const fg = plan
     ? `crop=${plan.crop.w}:${plan.crop.h}:${plan.crop.x}:${plan.crop.y},` +
       `scale=${plan.scale.w}:${plan.scale.h}:flags=lanczos,` +
@@ -62,7 +62,7 @@ function filterGraph(job: VideoExportJob): string {
     : null
 
   if (s.bg === 'blur') {
-    const bl = bounds(blurLayout(W, H, sw, sh, s.blur, 0))
+    const bl = bounds(blurPlacement(W, H, sw, sh, s.blur, 0))
     const bw = Math.round(bl.w)
     const bh = Math.round(bl.h)
     const blur = s.blur > 0 ? `,gblur=sigma=${s.blur}` : ''

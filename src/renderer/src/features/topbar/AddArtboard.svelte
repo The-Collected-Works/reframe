@@ -1,6 +1,6 @@
 <!-- The + after the tabs: a new artboard from a preset size, or a custom one. -->
 <script lang="ts">
-  import { PRESETS } from '../../state/model/project'
+  import { PRESETS } from '../../config/presets'
   import { Button, MenuItem, MenuSeparator, Popover } from '../../ui'
 
   /** `custom`: a size to set yourself (its editor opens). */

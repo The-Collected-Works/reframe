@@ -1,11 +1,11 @@
 import { compose, type Composition, type Layer, type LayerPicture } from '@shared/composition/compose'
-import { computeLayout } from '@shared/layout'
+import { computePlacement } from '@shared/framing/framing'
 import type { Artboard } from '@shared/types'
 import type { Track } from '../lib/playback/playback'
-import { items } from '../state/items.svelte'
-import type { Asset } from '../state/library.svelte'
-import { compositionOf } from '../state/model/items'
-import { project } from '../state/project.svelte'
+import { items } from './items.svelte'
+import type { Asset } from './library.svelte'
+import { compositionOf } from './model/items'
+import { project } from './project.svelte'
 
 /** A composition as the app shows it: its layers' sources are assets, with what's been loaded about them. */
 export type Composed = Composition<Asset> & {
@@ -52,7 +52,7 @@ export function tracksOf(c: Composition<Asset>, scale: number): Track[] {
   return c.layers.flatMap((l) => {
     const s = l.source
     if (s?.kind !== 'video' || !s.w || l.length <= 0) return []
-    const p = computeLayout(l.rect.w, l.rect.h, s.w, s.h, l.settings)
+    const p = computePlacement(l.rect.w, l.rect.h, s.w, s.h, l.settings)
     return [{ id: l.id, file: s, start: l.start, length: l.length, end: l.end, need: quantize(Math.max(p.w, p.h) * scale) }]
   })
 }

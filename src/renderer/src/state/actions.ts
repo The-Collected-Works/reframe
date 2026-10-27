@@ -15,7 +15,7 @@ import { project } from './project.svelte'
 import { selection } from './selection.svelte'
 import { shell } from './shell.svelte'
 import { view, type Mode } from './view.svelte'
-import { GLOBAL, GRID } from '../features/keymaps'
+import { GLOBAL, GRID } from '../config/keymaps'
 
 /**
  * What the app does across more than one store, or with the main process, or saying so in a

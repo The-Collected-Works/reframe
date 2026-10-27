@@ -3,7 +3,7 @@ import type { Artboard, Clip, CropSettings } from '@shared/types'
 import type { CopyState } from '../../lib/playback/copies'
 import type { Asset } from '../../state/library.svelte'
 import type { Entry } from '../../state/model/items'
-import type { Composed } from '../composition'
+import type { Composed } from '../../state/composition'
 
 export const GAP = 8
 /** Mat around each frame; matches the thumbnail's padding. */

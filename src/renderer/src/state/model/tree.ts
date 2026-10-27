@@ -1,6 +1,7 @@
-import { resolveSettings } from '@shared/layout'
+import { resolveSettings } from '@shared/framing/framing'
 import type { Artboard, SkippedFolder } from '@shared/types'
-import { FILTER_GROUPS, type FilterKey, type ViewPrefs } from '../prefs'
+import { FILTER_GROUPS, type FilterKey } from '../../config/filters'
+import type { ViewPrefs } from '../prefs'
 import type { Entry } from './items'
 import { hasOverrides } from './project'
 

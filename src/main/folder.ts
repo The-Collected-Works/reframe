@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promises as fs, watch, type FSWatcher } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
-import { kindOf } from '@shared/media'
+import { kindOf } from '@shared/media/media'
 import type { AssetEntry, FolderScan, MediaKind, ProjectFile, SkippedFolder } from '@shared/types'
 import { writeJsonAtomic } from './fsutil'
 

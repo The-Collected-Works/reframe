@@ -6,7 +6,7 @@ import { shell } from '../state/shell.svelte'
 import { view } from '../state/view.svelte'
 import { clearSelection, copy, openFolder, paste, redo, resetSelection, setMode, undo } from '../state/actions'
 import { pickBackground } from './inspector/eyedropper'
-import type { GLOBAL } from './keymaps'
+import type { GLOBAL } from '../config/keymaps'
 
 type Actions = keyof typeof GLOBAL.actions
 

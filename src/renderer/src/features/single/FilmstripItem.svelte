@@ -1,11 +1,11 @@
 <script lang="ts">
   import { drawComposition } from '@shared/composition/compose'
-  import { drawFrame, resolveSettings } from '@shared/layout'
+  import { drawFrame, resolveSettings } from '@shared/framing/framing'
   import type { Artboard } from '@shared/types'
   import { visibility } from '../../lib/attach'
   import { scheduleDraw } from '../../lib/draw-queue'
   import type { Asset } from '../../state/library.svelte'
-  import { thumbnail, type Composed } from '../composition'
+  import { thumbnail, type Composed } from '../../state/composition'
   import { FILM_HEIGHT } from './film'
 
   let {

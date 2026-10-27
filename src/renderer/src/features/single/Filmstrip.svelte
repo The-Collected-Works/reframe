@@ -11,7 +11,7 @@
   import { trackPointer } from '../../lib/drag'
   import { reducedMotion } from '../../lib/motion'
   import type { Asset } from '../../state/library.svelte'
-  import type { Composed } from '../composition'
+  import type { Composed } from '../../state/composition'
   import { FILM_GAP, FILM_HEIGHT, FILM_PAD } from './film'
   import FilmstripItem from './FilmstripItem.svelte'
 

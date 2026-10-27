@@ -1,5 +1,5 @@
-import { bounds, computeLayout, fromLocal, normDeg, toLocal, type Point } from '@shared/layout'
-import type { CropSettings } from '@shared/types'
+import { bounds, computePlacement, fromLocal, normDeg, toLocal, type Point } from './framing'
+import type { CropSettings } from '../types'
 
 export const ZOOM_MIN = 0.05
 export const ZOOM_MAX = 10
@@ -52,7 +52,7 @@ export function dragOffset(
     if (Math.abs(dx) > Math.abs(dy)) dy = 0
     else dx = 0
   }
-  const b = bounds(computeLayout(W, H, sw, sh, start))
+  const b = bounds(computePlacement(W, H, sw, sh, start))
   const sx = mods.alt ? { delta: 0, lines: [] } : snapAxis(b.x + dx, b.w, W, thresh)
   const sy = mods.alt ? { delta: 0, lines: [] } : snapAxis(b.y + dy, b.h, H, thresh)
   return {
@@ -71,8 +71,8 @@ export function withPivot(
   patch: Partial<CropSettings>,
   pivot: Point
 ): Partial<CropSettings> & Pick<CropSettings, 'offsetX' | 'offsetY'> {
-  const a = computeLayout(W, H, sw, sh, s)
-  const b = computeLayout(W, H, sw, sh, { ...s, ...patch })
+  const a = computePlacement(W, H, sw, sh, s)
+  const b = computePlacement(W, H, sw, sh, { ...s, ...patch })
   const moved = fromLocal(b, toLocal(a, pivot))
   return { ...patch, offsetX: s.offsetX + (pivot.x - moved.x) / W, offsetY: s.offsetY + (pivot.y - moved.y) / H }
 }
@@ -138,8 +138,8 @@ export function rotateAbout(
   sh: number,
   rotation: number
 ): Pick<CropSettings, 'rotation' | 'offsetX' | 'offsetY'> {
-  const a = computeLayout(W, H, sw, sh, s)
-  const b = computeLayout(W, H, sw, sh, { ...s, rotation: normDeg(rotation) })
+  const a = computePlacement(W, H, sw, sh, s)
+  const b = computePlacement(W, H, sw, sh, { ...s, rotation: normDeg(rotation) })
   return { rotation: normDeg(rotation), offsetX: s.offsetX + (a.cx - b.cx) / W, offsetY: s.offsetY + (a.cy - b.cy) / H }
 }
 

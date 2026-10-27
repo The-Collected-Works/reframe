@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from '../layout'
+import { DEFAULT_SETTINGS } from '../framing/framing'
 import type { Artboard, BentoComposition, BentoNode } from '../types'
 import { compose, layerTime, type LayerSource } from './compose'
 

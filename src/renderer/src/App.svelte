@@ -9,7 +9,7 @@
   import Grid from './features/grid/Grid.svelte'
   import { finishPick } from './features/inspector/eyedropper'
   import Inspector from './features/inspector/Inspector.svelte'
-  import { GLOBAL } from './features/keymaps'
+  import { GLOBAL } from './config/keymaps'
   import { blocked, GLOBAL_HANDLERS, quiet } from './features/shortcuts'
   import SingleView from './features/single/SingleView.svelte'
   import TopBar from './features/topbar/TopBar.svelte'

@@ -2,7 +2,7 @@ import { createReadStream, promises as fs } from 'node:fs'
 import { dirname, isAbsolute, join, normalize, relative, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
-import { mimeOf } from '@shared/media'
+import { mimeOf } from '@shared/media/media'
 import type { ColorMeta, FolderScan, CompositionExportJob, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
 import {
   cacheSize,

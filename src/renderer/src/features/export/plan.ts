@@ -1,5 +1,5 @@
 import { compose, drawComposition, type Composition, type LayerPicture } from '@shared/composition/compose'
-import { drawFrame, resolveSettings } from '@shared/layout'
+import { drawFrame, resolveSettings } from '@shared/framing/framing'
 import type { Artboard, Clip, ColorMeta, CropSettings, ExportPrefs, LayerJob, ProjectFile } from '@shared/types'
 import { api } from '../../lib/bridge'
 import { join } from '../../lib/paths'

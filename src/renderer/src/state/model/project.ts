@@ -1,19 +1,10 @@
-import { DEFAULT_SETTINGS } from '@shared/layout'
+import { DEFAULT_SETTINGS } from '@shared/framing/framing'
 import type { Artboard, CropSettings, ProjectFile, SettingKey } from '@shared/types'
 
 /**
  * The project: artboards (each with default settings and per-asset overrides), video trims and
  * export preferences, saved next to the assets. Everything here is plain data in, plain data out.
  */
-
-export const PRESETS: { name: string; width: number; height: number }[] = [
-  { name: 'Square', width: 1080, height: 1080 },
-  { name: 'Portrait', width: 1080, height: 1350 },
-  { name: 'Story', width: 1080, height: 1920 },
-  { name: 'Landscape', width: 1920, height: 1080 },
-  { name: 'Wide', width: 2560, height: 1080 },
-  { name: 'Classic', width: 1440, height: 1080 }
-]
 
 /** Every setting that frames an asset (all but whether it's exported). */
 export const FRAMING_KEYS = (Object.keys(DEFAULT_SETTINGS) as SettingKey[]).filter((k) => k !== 'skip')
