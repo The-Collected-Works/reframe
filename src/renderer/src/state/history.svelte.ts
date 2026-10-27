@@ -40,6 +40,13 @@ export class History<T> {
     this.current = next
   }
 
+  /** Changes every value, present, past and future, as if it had always been so. */
+  map(fn: (value: T) => T): void {
+    this.past = this.past.map(fn)
+    this.current = fn(this.current)
+    this.future = this.future.map(fn)
+  }
+
   /** Steps back; `carry` keeps parts of the present that undo shouldn't change. */
   undo(carry: (to: T, from: T) => T = (to) => to): boolean {
     const prev = this.past[this.past.length - 1]

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { inColor, OUT_TAGS, parseColor } from '@shared/media/color'
 import { compositionArgs, videoArgs } from '@shared/media/filtergraph'
 import type { ColorMeta, CompositionExportJob, PosterResult, VideoExportJob } from '@shared/types'
-import { writeJsonAtomic } from './fsutil'
+import { contentHash, writeJsonAtomic } from './fsutil'
 
 // Runs inside the media worker (see worker.ts); the main process passes these in.
 const FFMPEG = process.env.REFRAME_FFMPEG_BIN || 'ffmpeg'
@@ -167,34 +167,12 @@ const exists = (f: string) =>
 /** Cache file name for a source file by where it is, as it was keyed until 0.6 (see `contentKey`). */
 const cacheKey = (tag: string, path: string, st: Stats) => createHash('sha1').update(`${tag}|${path}|${st.size}|${st.mtimeMs}`).digest('hex')
 
-/** How much of a file's start, middle and end its content key reads. */
-const SAMPLE = 64 * 1024
-/** Content keys by path as the file was, so each file is read once for as long as it's unchanged. */
-const contentKeys = new Map<string, string>()
-
 /**
- * Cache file name for a source file by what's in it, not where it is: its size and a hash of 64 KB
- * from its start, middle and end (where a video's header and index are). Moved, renamed or
- * reorganised by a sync service, a file keeps its cache entries; edited, it gets new ones.
+ * Cache file name for a source file by what's in it, not where it is (see `contentHash`). Moved,
+ * renamed or reorganised by a sync service, a file keeps its cache entries; edited, it gets new ones.
  */
 async function contentKey(tag: string, path: string, st: Stats): Promise<string> {
-  const memo = `${path}|${st.size}|${st.mtimeMs}`
-  let key = contentKeys.get(memo)
-  if (!key) {
-    const hash = createHash('sha1').update(`${st.size}|`)
-    const fh = await fs.open(path, 'r')
-    try {
-      const n = Math.min(SAMPLE, st.size)
-      for (const at of [0, Math.max(0, Math.floor(st.size / 2 - n / 2)), Math.max(0, st.size - n)]) {
-        const buf = Buffer.alloc(n)
-        const { bytesRead } = await fh.read(buf, 0, n, at)
-        hash.update(buf.subarray(0, bytesRead))
-      }
-    } finally {
-      await fh.close()
-    }
-    contentKeys.set(memo, (key = hash.digest('hex')))
-  }
+  const key = await contentHash(path, st)
   return createHash('sha1').update(`${tag}|${key}`).digest('hex')
 }
 

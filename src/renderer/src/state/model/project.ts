@@ -21,7 +21,8 @@ export function emptyProject(): ProjectFile {
     artboards: [newBoard('Square', 1080, 1080)],
     clips: {},
     export: { dir: null, imageFormat: 'png', imageQuality: 0.92, videoCrf: 18 },
-    items: {}
+    items: {},
+    files: {}
   }
 }
 
@@ -50,7 +51,8 @@ export function normalizeProject(p: ProjectFile | null): ProjectFile {
     // Compositions were saved as "grid", then "layout", while they were being built (both bentos).
     items: Object.fromEntries(
       Object.entries(p.items ?? {}).map(([k, i]) => [k, ['grid', 'layout'].includes(i.kind as string) ? { ...i, kind: 'composition', type: 'bento' } : i])
-    ) as ProjectFile['items']
+    ) as ProjectFile['items'],
+    files: p.files ?? {}
   }
 }
 

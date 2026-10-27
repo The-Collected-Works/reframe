@@ -1,6 +1,7 @@
 import { resolveSettings } from '@shared/framing/framing'
-import type { Artboard, Clip, CropSettings, ExportPrefs, CompositionItem, ProjectFile, SettingKey, SplitArrangement } from '@shared/types'
+import type { Artboard, Clip, CropSettings, ExportPrefs, CompositionItem, Fingerprint, ProjectFile, SettingKey, SplitArrangement } from '@shared/types'
 import { History } from './history.svelte'
+import { relinked, sameFiles } from './model/files'
 import { withComposition, withSplit } from './model/items'
 import { changes, emptyProject, FRAMING_KEYS, newBoard, normalizeProject, uid, withOverrides, withoutOverrides } from './model/project'
 
@@ -146,15 +147,25 @@ class Project {
     this.history.replace({ ...this.file, export: { ...this.file.export, ...patch } })
   }
 
+  /** Files renamed or moved (from → to): every reference follows them, in what undo and redo bring back too. */
+  relink(moves: Map<string, string>): void {
+    if (moves.size) this.history.map((f) => relinked(f, moves))
+  }
+
+  /** The files' fingerprints aren't edits either: kept up to date, never undone. */
+  setFiles(files: Record<string, Fingerprint>): void {
+    if (!sameFiles(files, this.file.files ?? {})) this.history.replace({ ...this.file, files })
+  }
+
   undo(): boolean {
-    return this.afterStep(this.history.undo(this.keepExport))
+    return this.afterStep(this.history.undo(this.keepUnrecorded))
   }
 
   redo(): boolean {
-    return this.afterStep(this.history.redo(this.keepExport))
+    return this.afterStep(this.history.redo(this.keepUnrecorded))
   }
 
-  private keepExport = (to: ProjectFile, from: ProjectFile): ProjectFile => ({ ...to, export: from.export })
+  private keepUnrecorded = (to: ProjectFile, from: ProjectFile): ProjectFile => ({ ...to, export: from.export, files: from.files })
 
   /** Undo or redo can remove the artboard being edited; then the first one is. */
   private afterStep(stepped: boolean): boolean {

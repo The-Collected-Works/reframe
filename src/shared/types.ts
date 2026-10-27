@@ -126,6 +126,16 @@ export interface ProjectFile {
   export: ExportPrefs
   /** Variants and compositions, by key. */
   items?: Record<string, VirtualItem>
+  /** Each file the project refers to as it last was, so it's recognised if it's renamed or moved. */
+  files?: Record<string, Fingerprint>
+}
+
+/** A file as it was: `hash` (of what's in it; see main/fsutil) recognises it under another name. */
+export interface Fingerprint {
+  size: number
+  /** Unchanged size and mtime: the hash is still right. */
+  mtime: number
+  hash: string
 }
 
 export interface AssetEntry {
@@ -264,6 +274,8 @@ export interface ReframeApi {
   exportComposition(job: CompositionExportJob): Promise<void>
   cancelExport(): Promise<void>
   poster(path: string): Promise<PosterResult>
+  /** What's in each of these files (see Fingerprint); null for one that can't be read. */
+  hashFiles(paths: string[]): Promise<(string | null)[]>
   /**
    * A frame decoded the way export decodes it, as JPEG, no bigger than `edge` if given. A newer
    * request with the same `tag` stops the older one still decoding, which then gives null.

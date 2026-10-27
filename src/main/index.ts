@@ -18,6 +18,7 @@ import {
   poster,
   stopWorker
 } from './jobs'
+import { contentHash } from './fsutil'
 import { markFolder, noteSkipped, saveProject, scanFolder, setSkipped, unmarkFolder, watchFolder } from './folder'
 import { installUpdate, pollAutoUpdate, updateStatus } from './autoupdate'
 import { folderArg, forget, readState, recentFolders, remember, updateSystemMenus } from './recent'
@@ -276,6 +277,9 @@ ipcMain.handle('poster', (_e, path: string) => {
   mustRead(path)
   return poster(path)
 })
+ipcMain.handle('hash-files', (_e, paths: string[]) =>
+  Promise.all(paths.map((p) => (canRead(p) ? fs.stat(p).then((st) => contentHash(p, st)) : Promise.reject()).catch(() => null)))
+)
 ipcMain.handle('frame', (_e, path: string, time: number, color?: ColorMeta, tag?: string, edge?: number) => {
   mustRead(path)
   return frame(path, time, color, tag, edge)

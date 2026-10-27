@@ -1,7 +1,7 @@
 <!--
   The window: the top bar, then the content (grid or single view) beside the inspector, and what
   floats over them (the export dialog, toasts, the context menu). Also the app-wide plumbing: the
-  launch, autosave, shortcuts, file drops.
+  launch, autosave, following renamed files, shortcuts, file drops.
 -->
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
@@ -20,6 +20,7 @@
   import { basename } from './lib/paths'
   import { openFolder, rescanFolder } from './state/actions'
   import { autosave } from './state/autosave.svelte'
+  import { trackFiles } from './state/files.svelte'
   import { items } from './state/items.svelte'
   import { project } from './state/project.svelte'
   import { starts, type Start } from './state/starts.svelte'
@@ -42,6 +43,7 @@
   $effect(() => api.onFolderChanged(rescanFolder))
 
   const saving = autosave()
+  trackFiles()
 
   // Every video gets its playback copy ahead of time (what's showing in the grid first, then the
   // rest), so most are ready before they're opened. Copies are kept, so it's once per video.

@@ -2,7 +2,7 @@
 // they were called compositions; and variants, with the view filters that pick them out.
 
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { launch } from '../app.mjs'
 import { sleep } from '../cdp.mjs'
@@ -112,6 +112,31 @@ export default {
         await viewOption(app, 'All')
         assert.equal((await names(app)).length, 6)
         await app.key('Escape')
+      }
+    ],
+    [
+      'a renamed file keeps its variant, and everything else of it',
+      async ({ app, folder }) => {
+        const saved = () => JSON.parse(readFileSync(join(folder, '.reframe.json'), 'utf8'))
+        const deadline = Date.now() + 10000
+        while (!saved().files?.['h264.mp4']) {
+          assert.ok(Date.now() < deadline, 'its fingerprint saved')
+          await sleep(200)
+        }
+        const variant = `[...document.querySelectorAll('.cell')].some((c) => c.dataset.name.startsWith('~') && c.querySelector('.cell-name')?.textContent.trim() === 'h264 copy')`
+        for (const [from, to] of [
+          ['h264.mp4', 'renamed.mp4'],
+          ['renamed.mp4', 'h264.mp4']
+        ]) {
+          renameSync(join(folder, from), join(folder, to))
+          await app.waitFor(`!!document.querySelector('.cell[data-name="${to}"]')`, 5000, `${to} in the grid`)
+          await app.waitFor(variant, 5000, `the variant, of ${to}`)
+          await app.waitFor(`/Found/.test(document.querySelector('.toast')?.textContent ?? '')`, 3000, 'the toast')
+          // Saved shortly after.
+          await sleep(800)
+          const sources = Object.values(saved().items).flatMap((i) => (i.kind === 'variant' ? [i.source] : []))
+          assert.deepEqual(sources, [to], 'the variant saved as of the renamed file')
+        }
       }
     ],
     [

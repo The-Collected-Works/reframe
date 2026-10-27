@@ -26,6 +26,7 @@ const api: ReframeApi = {
   exportComposition: (job) => ipcRenderer.invoke('export-composition', job),
   cancelExport: () => ipcRenderer.invoke('cancel-export'),
   poster: (path) => ipcRenderer.invoke('poster', path),
+  hashFiles: (paths) => ipcRenderer.invoke('hash-files', paths),
   frame: (path, time, color, tag, edge) => ipcRenderer.invoke('frame', path, time, color, tag, edge),
   copy: (id, path, w, h, color, edge, duration, background, stream) => ipcRenderer.invoke('copy', id, path, w, h, color, edge, duration, background, stream),
   copiesMade: (list) => ipcRenderer.invoke('copies-made', list),
