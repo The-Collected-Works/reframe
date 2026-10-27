@@ -4,7 +4,7 @@ Notes for picking up work on the `grids` branch on another machine. Everything h
 
 ## How playback works now
 
-Everything that plays video goes through `src/renderer/src/lib/playback/`: the single view and compositions play through it, and hover previews in the grid play its copies.
+Everything that plays video goes through `src/renderer/src/lib/playback/`: the single view, compositions and the grid's hover previews (a one-track `Player`). One player bar (`features/single/PlayerBar.svelte`) serves videos and compositions.
 
 The engine is plain TypeScript with no Svelte inside. It's told what to do through methods, and it says when something changed through change signals (`emitter.ts`). The media worker comes in as an interface (`host.ts`), so the engine runs in Node against fakes: `npm test` runs its unit tests. `state/playback.svelte.ts` is the one place it meets Svelte:
 - the app's single `Copies` store, wrapped so each read follows what it depends on (what's made or wanted, and for progress, each step);
