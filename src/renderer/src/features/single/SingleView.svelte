@@ -185,28 +185,31 @@
       />
     </span>
   {/if}
-  {#if comp && compositionKey && outlineOpen}
-    <!-- The composition's structure, on the same ground as the viewport. -->
-    <aside class="structure">
-      <Outline
-        root={comp.item.root}
-        dirOf={dirsOn(comp.arrangement)}
-        cellOf={(id) => {
-          const s = comp.layers.find((l) => l.id === id)?.source
-          return s ? { label: s.label, thumb: s.thumb, w: s.w, h: s.h } : null
-        }}
-        selected={selection.nodes}
-        hover={structureHover}
-        onSelect={(id, add) => {
-          shell.adjusting = null
-          if (add) selection.toggleNode(id)
-          else selection.node = id
-        }}
-        onHover={(id) => (structureHover = id)}
-        onFlip={flipGroup}
-        onLanding={(moving, into) => (outlineDrag = moving ? { moving, into } : null)}
-        onDrop={(moving, into) => moveIntoGroup(moving, into.parent, into.index)}
-      />
+  {#if comp && compositionKey}
+    <!-- The composition's structure, on the same ground as the viewport. Folding it away slides it
+         shut, the stage (and the player and filmstrip under it) widening as it goes. -->
+    <aside class={['structure', { closed: !outlineOpen }]} inert={!outlineOpen}>
+      <div class="structure-rows">
+        <Outline
+          root={comp.item.root}
+          dirOf={dirsOn(comp.arrangement)}
+          cellOf={(id) => {
+            const s = comp.layers.find((l) => l.id === id)?.source
+            return s ? { label: s.label, thumb: s.thumb, w: s.w, h: s.h } : null
+          }}
+          selected={selection.nodes}
+          hover={structureHover}
+          onSelect={(id, add) => {
+            shell.adjusting = null
+            if (add) selection.toggleNode(id)
+            else selection.node = id
+          }}
+          onHover={(id) => (structureHover = id)}
+          onFlip={flipGroup}
+          onLanding={(moving, into) => (outlineDrag = moving ? { moving, into } : null)}
+          onDrop={(moving, into) => moveIntoGroup(moving, into.parent, into.index)}
+        />
+      </div>
     </aside>
   {/if}
   <div class="main">
@@ -339,11 +342,35 @@
   .structure {
     flex: none;
     width: 232px;
-    padding: 44px 8px 12px;
-    overflow-y: auto;
+    overflow: hidden;
     border-right: 1px solid var(--line);
     background: var(--well);
-    animation: rise-in 300ms var(--ease) 100ms both;
+    transition: width 260ms var(--ease);
+  }
+
+  .structure.closed {
+    width: 0;
+    border-right-width: 0;
+  }
+
+  /* Its full width while it slides, so the rows don't reflow: they slide out of sight with it. */
+  .structure-rows {
+    width: 232px;
+    height: 100%;
+    padding: 44px 8px 12px;
+    overflow-y: auto;
+    transition: opacity 200ms var(--ease);
+  }
+
+  .structure.closed .structure-rows {
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .structure,
+    .structure-rows {
+      transition: none;
+    }
   }
 
   /* Everything else: the stage, and the player and filmstrip centred under it. */
