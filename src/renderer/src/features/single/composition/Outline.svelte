@@ -1,6 +1,6 @@
 <!--
-  A composition's structure as an outline (in the single view's left panel): its groups (side by
-  side, or stacked) and cells, indented under the group they're in. Click a row to select it,
+  A composition's structure as an outline (in the single view's left panel): its groups (horizontal
+  or vertical stacks) and cells, indented under the group they're in. Click a row to select it,
   shift-click to add it to the selection; hovering one shows it on the stage. Drag a row to move it:
   between two rows, it goes there in their group; onto the middle of a group's row, to the end of
   that group. The stage shows where it would land while it's dragged (`onLanding`). Takes props.
@@ -30,6 +30,7 @@
     onSelect,
     onHover,
     onFlip,
+    onMenu,
     onLanding,
     onDrop
   }: {
@@ -43,6 +44,8 @@
     onSelect: (id: string, add: boolean) => void
     onHover: (id: string | null) => void
     onFlip: (group: string) => void
+    /** Right-click on a row. */
+    onMenu: (id: string, at: { x: number; y: number }) => void
     /** Mid-drag: where row `moving` would land (null: nowhere). */
     onLanding: (moving: string | null, into: Into | null) => void
     onDrop: (moving: string, into: Into) => void
@@ -150,19 +153,23 @@
       style:padding-left={`${4 + row.depth * INDENT}px`}
       onpointerdown={(e) => press(e, node.id)}
       onpointerenter={() => !dragging && onHover(node.id)}
+      oncontextmenu={(e) => {
+        e.preventDefault()
+        onMenu(node.id, { x: e.clientX, y: e.clientY })
+      }}
     >
       <!-- A faint line down each level it's inside. -->
       {#each { length: row.depth } as _, d (d)}<span class="guide" style:left={`${11 + d * INDENT}px`}></span>{/each}
       {#if isSplit(node)}
         <button
           class="dir"
-          title={dirOf(node) === 'row' ? 'Side by side: click to stack them' : 'Stacked: click to put them side by side'}
+          title={dirOf(node) === 'row' ? 'Horizontal stack: click to make it vertical' : 'Vertical stack: click to make it horizontal'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={() => onFlip(node.id)}
         >
           <Icon name={dirOf(node) === 'row' ? 'splitRow' : 'splitCol'} size={13} />
         </button>
-        <span class="name group">{dirOf(node) === 'row' ? 'Side by side' : 'Stacked'}</span>
+        <span class="name group">{dirOf(node) === 'row' ? 'Horizontal Stack' : 'Vertical Stack'}</span>
         {#if !node.dir}<span class="auto" title="Follows each artboard's shape">auto</span>{/if}
       {:else}
         <canvas class="thumb" {@attach thumb(cell)}></canvas>

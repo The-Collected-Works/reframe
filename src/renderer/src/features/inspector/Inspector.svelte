@@ -12,6 +12,7 @@
   import { fmtSize, fmtTime, plural } from '../../lib/format'
   import { hint } from '../../lib/keymap.svelte'
   import {
+    canUngroupNode,
     clearSelection,
     copy,
     edit,
@@ -25,7 +26,8 @@
     resetSelection,
     setGroupDir,
     setSlot,
-    targets
+    targets,
+    ungroupNode
   } from '../../state/actions'
   import { items } from '../../state/items.svelte'
   import type { Asset } from '../../state/library.svelte'
@@ -258,7 +260,13 @@
         onResetArrangement={() => compositions.forEach((k) => project.resetSplits(k))}
         onPick={pickBackground}
       />
-      {#if group}<CompositionGroup {group} nested={!!comp && parentOf(comp.item.root, group.id) !== null} onDir={setGroupDir} onEvenOut={evenOut} />{/if}
+      {#if group}<CompositionGroup
+          {group}
+          nested={!!comp && parentOf(comp.item.root, group.id) !== null}
+          onDir={setGroupDir}
+          onEvenOut={evenOut}
+          onUngroup={canUngroupNode(group.id) ? ungroupNode : undefined}
+        />{/if}
     </div>
     <footer class="insp-foot">
       <div class="spacer"></div>

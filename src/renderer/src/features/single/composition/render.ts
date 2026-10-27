@@ -8,6 +8,9 @@ import type { View } from '../camera.svelte'
 const HANDLE = 4.5
 /** A cell with nothing in it yet. */
 const EMPTY = 'rgba(128, 128, 128, 0.16)'
+/** Outlines, kept quiet: what's pointed at (and a selected group's members), and how strong the accent is for what's selected. */
+const HOVER = 'rgba(255, 255, 255, 0.28)'
+const SELECTED = 0.8
 
 /** The composition editor's view: the composition (as it is, or as a drag would leave it), and its chrome. */
 export interface CompositionFrame<S extends LayerSource = LayerSource> {
@@ -107,13 +110,12 @@ export function drawCompositionStage<S extends LayerSource>(ctx: CanvasRendering
     ctx.setLineDash([])
   }
 
+  // Pointed at: a faint line, not the accent (that's for what's selected).
   if (f.hover) {
-    ctx.strokeStyle = accent
-    ctx.globalAlpha = 0.55
-    ctx.lineWidth = 1.5 * dpr
-    outline(f.hover, 1.5 * dpr)
+    ctx.strokeStyle = HOVER
+    ctx.lineWidth = dpr
+    outline(f.hover, dpr)
     ctx.stroke()
-    ctx.globalAlpha = 1
   }
 
   // The gap under the pointer: a pill along its middle, to grab.
@@ -134,40 +136,34 @@ export function drawCompositionStage<S extends LayerSource>(ctx: CanvasRendering
 
   const sel = f.selection
   if (sel && !adjusting) {
-    ctx.strokeStyle = accent
     if (sel.group) {
-      // A group: tinted, its members outlined faintly inside it.
-      ctx.fillStyle = accent
-      ctx.globalAlpha = 0.07
-      outline(sel.rect, 3 * dpr)
-      ctx.fill()
-      ctx.globalAlpha = 0.45
+      // A group: its members outlined faintly inside it.
+      ctx.strokeStyle = HOVER
       ctx.lineWidth = dpr
       for (const m of sel.members) {
         outline(m, 0.5 * dpr)
         ctx.stroke()
       }
-      ctx.globalAlpha = 1
     }
-    ctx.lineWidth = 2 * dpr
-    ctx.shadowColor = accent
-    ctx.shadowBlur = 8 * dpr
+    ctx.strokeStyle = accent
+    ctx.globalAlpha = SELECTED
+    ctx.lineWidth = 1.5 * dpr
     for (const r of [sel.rect, ...sel.more]) {
       outline(r, (sel.group ? 3 : 1.5) * dpr)
       ctx.stroke()
     }
-    ctx.shadowBlur = 0
+    ctx.globalAlpha = 1
   }
 
   // Where it would land.
   if (f.placeholder) {
     ctx.fillStyle = accent
-    ctx.globalAlpha = 0.12
+    ctx.globalAlpha = 0.08
     outline(f.placeholder, -1 * dpr)
     ctx.fill()
-    ctx.globalAlpha = 0.9
+    ctx.globalAlpha = SELECTED
     ctx.strokeStyle = accent
-    ctx.lineWidth = 1.5 * dpr
+    ctx.lineWidth = dpr
     ctx.setLineDash([6 * dpr, 4 * dpr])
     outline(f.placeholder, -1 * dpr)
     ctx.stroke()
@@ -178,9 +174,11 @@ export function drawCompositionStage<S extends LayerSource>(ctx: CanvasRendering
   if (adjusting) {
     // The cell, then its media's transform box and handles.
     ctx.strokeStyle = accent
-    ctx.lineWidth = 2 * dpr
+    ctx.globalAlpha = SELECTED
+    ctx.lineWidth = 1.5 * dpr
     outline(adjusting.rect, 1.5 * dpr)
     ctx.stroke()
+    ctx.globalAlpha = 1
     ctx.lineWidth = dpr
     if (p) {
       const pts = corners(p).map((pt) => ({ x: ox + pt.x * kk, y: oy + pt.y * kk }))
@@ -243,7 +241,8 @@ export function drawCompositionStage<S extends LayerSource>(ctx: CanvasRendering
     ctx.restore()
     ctx.save()
     ctx.strokeStyle = accent
-    ctx.lineWidth = 2 * dpr
+    ctx.globalAlpha = SELECTED
+    ctx.lineWidth = 1.5 * dpr
     ctx.beginPath()
     ctx.roundRect(x, y, w, h, 8 * dpr)
     ctx.stroke()

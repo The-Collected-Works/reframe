@@ -1,3 +1,4 @@
+import { dirsOn, findNode, isSplit, parentOf } from '@shared/composition/bento'
 import { resolveSettings } from '@shared/framing/framing'
 import { api, mac, win } from '../lib/bridge'
 import { fmtSize } from '../lib/format'
@@ -19,10 +20,17 @@ import {
   removeNode,
   selectParent,
   addCell,
+  canGroupNodes,
+  canUngroupNode,
+  evenOut,
+  flipGroup,
+  groupNodes,
+  ungroupNode,
   resetSelection,
   setMode,
   setSlot
 } from '../state/actions'
+import type { Composed } from '../state/composition'
 import { items } from '../state/items.svelte'
 import { library } from '../state/library.svelte'
 import { isVirtual } from '../state/model/items'
@@ -35,7 +43,7 @@ import { view } from '../state/view.svelte'
 import { showMenu, type ContextMenuItem } from '../ui'
 import { GLOBAL, GRID, COMPOSITION_EDITOR } from '../config/keymaps'
 
-/** The right-click menus: on items (grid and single view), composition cells, artboard tabs, and folder headers. */
+/** The right-click menus: on items (grid and single view), parts of compositions, artboard tabs, and folder headers. */
 
 const revealLabel = mac ? 'Reveal in Finder' : win ? 'Show in Explorer' : 'Show in Folder'
 const openLabel = mac ? 'Open in Finder' : win ? 'Open in Explorer' : 'Open in File Manager'
@@ -127,28 +135,63 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
   else if (id === 'reveal') api.reveal(path)
 }
 
-/** Right-click on a composition's cell in the single view (it's selected first). */
-export async function slotMenu(slot: string, filled: boolean, video: boolean, end: 'loop' | 'hold', at: { x: number; y: number }): Promise<void> {
-  selection.node = slot
+/**
+ * Right-click on part of a composition in the single view (on the stage, or in its outline): a cell
+ * or a group, selected first; or, on one of several selected, what can be done to them all.
+ */
+export async function nodeMenu(node: string, comp: Composed, at: { x: number; y: number }): Promise<void> {
+  const root = comp.item.root
+  const target = findNode(root, node)
+  if (!target) return
+  const several = selection.nodes.length > 1 && selection.nodes.includes(node)
+  if (several) {
+    const ids = selection.nodes
+    const id = await showMenu(at.x, at.y, [
+      { id: 'group', label: 'Group Selection', icon: 'group', shortcut: hint(COMPOSITION_EDITOR.actions.group), enabled: canGroupNodes(ids) },
+      { separator: true },
+      { id: 'remove', label: `Remove ${ids.length}`, icon: 'trash', shortcut: hint(COMPOSITION_EDITOR.actions.remove), danger: true }
+    ])
+    if (id === 'group') groupNodes(ids)
+    else if (id === 'remove') removeNode(ids)
+    return
+  }
+  selection.node = node
+  const group = isSplit(target)
+  const layer = group ? undefined : comp.layers.find((l) => l.id === node)
+  const filled = !!layer?.source
+  const runs = group ? dirsOn(comp.arrangement)(target) : null
   const id = await showMenu(at.x, at.y, [
-    { id: 'choose', label: filled ? 'Replace…' : 'Choose…', icon: 'choose' },
-    ...(filled ? [{ id: 'adjust', label: 'Adjust', icon: 'frameMode' as const, shortcut: hint(COMPOSITION_EDITOR.actions.adjust) }] : []),
+    ...(group
+      ? [
+          { id: 'flip', label: runs === 'row' ? 'Make Vertical Stack' : 'Make Horizontal Stack', icon: 'flipDir' as const },
+          { id: 'even', label: 'Make Cells Equal', icon: 'evenOut' as const },
+          ...(canUngroupNode(node) ? [{ id: 'ungroup', label: 'Ungroup', icon: 'ungroup' as const, shortcut: hint(COMPOSITION_EDITOR.actions.ungroup) }] : [])
+        ]
+      : [
+          { id: 'choose', label: filled ? 'Replace…' : 'Choose…', icon: 'choose' as const },
+          ...(filled ? [{ id: 'adjust', label: 'Adjust', icon: 'frameMode' as const, shortcut: hint(COMPOSITION_EDITOR.actions.adjust) }] : [])
+        ]),
     { separator: true },
     { id: 'left', label: 'Add Cell to the Left', icon: 'plus' },
     { id: 'right', label: 'Add Cell to the Right', icon: 'plus' },
     { id: 'top', label: 'Add Cell Above', icon: 'plus' },
     { id: 'bottom', label: 'Add Cell Below', icon: 'plus' },
-    ...(video ? [{ separator: true }, { id: 'hold', label: 'Hold Last Frame When Shorter', icon: 'pause' as const, checked: end === 'hold' }] : []),
+    ...(layer?.source?.kind === 'video'
+      ? [{ separator: true }, { id: 'hold', label: 'Hold Last Frame When Shorter', icon: 'pause' as const, checked: layer.end === 'hold' }]
+      : []),
     { separator: true },
-    { id: 'parent', label: 'Select Its Group', icon: 'parent', shortcut: hint(COMPOSITION_EDITOR.actions.parent) },
-    { id: 'remove', label: 'Remove Cell', icon: 'trash', shortcut: hint(COMPOSITION_EDITOR.actions.remove), danger: true }
+    ...(parentOf(root, node) ? [{ id: 'parent', label: 'Select Its Group', icon: 'parent' as const, shortcut: hint(COMPOSITION_EDITOR.actions.parent) }] : []),
+    { id: 'remove', label: group ? 'Remove Group' : 'Remove Cell', icon: 'trash', shortcut: hint(COMPOSITION_EDITOR.actions.remove), danger: true }
   ])
-  if (id === 'choose') shell.choosing = slot
-  else if (id === 'adjust') shell.adjusting = slot
-  else if (id === 'left' || id === 'right' || id === 'top' || id === 'bottom') addCell(slot, id)
-  else if (id === 'hold') setSlot(slot, { end: end === 'hold' ? 'loop' : 'hold' })
+  if (id === 'choose') shell.choosing = node
+  else if (id === 'adjust') shell.adjusting = node
+  else if (id === 'flip') flipGroup(node)
+  else if (id === 'even') evenOut(node)
+  else if (id === 'ungroup') ungroupNode(node)
+  else if (id === 'left' || id === 'right' || id === 'top' || id === 'bottom') addCell(node, id)
+  else if (id === 'hold') setSlot(node, { end: layer?.end === 'hold' ? 'loop' : 'hold' })
   else if (id === 'parent') selectParent()
-  else if (id === 'remove') removeNode(slot)
+  else if (id === 'remove') removeNode(node)
 }
 
 /** Right-click menu for an artboard tab. */

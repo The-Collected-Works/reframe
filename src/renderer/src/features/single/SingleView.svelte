@@ -36,7 +36,7 @@
   import { view } from '../../state/view.svelte'
   import { Button } from '../../ui'
   import { SINGLE } from '../../config/keymaps'
-  import { assetMenu, slotMenu } from '../menus'
+  import { assetMenu, nodeMenu } from '../menus'
   import { composed, composedWith, quantize, tracksOf } from '../../state/composition'
   import Filmstrip from './Filmstrip.svelte'
   import CompositionStage from './composition/CompositionStage.svelte'
@@ -206,6 +206,7 @@
           }}
           onHover={(id) => (structureHover = id)}
           onFlip={flipGroup}
+          onMenu={(id, at) => nodeMenu(id, comp, at)}
           onLanding={(moving, into) => (outlineDrag = moving ? { moving, into } : null)}
           onDrop={(moving, into) => moveIntoGroup(moving, into.parent, into.index)}
         />
@@ -240,18 +241,13 @@
         onMove={moveNode}
         onSwap={swapSlots}
         onRemove={removeNode}
-        onFlip={flipGroup}
         onUngroup={ungroupNode}
         onGroup={groupNodes}
         onChoose={(slot) => {
           selection.node = slot
           shell.choosing = slot
         }}
-        onHold={(slot, hold) => setSlot(slot, { end: hold ? 'hold' : 'loop' })}
-        onMenu={(slot, at) => {
-          const layer = comp.layers.find((l) => l.id === slot)
-          slotMenu(slot, !!layer?.source, layer?.source?.kind === 'video', layer?.end ?? 'loop', at)
-        }}
+        onMenu={(id, at) => nodeMenu(id, comp, at)}
         onExit={() => setMode('grid')}
       />
     {:else}

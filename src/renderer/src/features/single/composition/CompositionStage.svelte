@@ -28,14 +28,13 @@
   import type { Composed } from '../../../state/composition'
   import type { Asset } from '../../../state/library.svelte'
   import type { Player } from '../../../state/playback.svelte'
-  import { Button, Icon } from '../../../ui'
+  import { Icon } from '../../../ui'
   import { camera, type View } from '../camera.svelte'
   import { dragTo, hitTest, type DragStart, type Mode as GizmoMode } from '../gizmo'
   import { fitBoard } from '../fit'
   import { WheelNav } from '../nav'
   import { zoomTransitions } from '../zoom.svelte'
   import { dropAt, landed, type Landing } from './drop'
-  import FloatingBar from './FloatingBar.svelte'
   import { dragGap, gapAt } from './gaps'
   import { drawCompositionStage } from './render'
 
@@ -65,11 +64,9 @@
     onMove,
     onSwap,
     onRemove,
-    onFlip,
     onUngroup,
     onGroup,
     onChoose,
-    onHold,
     onMenu,
     onExit
   }: {
@@ -110,14 +107,11 @@
     onMove: (node: string, target: string, side: Side) => void
     onSwap: (a: string, b: string) => void
     onRemove: (nodes: string[]) => void
-    onFlip: (group: string) => void
     onUngroup: (group: string) => void
     /** Nodes put in a group of their own (see `canGroup`). */
     onGroup: (nodes: string[]) => void
     /** Choose what a cell shows. */
     onChoose: (slot: string) => void
-    /** A video cell holding its last frame when it's shorter than the composition (or looping). */
-    onHold: (slot: string, hold: boolean) => void
     onMenu: (slot: string, at: { x: number; y: number }) => void
     /** Double-click on empty space: back to the grid. */
     onExit: () => void
@@ -193,7 +187,16 @@
     return r.root === root ? null : recompose(r.root, r.born)
   })
   /** What's drawn: the composition as it is, or as the drag would leave it. */
-  const shown = $derived(preview ?? comp)
+  const shown = $derived.by(() => {
+    if (preview) return preview
+    // Swapping: the two trade places (what each shows goes with it), as a move would show them.
+    const l = drag?.landing
+    if (!drag || l?.kind !== 'swap') return comp
+    const a = layers.get(drag.moving)?.rect
+    const b = layers.get(l.target)?.rect
+    if (!a || !b) return comp
+    return { ...comp, layers: comp.layers.map((x) => (x.id === drag.moving ? { ...x, rect: b } : x.id === l.target ? { ...x, rect: a } : x)) }
+  })
 
   // Cells glide to wherever they go next (not while a gap's dragged: they follow the pointer exactly).
   const glide = new Tween(1, { duration: 180, easing: cubicOut })
@@ -202,6 +205,8 @@
   let to = new Map<string, Rect>()
   /** The gap being dragged: cells follow it exactly (no gliding), and so does its grip. */
   let draggedGap = $state<Gap | null>(null)
+  /** A swap just dropped: it's shown as it'll be already, so it lands without gliding. */
+  let justSwapped = false
   const sameRect = (a: Rect | undefined, b: Rect) => !!a && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h
   $effect.pre(() => {
     const next = targets
@@ -210,7 +215,7 @@
       const first = !to.size
       from = new Map([...to.keys()].map((id) => [id, placedAt(id)!]))
       to = next
-      if (first || draggedGap || reducedMotion()) return void glide.set(1, { duration: 0 })
+      if (first || draggedGap || justSwapped || reducedMotion()) return void glide.set(1, { duration: 0 })
       glide.set(0, { duration: 0 })
       glide.set(1)
     })
@@ -277,16 +282,11 @@
   }
   /**
    * What each cell shows, mid-drag: what's moving leaves its place empty (the placeholder shows where
-   * it lands); swapping, the two trade pictures, the one landing as a placeholder.
+   * it lands, swapping too: see `shown`).
    */
   function picture(l: Layer<Asset>): LayerPicture | null {
     const d = drag
-    if (!d?.landing) return pictureOf(l)
-    if (d.landing.kind === 'swap') {
-      if (l.id === d.landing.target) return null
-      return l.id === d.moving ? pictureOf(layers.get(d.landing.target)) : pictureOf(l)
-    }
-    return within(root, d.moving, l.id) ? null : pictureOf(l)
+    return d?.landing && within(root, d.moving, l.id) ? null : pictureOf(l)
   }
 
   // Everything a frame is drawn from; the canvas redraws whenever it changes.
@@ -360,7 +360,7 @@
       hover: f.hover && !f.nodes.includes(f.hover) && !d && !fr ? at(f.hover) : null,
       hoverGap: grip && !fr && !d ? { rect: grip.rect, dir: grip.dir, active: !!f.draggedGap } : null,
       structure: d ? [...f.shown.arrangement.splits].filter(([id]) => id !== f.shown.item.root.id).map(([, s]) => s.rect) : [],
-      placeholder: d?.landing ? at(d.landing.kind === 'swap' ? d.landing.target : d.moving) : null,
+      placeholder: d?.landing ? at(d.moving) : null,
       ghost:
         d?.at && ghostRect
           ? {
@@ -588,7 +588,10 @@
         cellDrag = null
         if (!dragged) return add ? onToggle(id) : onSelect(id)
         if (d?.kind === 'swap') {
+          justSwapped = true
           onSwap(moving, d.target)
+          // (After the redraw that uses it.)
+          queueMicrotask(() => (justSwapped = false))
           // What was dragged is there now: keep it selected.
           onSelect(d.target)
         } else if (d?.kind === 'beside') onMove(moving, d.target, d.side)
@@ -671,14 +674,11 @@
   })
   const sel = $derived(selectedRect && !quiet ? onScreen(selectedRect, cam.current) : null)
   const empties = $derived(quiet || adjusting ? [] : comp.layers.filter((l) => !l.source).map((l) => ({ id: l.id, at: onScreen(l.rect, cam.current) })))
-  const selLayer = $derived(selectedNode && !isSplit(selectedNode) ? layers.get(selectedNode.id) : undefined)
-  const groupLabel = $derived(
-    selectedNode && isSplit(selectedNode) ? `${dirOf(selectedNode) === 'row' ? 'Side by side' : 'Stacked'} · ${selectedNode.children.length}` : ''
-  )
 </script>
 
 <div
   class="stage"
+  data-adjusting={adjusting ?? undefined}
   role="presentation"
   bind:this={stage}
   bind:clientWidth={width}
@@ -711,29 +711,7 @@
     {/if}
   {/each}
 
-  {#if sel && multi}
-    <FloatingBar at={sel} stageWidth={width}>
-      <span class="label">{nodes.length} selected</span>
-      <Button
-        icon="group"
-        iconSize={14}
-        disabled={!canGroup(nodes)}
-        title={canGroup(nodes)
-          ? `Group them, running the same way as the group they're in (${hint(COMPOSITION_EDITOR.actions.group)})`
-          : 'Only cells or groups in the same group, and not all of it, can be grouped'}
-        onclick={() => onGroup(nodes)}>Group</Button
-      >
-      <span class="sep"></span>
-      <Button
-        variant="icon"
-        icon="trash"
-        iconSize={14}
-        tone="danger"
-        title={`Remove them (${hint(COMPOSITION_EDITOR.actions.remove)})`}
-        onclick={() => onRemove(nodes)}
-      />
-    </FloatingBar>
-  {:else if sel && selectedNode && !adjusting}
+  {#if sel && selectedNode && !multi && !adjusting}
     <!-- A + on each edge of the selection: a new cell there. -->
     {#each SIDES as s (s.side)}
       <button
@@ -745,80 +723,9 @@
         onpointerdown={(ev) => ev.stopPropagation()}
         onclick={() => onAdd(selectedNode.id, s.side)}
       >
-        <Icon name="plus" size={11} />
+        <Icon name="plus" size={9} />
       </button>
     {/each}
-
-    <FloatingBar at={sel} stageWidth={width}>
-      {#if isSplit(selectedNode)}
-        <span class="label">{groupLabel}</span>
-        <Button
-          variant="icon"
-          icon="flipDir"
-          iconSize={15}
-          title={dirOf(selectedNode) === 'row' ? 'Stack them instead' : 'Put them side by side instead'}
-          onclick={() => onFlip(selectedNode.id)}
-        />
-        <Button variant="icon" icon="evenOut" iconSize={15} title="Make them equal (on this artboard)" onclick={() => onEvenOut(selectedNode.id)} />
-        {#if canUngroup(selectedNode.id)}
-          <Button
-            variant="icon"
-            icon="ungroup"
-            iconSize={15}
-            title={`Ungroup: spread them into the group around (${hint(COMPOSITION_EDITOR.actions.ungroup)})`}
-            onclick={() => onUngroup(selectedNode.id)}
-          />
-        {/if}
-      {:else}
-        <Button icon="choose" iconSize={14} onclick={() => onChoose(selectedNode.id)}>{selLayer?.source ? 'Replace…' : 'Choose…'}</Button>
-        {#if selLayer?.source}
-          <Button
-            icon="frameMode"
-            iconSize={14}
-            title={`Move, scale or rotate what it shows (double-click, or ${hint(COMPOSITION_EDITOR.actions.adjust)})`}
-            onclick={() => adjust(selectedNode.id)}>Adjust</Button
-          >
-        {/if}
-        {#if selLayer?.source?.kind === 'video'}
-          <Button
-            variant="icon"
-            icon="pause"
-            iconSize={14}
-            pressed={selLayer.end === 'hold'}
-            title="Hold the last frame when it's shorter than the composition (otherwise it loops)"
-            onclick={() => onHold(selectedNode.id, selLayer.end !== 'hold')}
-          />
-        {/if}
-      {/if}
-      <span class="sep"></span>
-      {#if parent}
-        <Button
-          variant="icon"
-          icon="parent"
-          iconSize={15}
-          title={`Select the group it's in (${hint(COMPOSITION_EDITOR.actions.parent)})`}
-          onclick={() => onSelect(parent.id)}
-        />
-      {/if}
-      <Button
-        variant="icon"
-        icon="trash"
-        iconSize={14}
-        tone="danger"
-        title={`Remove ${isSplit(selectedNode) ? 'the group' : 'the cell'} (${hint(COMPOSITION_EDITOR.actions.remove)})`}
-        onclick={() => onRemove([selectedNode.id])}
-      />
-    </FloatingBar>
-  {/if}
-
-  {#if framing && !quiet}
-    <FloatingBar at={onScreen(framing.cell.rect, cam.current)} stageWidth={width}>
-      <span class="label">Adjusting{framing.asset ? ` ${framing.asset.label}` : ''}</span>
-      <Button icon="reset" iconSize={14} title="Back to how its cell frames it (or double-click it)" onclick={() => onReset(framing.cell.slot.id, TRANSFORM)}
-        >Reset</Button
-      >
-      <Button variant="primary" title={`Done (${hint(COMPOSITION_EDITOR.actions.adjust)})`} onclick={() => adjust(null)}>Done</Button>
-    </FloatingBar>
   {/if}
 
   <button class="zoom-chip" title={manual ? `Fit to view (${hint(SINGLE.actions.fit)})` : 'Fit'} onpointerdown={(e) => e.stopPropagation()} onclick={fitView}>
@@ -866,32 +773,32 @@
     background: var(--hover);
   }
 
-  /* A + on an edge of the selection, half over it: white, ringed in the accent, filling on hover. */
+  /* A + on an edge of the selection, centred on it: small and solid, easier to hit than it looks. */
   .add {
     position: absolute;
     z-index: 3;
     display: grid;
     place-items: center;
-    width: 20px;
-    height: 20px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    background: #fff;
-    color: var(--accent);
-    box-shadow:
-      0 0 0 1.5px var(--accent),
-      0 2px 6px rgba(0, 0, 0, 0.45);
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
     animation: pop-in 160ms var(--ease) both;
-    transition:
-      transform var(--t-fast) var(--ease),
-      background-color var(--t-fast) var(--ease),
-      color var(--t-fast) var(--ease);
+    transition: transform var(--t-fast) var(--ease);
+  }
+
+  .add::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
   }
 
   .add:hover {
-    transform: translate(-50%, -50%) scale(1.2);
-    background: var(--accent);
-    color: #fff;
+    transform: translate(-50%, -50%) scale(1.25);
   }
 
   /* Floating glass over the media. */
