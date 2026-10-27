@@ -1,8 +1,8 @@
 // Electron utility process that does all ffmpeg work. Starting a process blocks the calling
 // thread (over a second on Windows while Defender scans ffmpeg.exe, or from a network/WSL path);
 // in the main process that would freeze the whole window. Here it only delays the result.
-import type { ColorMeta, LayoutExportJob, VideoExportJob } from '@shared/types'
-import { cacheSize, cancelCopy, cancelExport, clearCache, copiesMade, copy, exportLayout, exportVideo, frame, poster, shutdown } from './ffmpeg'
+import type { ColorMeta, CompositionExportJob, VideoExportJob } from '@shared/types'
+import { cacheSize, cancelCopy, cancelExport, clearCache, copiesMade, copy, exportComposition, exportVideo, frame, poster, shutdown } from './ffmpeg'
 
 export type WorkerRequest =
   | { id: number; type: 'poster'; path: string }
@@ -13,7 +13,7 @@ export type WorkerRequest =
   | { id: number; type: 'cache-size' }
   | { id: number; type: 'clear-cache' }
   | { id: number; type: 'export'; job: VideoExportJob }
-  | { id: number; type: 'layout'; job: LayoutExportJob }
+  | { id: number; type: 'composition'; job: CompositionExportJob }
   | { type: 'cancel' }
   | { type: 'shutdown' }
 
@@ -41,8 +41,8 @@ port.on('message', async ({ data }) => {
     else if (req.type === 'copies-made') reply({ id: req.id, result: await copiesMade(req.list) })
     else if (req.type === 'cache-size') reply({ id: req.id, result: await cacheSize() })
     else if (req.type === 'clear-cache') reply({ id: req.id, result: await clearCache() })
-    else if (req.type === 'layout') {
-      await exportLayout(req.job, (progress) => reply({ id: req.id, progress }))
+    else if (req.type === 'composition') {
+      await exportComposition(req.job, (progress) => reply({ id: req.id, progress }))
       reply({ id: req.id, result: null })
     } else {
       await exportVideo(req.job, (progress) => reply({ id: req.id, progress }))

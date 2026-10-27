@@ -1,4 +1,4 @@
-<!-- A layout's playback: play / pause, the time, a bar to scrub along, and how long it runs. -->
+<!-- A composition's playback: play / pause, the time, a bar to scrub along, and how long it runs. -->
 <script lang="ts">
   import { trackPointer } from '../../lib/drag'
   import { fmtTime } from '../../lib/format'
@@ -54,7 +54,7 @@
     <div class="head" style:left={`${(player.time / duration) * 100}%`}></div>
   </div>
   <span class="time muted">{fmtTime(duration)}</span>
-  <span class="silent" title="Layouts export without sound for now"><Icon name="volumeOff" /></span>
+  <span class="silent" title="Compositions export without sound for now"><Icon name="volumeOff" /></span>
 </div>
 
 <style>

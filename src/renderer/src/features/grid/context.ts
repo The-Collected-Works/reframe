@@ -3,7 +3,7 @@ import type { Artboard, Clip, CropSettings } from '@shared/types'
 import type { CopyState } from '../../lib/playback/copies'
 import type { Asset } from '../../state/library.svelte'
 import type { Entry } from '../../state/model/items'
-import type { LayoutScene } from '../scene'
+import type { CompositionScene } from '../scene'
 
 export const GAP = 8
 /** Mat around each frame; matches the thumbnail's padding. */
@@ -15,7 +15,7 @@ export const scroll = { last: 0 }
 type At = { x: number; y: number }
 
 /**
- * What the folders and thumbnails inside the grid get from it: the layout, each asset's data, and
+ * What the folders and thumbnails inside the grid get from it: the composition, each asset's data, and
  * what to call when something happens. Grid provides it; they don't read app state themselves.
  */
 export interface GridModel {
@@ -36,14 +36,14 @@ export interface GridModel {
   readonly previews: boolean
 
   asset(entry: Entry): Asset
-  /** A layout as it sits on the artboard. */
-  composite(name: string): LayoutScene | null
+  /** A composition as it sits on the artboard. */
+  composite(name: string): CompositionScene | null
   selected(name: string): boolean
   focused(name: string): boolean
   clip(name: string): Clip | undefined
   /** A video's playback copy being made (or waiting to be). */
   copying(entry: Entry): CopyState
-  /** A variant or layout whose name is being edited in place. */
+  /** A variant or composition whose name is being edited in place. */
   renaming(name: string): boolean
   /** The new name (null: cancelled). */
   rename(name: string, label: string | null): void

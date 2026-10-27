@@ -4,7 +4,7 @@ import { project } from './project.svelte'
 import { starts } from './starts.svelte'
 
 /**
- * Every item, as rows: the folder's files, their variants and the layouts. Rebuilt only when the
+ * Every item, as rows: the folder's files, their variants and the compositions. Rebuilt only when the
  * files or the items themselves change, never for an edit to how something is framed, so dragging
  * a slider never re-lays out the grid.
  */
@@ -24,9 +24,9 @@ class Items {
     return key ? this.byKey.get(key) : undefined
   }
 
-  /** What's been loaded about an item's file (a variant has its source's; a layout has no file). */
+  /** What's been loaded about an item's file (a variant has its source's; a composition has no file). */
   meta(e: Entry): AssetMeta | undefined {
-    return e.kind === 'layout' ? undefined : library.meta.get(e.source ?? e.name)
+    return e.kind === 'composition' ? undefined : library.meta.get(e.source ?? e.name)
   }
 
   /** An item with what's been loaded about its file. */

@@ -1,6 +1,6 @@
-import { drawLayout, type CellSource, type Arrangement } from '@shared/arrangement'
+import { drawBento, type CellSource, type Arrangement } from '@shared/composition/bento'
 import { computeLayout, corners, drawFrame, type Placement, type Rect } from '@shared/layout'
-import type { Artboard, CropSettings, LayoutItem, Slot } from '@shared/types'
+import type { Artboard, CropSettings, CompositionItem, Slot } from '@shared/types'
 import { themeColor } from '../../lib/theme'
 import type { Guides } from '../snapping'
 import type { View } from './camera.svelte'
@@ -114,12 +114,12 @@ export function drawStage(ctx: CanvasRenderingContext2D, f: Frame): void {
   ctx.restore()
 }
 
-/** The layout editor's view: the layout, and whatever editing chrome is showing. */
-export interface LayoutFrame {
+/** The composition editor's view: the composition, and whatever editing chrome is showing. */
+export interface CompositionFrame {
   view: View
   dpr: number
   board: Artboard
-  layout: LayoutItem
+  composition: CompositionItem
   arrangement: Arrangement
   source: (slot: Slot) => CellSource | null
   /** The cell being edited: its rectangle, and its media's placement there (in artboard pixels). */
@@ -137,9 +137,9 @@ export interface LayoutFrame {
 /** A cell with nothing in it yet. */
 const EMPTY = 'rgba(128, 128, 128, 0.16)'
 
-/** Draws the layout editor: the layout on its board, empty cells marked, and the selected cell's gizmo. */
-export function drawLayoutStage(ctx: CanvasRenderingContext2D, f: LayoutFrame): void {
-  const { view, dpr, board, layout, arrangement, selected } = f
+/** Draws the composition editor: the composition on its board, empty cells marked, and the selected cell's gizmo. */
+export function drawCompositionStage(ctx: CanvasRenderingContext2D, f: CompositionFrame): void {
+  const { view, dpr, board, composition, arrangement, selected } = f
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
   const kk = view.k * dpr
   const ox = view.bx * dpr
@@ -165,7 +165,7 @@ export function drawLayoutStage(ctx: CanvasRenderingContext2D, f: LayoutFrame): 
   ctx.beginPath()
   ctx.rect(0, 0, W * kk, H * kk)
   ctx.clip()
-  drawLayout(ctx, layout, arrangement, W, H, kk, f.source, EMPTY)
+  drawBento(ctx, composition, arrangement, W, H, kk, f.source, EMPTY)
   ctx.restore()
   if (!f.chrome) return
 

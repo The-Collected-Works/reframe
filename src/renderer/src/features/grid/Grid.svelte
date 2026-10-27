@@ -17,15 +17,15 @@
   import { Icon } from '../../ui'
   import { GRID } from '../keymaps'
   import { assetMenu, excludedFolderMenu, folderMenu } from '../menus'
-  import { layoutScene } from '../scene'
+  import { compositionScene } from '../scene'
   import { GAP, PAD, provideGrid, scroll } from './context'
   import GridFolder from './GridFolder.svelte'
   import { boxSelect } from './marquee'
 
   let { active }: { active: boolean } = $props()
 
-  const tree = $derived(view.layout.tree)
-  const sectioned = $derived(view.layout.sectioned)
+  const tree = $derived(view.grid.tree)
+  const sectioned = $derived(view.grid.sectioned)
   let frozen = project.board
   const board = $derived.by(() => {
     if (active) frozen = project.board
@@ -112,7 +112,7 @@
       return active && !shell.picking
     },
     asset: (entry) => items.with(entry),
-    composite: (name) => layoutScene(name, board),
+    composite: (name) => compositionScene(name, board),
     selected: (name) => selection.has(name),
     focused: (name) => selection.focus === name,
     clip: (name) => project.file.clips[name],

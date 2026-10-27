@@ -1,4 +1,4 @@
-import { slotTime } from '@shared/arrangement'
+import { slotTime } from '@shared/composition/bento'
 import { Clip, type ClipLike } from './clip'
 import { sizeFor, sizesOf, type Copies, type MediaFile } from './copies'
 import { Emitter } from './emitter'
@@ -6,7 +6,7 @@ import type { MediaHost } from './host'
 
 /**
  * Playback: one clock, and any number of videos following it. A single video in the single view is
- * one track; a layout is a track per video cell; anything later (sequences, sound mixes) is more of
+ * one track; a composition is a track per video cell; anything later (sequences, sound mixes) is more of
  * the same. Pictures come from playback copies sized to what's on screen (see Copies), or one still
  * being made, streamed as it's written; zoomed in past them all, when the clock stops, from the
  * exact frame (decoded by ffmpeg the way export decodes, at screen size). Sound comes from the

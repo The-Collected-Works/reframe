@@ -36,8 +36,8 @@ export const GRID = keymap({
     up: { keys: 'arrowup', label: 'Row above' },
     down: { keys: 'arrowdown', label: 'Row below' },
     duplicate: { keys: 'mod+d', label: 'Duplicate' },
-    combine: { keys: 'mod+g', label: 'Combine into a layout' },
-    remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Delete a variant or layout' }
+    combine: { keys: 'mod+g', label: 'Combine into a composition' },
+    remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Delete a variant or composition' }
   },
   notes: [
     { keys: 'shift+Click', label: 'Select a range' },
@@ -74,7 +74,7 @@ export const SINGLE = keymap({
 })
 
 export const LAYOUT_EDITOR = keymap({
-  title: 'Layout editor',
+  title: 'Composition editor',
   actions: {
     deselect: { keys: 'escape', label: 'Deselect the cell, then back to grid' },
     remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Remove the cell' }

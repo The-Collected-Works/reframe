@@ -1,11 +1,11 @@
 <!--
-  The layout editor's canvas: the layout on its artboard, framed by the camera. Drag a gap between
+  The composition editor's canvas: the composition on its artboard, framed by the camera. Drag a gap between
   cells to share the space differently (on this artboard); click a cell to frame what it shows,
   with the same gizmo as a single asset, clipped to its cell; drag the selected cell's tab onto
   another to swap them. Takes props; the single view connects it.
 -->
 <script lang="ts">
-  import { findNode, isSplit, type CellSource, type Gap } from '@shared/arrangement'
+  import { findNode, isSplit, type CellSource, type Gap } from '@shared/composition/bento'
   import { bounds, computeLayout, type Placement, type Point } from '@shared/layout'
   import type { Artboard, CropSettings, Slot, SettingKey } from '@shared/types'
   import { trackPointer } from '../../lib/drag'
@@ -13,13 +13,13 @@
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { Icon } from '../../ui'
   import { LAYOUT_EDITOR, SINGLE } from '../keymaps'
-  import type { LayoutScene } from '../scene'
+  import type { CompositionScene } from '../scene'
   import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
   import { camera, type View } from './camera.svelte'
   import { dragGap, gapAt } from './gaps'
   import { dragTo, hitTest, type DragStart, type Mode } from './gizmo'
   import { WheelNav } from './nav'
-  import { drawLayoutStage } from './render'
+  import { drawCompositionStage } from './render'
   import { zoomTransitions } from './zoom.svelte'
 
   let {
@@ -40,7 +40,7 @@
     onExit
   }: {
     board: Artboard
-    scene: LayoutScene
+    scene: CompositionScene
     /** The cell being edited. */
     slot: string | null
     /** Its videos' playback (a track per video cell, by slot). */
@@ -122,7 +122,7 @@
     interacting = false
     settled++
   }
-  // A new layout goes back to Fit. (By key: the scene object itself is new after every edit.)
+  // A new composition goes back to Fit. (By key: the scene object itself is new after every edit.)
   const sceneKey = $derived(scene.key)
   let manual = $derived.by((): View | null => {
     void sceneKey
@@ -187,11 +187,11 @@
       canvas.height = ph
     }
     const sel = f.selected
-    drawLayoutStage(canvas.getContext('2d')!, {
+    drawCompositionStage(canvas.getContext('2d')!, {
       view: f.view,
       dpr,
       board: f.board,
-      layout: f.scene.layout,
+      composition: f.scene.composition,
       arrangement: f.scene.arrangement,
       source,
       selected: sel ? { rect: sel.cell.rect, placement: sel.placement, source: source(sel.cell.slot) } : null,
@@ -361,7 +361,7 @@
 
   /** The content's own shape, for the cells either side of a gap (snapping so it fits uncropped). */
   function aspectsOf(gap: Gap): (index: number) => number | null {
-    const split = findNode(scene.layout.root, gap.split)
+    const split = findNode(scene.composition.root, gap.split)
     return (i) => {
       const child = split && isSplit(split) ? split.children[i] : null
       if (!child || isSplit(child)) return null

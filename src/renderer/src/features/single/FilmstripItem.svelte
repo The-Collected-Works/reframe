@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { drawLayout } from '@shared/arrangement'
+  import { drawBento } from '@shared/composition/bento'
   import { drawFrame, resolveSettings } from '@shared/layout'
   import type { Artboard } from '@shared/types'
   import { visibility } from '../../lib/attach'
   import { scheduleDraw } from '../../lib/draw-queue'
   import type { Asset } from '../../state/library.svelte'
-  import { thumbSource, type LayoutScene } from '../scene'
+  import { thumbSource, type CompositionScene } from '../scene'
   import { FILM_HEIGHT } from './film'
 
   let {
@@ -18,8 +18,8 @@
   }: {
     asset: Asset
     board: Artboard
-    /** A layout, as it sits on the board. */
-    scene: LayoutScene | null
+    /** A composition, as it sits on the board. */
+    scene: CompositionScene | null
     /** The one the single view shows. */
     on: boolean
     onclick: () => void
@@ -47,7 +47,7 @@
       canvas.height = ph
     }
     const ctx = canvas.getContext('2d')!
-    if (scene) drawLayout(ctx, scene.layout, scene.arrangement, board.width, board.height, pw / board.width, thumbSource(scene))
+    if (scene) drawBento(ctx, scene.composition, scene.arrangement, board.width, board.height, pw / board.width, thumbSource(scene))
     else drawFrame(ctx, asset.thumb, asset.w, asset.h, board.width, board.height, settings, pw / board.width)
     ready = true
     drawn = key

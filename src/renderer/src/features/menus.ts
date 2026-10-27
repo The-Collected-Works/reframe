@@ -1,11 +1,11 @@
-import type { Dir } from '@shared/arrangement'
+import type { Dir } from '@shared/composition/bento'
 import { resolveSettings } from '@shared/layout'
 import { api, mac, win } from '../lib/bridge'
 import { fmtSize } from '../lib/format'
 import { hint } from '../lib/keymap.svelte'
 import { inside } from '../lib/paths'
 import {
-  addToLayout,
+  addToComposition,
   clearCache,
   combineSelection,
   copy,
@@ -27,7 +27,7 @@ import { items } from '../state/items.svelte'
 import { library } from '../state/library.svelte'
 import { isVirtual } from '../state/model/items'
 import { hasOverrides } from '../state/model/project'
-import { folderOf, LAYOUTS } from '../state/model/tree'
+import { folderOf, COMPOSITIONS } from '../state/model/tree'
 import { project } from '../state/project.svelte'
 import { selection } from '../state/selection.svelte'
 import { shell } from '../state/shell.svelte'
@@ -35,7 +35,7 @@ import { view } from '../state/view.svelte'
 import { showMenu, type ContextMenuItem } from '../ui'
 import { GLOBAL, GRID, LAYOUT_EDITOR } from './keymaps'
 
-/** The right-click menus: on items (grid and single view), layout cells, artboard tabs, and folder headers. */
+/** The right-click menus: on items (grid and single view), composition cells, artboard tabs, and folder headers. */
 
 const revealLabel = mac ? 'Reveal in Finder' : win ? 'Show in Explorer' : 'Show in Folder'
 const openLabel = mac ? 'Open in Finder' : win ? 'Open in Explorer' : 'Open in File Manager'
@@ -56,7 +56,7 @@ export async function openFolderMenu(at: { x: number; y: number }): Promise<void
 }
 
 /**
- * Right-click menu for an item (a file, a variant or a layout). Right-clicking outside the selection
+ * Right-click menu for an item (a file, a variant or a composition). Right-clicking outside the selection
  * selects it first.
  */
 export async function assetMenu(name: string, path: string, at: { x: number; y: number }, inSingle = false): Promise<void> {
@@ -64,23 +64,23 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
   const board = project.board
   const sel = selection.names
   const skip = resolveSettings(board, name).skip
-  const layout = items.entry(name)?.kind === 'layout'
-  const assets = sel.filter((n) => items.entry(n)?.kind !== 'layout')
-  const layouts = items.all.filter((e) => e.kind === 'layout')
+  const composition = items.entry(name)?.kind === 'composition'
+  const assets = sel.filter((n) => items.entry(n)?.kind !== 'composition')
+  const compositions = items.all.filter((e) => e.kind === 'composition')
   const id = await showMenu(at.x, at.y, [
     ...(inSingle ? [] : [{ id: 'open', label: 'Open', icon: 'open' as const, shortcut: hint(GRID.actions.open) }, { separator: true }]),
     ...(inSingle
       ? []
       : [
           { id: 'duplicate', label: 'Duplicate', icon: 'duplicate' as const, shortcut: hint(GRID.actions.duplicate) },
-          { id: 'combine', label: 'Combine into Layout', icon: 'layout' as const, shortcut: hint(GRID.actions.combine), enabled: assets.length > 0 },
-          // One per layout, while there are few enough to list.
-          ...(assets.length && layouts.length && layouts.length <= 6
-            ? layouts.map((g): ContextMenuItem => ({ id: `add:${g.name}`, label: `Add to “${g.label}”`, icon: 'plus' }))
+          { id: 'combine', label: 'Combine into Composition', icon: 'composition' as const, shortcut: hint(GRID.actions.combine), enabled: assets.length > 0 },
+          // One per composition, while there are few enough to list.
+          ...(assets.length && compositions.length && compositions.length <= 6
+            ? compositions.map((g): ContextMenuItem => ({ id: `add:${g.name}`, label: `Add to “${g.label}”`, icon: 'plus' }))
             : []),
           { separator: true }
         ]),
-    ...(layout
+    ...(composition
       ? []
       : [
           { id: 'copy', label: 'Copy Settings', icon: 'copy' as const, shortcut: hint(GLOBAL.actions.copy), enabled: sel.length === 1 },
@@ -103,13 +103,13 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
     { id: 'leaveOut', label: 'Leave Out of Export', icon: 'leaveOut', checked: skip },
     { separator: true },
     ...(isVirtual(name) ? [{ id: 'rename', label: 'Rename', icon: 'rename' as const }] : []),
-    ...(layout ? [] : [{ id: 'reveal', label: revealLabel, icon: 'reveal' as const }]),
+    ...(composition ? [] : [{ id: 'reveal', label: revealLabel, icon: 'reveal' as const }]),
     ...(sel.some(isVirtual) ? [{ id: 'delete', label: 'Delete', icon: 'trash' as const, shortcut: hint(GRID.actions.remove), danger: true }] : [])
   ])
   if (id === 'open') setMode('single')
   else if (id === 'duplicate') duplicateSelection()
   else if (id === 'combine') combineSelection()
-  else if (id?.startsWith('add:')) addToLayout(id.slice(4))
+  else if (id?.startsWith('add:')) addToComposition(id.slice(4))
   else if (id === 'copy') copy()
   else if (id === 'paste') paste()
   else if (id === 'reset') resetSelection()
@@ -121,7 +121,7 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
   else if (id === 'reveal') api.reveal(path)
 }
 
-/** Right-click on a layout's cell in the single view (it's selected first). */
+/** Right-click on a composition's cell in the single view (it's selected first). */
 export async function slotMenu(slot: string, filled: boolean, video: boolean, end: 'loop' | 'hold', at: { x: number; y: number }): Promise<void> {
   selection.slot = slot
   const id = await showMenu(at.x, at.y, [
@@ -160,17 +160,17 @@ export async function boardMenu(boardId: string, at: { x: number; y: number }): 
 
 /** Right-click on a folder's section header in the grid. */
 export async function folderMenu(folder: string, at: { x: number; y: number }): Promise<void> {
-  if (folder === LAYOUTS) {
-    const layouts = view.visible.filter((a) => a.kind === 'layout').map((a) => a.name)
-    const id = await showMenu(at.x, at.y, [{ id: 'select', label: 'Select All Layouts', icon: 'check', enabled: layouts.length > 0 }])
-    if (id === 'select') selection.set(layouts)
+  if (folder === COMPOSITIONS) {
+    const compositions = view.visible.filter((a) => a.kind === 'composition').map((a) => a.name)
+    const id = await showMenu(at.x, at.y, [{ id: 'select', label: 'Select All Compositions', icon: 'check', enabled: compositions.length > 0 }])
+    if (id === 'select') selection.set(compositions)
     return
   }
   // What's visible in the folder and the folders inside it (selecting hidden assets would let edits
   // land out of sight). A variant is in its file's folder.
   const home = (a: { name: string; source?: string }) => a.source ?? a.name
   const names = view.visible
-    .filter((a) => a.kind !== 'layout' && (folderOf(home(a)) === folder || (folder !== '' && home(a).startsWith(folder + '/'))))
+    .filter((a) => a.kind !== 'composition' && (folderOf(home(a)) === folder || (folder !== '' && home(a).startsWith(folder + '/'))))
     .map((a) => a.name)
   const id = await showMenu(at.x, at.y, [
     { id: 'select', label: 'Select All in Folder', icon: 'check', enabled: names.length > 0 },

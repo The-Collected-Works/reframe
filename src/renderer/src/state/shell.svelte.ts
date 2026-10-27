@@ -5,9 +5,9 @@ class Shell {
   editingBoard = $state.raw<string | null>(null)
   /** The artboard whose tab is being renamed in place, if any. */
   renamingBoard = $state.raw<string | null>(null)
-  /** A layout's slot whose content is being chosen (the picker is open). */
+  /** A composition's slot whose content is being chosen (the picker is open). */
   choosing = $state.raw<string | null>(null)
-  /** A variant or layout being renamed in place, if any. */
+  /** A variant or composition being renamed in place, if any. */
   renamingItem = $state.raw<string | null>(null)
   /** Eyedropper armed: the next click on the screen samples the background colour. */
   picking = $state.raw(false)

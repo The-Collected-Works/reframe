@@ -1,11 +1,11 @@
 <!--
-  One item at a time, large: the stage (or for a layout, the layout editor), and floating over the band
-  reserved at its bottom, the player (for videos and layouts with video) and the filmstrip. The
+  One item at a time, large: the stage (or for a composition, the composition editor), and floating over the band
+  reserved at its bottom, the player (for videos and compositions with video) and the filmstrip. The
   single view's connection to app state; the parts inside take props.
 -->
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { slotKey } from '@shared/arrangement'
+  import { slotKey } from '@shared/composition/bento'
   import { computeLayout, drawFrame } from '@shared/layout'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { removeSlot, setMode, setSlot, swapSlots } from '../../state/actions'
@@ -21,20 +21,20 @@
   import { Button } from '../../ui'
   import { SINGLE } from '../keymaps'
   import { assetMenu, slotMenu } from '../menus'
-  import { layoutScene } from '../scene'
+  import { compositionScene } from '../scene'
   import Filmstrip from './Filmstrip.svelte'
-  import LayoutPlayerBar from './LayoutPlayerBar.svelte'
-  import LayoutStage from './LayoutStage.svelte'
+  import CompositionPlayerBar from './CompositionPlayerBar.svelte'
+  import CompositionStage from './CompositionStage.svelte'
   import ItemPicker from './ItemPicker.svelte'
   import PlayerBar from './PlayerBar.svelte'
   import Stage from './Stage.svelte'
 
   const focused = $derived(items.entry(selection.focus))
   const board = $derived(project.board)
-  // A layout opens in the layout editor; anything else on the stage.
-  const layoutKey = $derived(focused?.kind === 'layout' ? focused.name : null)
-  const scene = $derived(layoutKey ? layoutScene(layoutKey, board) : null)
-  const asset = $derived(layoutKey ? undefined : items.asset(selection.focus))
+  // A composition opens in the composition editor; anything else on the stage.
+  const compositionKey = $derived(focused?.kind === 'composition' ? focused.name : null)
+  const scene = $derived(compositionKey ? compositionScene(compositionKey, board) : null)
+  const asset = $derived(compositionKey ? undefined : items.asset(selection.focus))
   const settings = $derived(asset ? project.settingsOf(asset.name) : board.defaults)
   // Position among what the grid shows (filtered, sorted, collapsed folders left out).
   const strip = $derived(view.visible.map((e) => items.with(e)))
@@ -106,10 +106,10 @@
     playback.preview(a.name, t, (src) => drawFrame(canvas.getContext('2d')!, src, a.w, a.h, board.width, board.height, settings, canvas.width / board.width))
   }
 
-  // A layout's playback: a track per video cell, each the part of its file the cell plays, sized
+  // A composition's playback: a track per video cell, each the part of its file the cell plays, sized
   // to the cell on screen. No sound yet (the export has none either).
   let scale = $state(1)
-  const layoutTracks = $derived.by((): Track[] => {
+  const compositionTracks = $derived.by((): Track[] => {
     if (!scene) return []
     return scene.arrangement.cells.flatMap(({ slot, rect }) => {
       const cell = scene.cells.get(slot.id)
@@ -121,60 +121,60 @@
     })
   })
   // Until every cell has a copy, the ones without show stills: say how many, and how far along.
-  // How far into the layout every cell plays smoothly: a cell whose copy is still being made is
+  // How far into the composition every cell plays smoothly: a cell whose copy is still being made is
   // ready as far as it's encoded past its trim's start (the first time round).
-  const layoutCached = $derived.by(() => {
+  const compositionCached = $derived.by(() => {
     let reach = scene?.duration ?? 0
-    for (const t of layoutTracks) {
+    for (const t of compositionTracks) {
       const r = copies.ready(t.file)
       if (r < t.start + t.length - 0.05) reach = Math.min(reach, Math.max(0, r - t.start))
     }
     return reach
   })
 
-  const layoutPreparing = $derived.by(() => {
-    const waiting = [...new Map(layoutTracks.filter((t) => copies.pending(t.file)).map((t) => [t.file.path, t.file])).values()]
+  const compositionPreparing = $derived.by(() => {
+    const waiting = [...new Map(compositionTracks.filter((t) => copies.pending(t.file)).map((t) => [t.file.path, t.file])).values()]
     if (!waiting.length) return null
     const making = waiting.map((f) => copies.state(f)).find((s) => s?.state === 'making')
     return { label: `Preparing playback · ${waiting.length} to go`, progress: making?.state === 'making' ? making.progress : null }
   })
-  let layoutPlayback = $state.raw<Player | null>(null)
+  let compositionPlayer = $state.raw<Player | null>(null)
   $effect(() => {
-    if (!layoutKey) return
+    if (!compositionKey) return
     const p = new Player({
-      tracks: () => layoutTracks,
+      tracks: () => compositionTracks,
       range: () => ({ start: 0, end: scene?.duration ?? 0 }),
       hold: () => shell.picking
     })
-    layoutPlayback = p
+    compositionPlayer = p
     return () => {
       p.destroy()
-      layoutPlayback = null
+      compositionPlayer = null
     }
   })
   const choosing = $derived(shell.choosing && scene ? scene.arrangement.cells.find((c) => c.slot.id === shell.choosing) : undefined)
 
   // Space plays and pauses; any arrow steps through the strip. (The stage handles the rest.)
   useKeymap(SINGLE, {
-    play: () => (layoutKey ? layoutPlayback : playback)?.toggle(),
+    play: () => (compositionKey ? compositionPlayer : playback)?.toggle(),
     prev: () => selection.step(-1),
     next: () => selection.step(1)
   })
 </script>
 
 <div class="single">
-  {#if scene && layoutKey}
-    <LayoutStage
+  {#if scene && compositionKey}
+    <CompositionStage
       {board}
       {scene}
       slot={selection.slot}
-      player={layoutPlayback}
+      player={compositionPlayer}
       picking={shell.picking}
       onScale={(k) => (scale = k)}
       onSelect={(slot) => (selection.slot = slot)}
-      onEdit={(slot, patch) => project.edit([slotKey(layoutKey, slot)], patch)}
-      onReset={(slot, keys) => project.resetKeys([slotKey(layoutKey, slot)], keys)}
-      onArrange={(split, weights) => project.setSplit(layoutKey, split, { weights })}
+      onEdit={(slot, patch) => project.edit([slotKey(compositionKey, slot)], patch)}
+      onReset={(slot, keys) => project.resetKeys([slotKey(compositionKey, slot)], keys)}
+      onArrange={(split, weights) => project.setSplit(compositionKey, split, { weights })}
       onSwap={swapSlots}
       onChoose={(slot) => {
         selection.slot = slot
@@ -206,8 +206,8 @@
   {/if}
   <div class="single-fade"></div>
   <div class="single-overlay">
-    {#if layoutPlayback && scene?.duration}
-      <LayoutPlayerBar player={layoutPlayback} duration={scene.duration} preparing={layoutPreparing} cached={layoutCached} />
+    {#if compositionPlayer && scene?.duration}
+      <CompositionPlayerBar player={compositionPlayer} duration={scene.duration} preparing={compositionPreparing} cached={compositionCached} />
     {:else if asset && playback && asset.duration > 0}
       <PlayerBar
         {playback}
@@ -232,7 +232,7 @@
         assets={strip}
         {board}
         focus={selection.focus}
-        composite={(name) => layoutScene(name, board)}
+        composite={(name) => compositionScene(name, board)}
         onSelect={(name) => selection.select(name)}
         onSeen={(a) => prioritize(a.path)}
       />
@@ -241,9 +241,9 @@
   </div>
 </div>
 
-{#if choosing && layoutKey}
+{#if choosing && compositionKey}
   <ItemPicker
-    assets={items.all.filter((e) => e.kind !== 'layout').map((e) => items.with(e))}
+    assets={items.all.filter((e) => e.kind !== 'composition').map((e) => items.with(e))}
     current={choosing.slot.item}
     onChoose={(key) => {
       setSlot(choosing.slot.id, { item: key })

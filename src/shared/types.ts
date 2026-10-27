@@ -36,27 +36,27 @@ export interface Artboard {
   width: number
   height: number
   defaults: CropSettings
-  /** Keyed by item: an asset's file name, a variant's key, or a layout slot's (see arrangement.ts). */
+  /** Keyed by item: an asset's file name, a variant's key, or a composition slot's (see arrangement.ts). */
   overrides: Record<string, Partial<CropSettings>>
-  /** How layouts are arranged on this artboard: by layout key, then split id. Unset follows its shape. */
+  /** How compositions are arranged on this artboard: by composition key, then split id. Unset follows its shape. */
   splits?: Record<string, Record<string, SplitArrangement>>
 }
 
-/** A cell in a layout, showing an item (or nothing yet). */
+/** A cell in a bento composition, showing an item (or nothing yet). */
 export interface Slot {
   id: string
   item: string | null
-  /** A video shorter than the layout: plays again from its start, or holds its last frame. */
+  /** A video shorter than the composition: plays again from its start, or holds its last frame. */
   end?: 'loop' | 'hold'
 }
 
-/** Its children side by side or stacked, whichever way suits the space it gets on each artboard. */
+/** In a bento: its children side by side or stacked, whichever way suits the space it gets on each artboard. */
 export interface Split {
   id: string
-  children: LayoutNode[]
+  children: BentoNode[]
 }
 
-export type LayoutNode = Slot | Split
+export type BentoNode = Slot | Split
 
 /** How one split sits on one artboard. Either part left unset follows the artboard. */
 export interface SplitArrangement {
@@ -66,8 +66,8 @@ export interface SplitArrangement {
 }
 
 /**
- * Items that aren't files: a variant (a file again, with its own framing and trim) or a layout
- * (several items laid out together). Each is a row of its own, keyed apart from file names.
+ * Items that aren't files: a variant (a file again, with its own framing and trim) or a composition
+ * (several items put together on one artboard). Each is a row of its own, keyed apart from file names.
  */
 export interface VariantItem {
   kind: 'variant'
@@ -76,10 +76,18 @@ export interface VariantItem {
   name: string
 }
 
-export interface LayoutItem {
-  kind: 'layout'
+/**
+ * A composition: several items put together, each a layer with its own place and timing. Its `type`
+ * says how they're put together; each type has its own fields. So far there's one:
+ * - `bento`: cells laid out as a tree of splits, with gaps between them (see composition/bento.ts).
+ */
+export type CompositionItem = BentoComposition
+
+export interface BentoComposition {
+  kind: 'composition'
+  type: 'bento'
   name: string
-  root: LayoutNode
+  root: BentoNode
   /** In artboard pixels: between cells, and around them. */
   gap: number
   padding: number
@@ -90,7 +98,7 @@ export interface LayoutItem {
   duration: number | null
 }
 
-export type VirtualItem = VariantItem | LayoutItem
+export type VirtualItem = VariantItem | CompositionItem
 
 export interface Clip {
   start: number
@@ -111,7 +119,7 @@ export interface ProjectFile {
   /** Trim is a property of the source, shared across artboards. */
   clips: Record<string, Clip>
   export: ExportPrefs
-  /** Variants and layouts, by key. */
+  /** Variants and compositions, by key. */
   items?: Record<string, VirtualItem>
 }
 
@@ -159,8 +167,8 @@ export interface VideoExportJob {
   crf: number
 }
 
-/** One video cell of a layout export, framed into its rectangle like an artboard of that size. */
-export interface LayoutCellJob {
+/** One video cell of a composition export, framed into its rectangle like an artboard of that size. */
+export interface LayerJob {
   input: string
   x: number
   y: number
@@ -177,17 +185,17 @@ export interface LayoutCellJob {
 }
 
 /**
- * A layout with video in it. Everything that doesn't move (background, images, rounded corners) is
+ * A composition with video in it. Everything that doesn't move (background, images, rounded corners) is
  * drawn by the renderer into `layer`, a PNG with holes where the videos show through.
  */
-export interface LayoutExportJob {
+export interface CompositionExportJob {
   id: string
   output: string
   width: number
   height: number
   bgColor: string
   layer: Uint8Array
-  cells: LayoutCellJob[]
+  cells: LayerJob[]
   duration: number
   fps: number
   crf: number
@@ -248,7 +256,7 @@ export interface ReframeApi {
   chooseExportDir(defaultPath?: string): Promise<string | null>
   writeFile(path: string, data: ArrayBuffer): Promise<void>
   exportVideo(job: VideoExportJob): Promise<void>
-  exportLayout(job: LayoutExportJob): Promise<void>
+  exportComposition(job: CompositionExportJob): Promise<void>
   cancelExport(): Promise<void>
   poster(path: string): Promise<PosterResult>
   /**

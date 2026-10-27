@@ -56,9 +56,9 @@ export function normalizeProject(p: ProjectFile | null): ProjectFile {
     })),
     clips: p.clips ?? {},
     export: { ...base.export, ...p.export },
-    // Layouts were saved as "grid" while they were being built.
+    // Compositions were saved as "grid", then "layout", while they were being built (both bentos).
     items: Object.fromEntries(
-      Object.entries(p.items ?? {}).map(([k, i]) => [k, (i.kind as string) === 'grid' ? { ...i, kind: 'layout' } : i])
+      Object.entries(p.items ?? {}).map(([k, i]) => [k, ['grid', 'layout'].includes(i.kind as string) ? { ...i, kind: 'composition', type: 'bento' } : i])
     ) as ProjectFile['items']
   }
 }

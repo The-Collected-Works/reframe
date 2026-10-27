@@ -1,7 +1,7 @@
 import { existsSync, promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { app, utilityProcess, type UtilityProcess } from 'electron'
-import type { ColorMeta, LayoutExportJob, PosterResult, VideoExportJob } from '@shared/types'
+import type { ColorMeta, CompositionExportJob, PosterResult, VideoExportJob } from '@shared/types'
 import type { WorkerReply, WorkerRequest } from './worker'
 
 const OS: Record<string, string> = { win32: 'win', darwin: 'mac', linux: 'linux' }
@@ -85,7 +85,7 @@ export const cancelCopy = (): void => worker?.postMessage({ type: 'cancel-copy' 
 export const cacheSize = () => call<number>({ type: 'cache-size' })
 export const clearCache = () => call<number>({ type: 'clear-cache' })
 export const exportVideo = (job: VideoExportJob, onProgress: (p: number) => void) => call<void>({ type: 'export', job }, onProgress)
-export const exportLayout = (job: LayoutExportJob, onProgress: (p: number) => void) => call<void>({ type: 'layout', job }, onProgress)
+export const exportComposition = (job: CompositionExportJob, onProgress: (p: number) => void) => call<void>({ type: 'composition', job }, onProgress)
 export const cancelExport = (): void => worker?.postMessage({ type: 'cancel' } satisfies WorkerRequest)
 
 /**

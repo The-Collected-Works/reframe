@@ -19,7 +19,7 @@ const keyOf = (s: Pick<Start, 'path' | 'mtime' | 'at'>) => `${s.path}|${s.mtime}
 
 /**
  * Thumbnails for videos trimmed to start after their first frame: the frame playback starts on, so
- * the grid, the filmstrip and layouts show what plays (and the single view doesn't jump from one to
+ * the grid, the filmstrip and compositions show what plays (and the single view doesn't jump from one to
  * the other). Read from the video's playback copy where there is one (every frame a keyframe, so
  * it's quick), else the file; two at a time. Only those still trimmed that way are kept.
  */

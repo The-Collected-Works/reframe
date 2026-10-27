@@ -1,14 +1,14 @@
 <!--
   The settings of the selection, or with nothing selected, the artboard's defaults that every asset
   follows. A dot beside a setting marks it as changed from the defaults (click to reset it; "Make
-  default" turns it into the default). A layout shows its own settings, and a cell being edited in
+  default" turns it into the default). A composition shows its own settings, and a cell being edited in
   one its framing there. The inspector's connection to app state.
 -->
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'
-  import { slotsOf } from '@shared/arrangement'
+  import { slotsOf } from '@shared/composition/bento'
   import { DEFAULT_SETTINGS, normDeg, resolveSettings } from '@shared/layout'
-  import type { CropSettings, FitMode, LayoutItem, SettingKey } from '@shared/types'
+  import type { CropSettings, FitMode, CompositionItem, SettingKey } from '@shared/types'
   import { fmtSize, fmtTime, plural } from '../../lib/format'
   import { hint } from '../../lib/keymap.svelte'
   import {
@@ -27,7 +27,7 @@
   } from '../../state/actions'
   import { items } from '../../state/items.svelte'
   import type { Asset } from '../../state/library.svelte'
-  import { layoutOf, isVirtual } from '../../state/model/items'
+  import { COMPOSITION_TYPES, compositionOf, isVirtual } from '../../state/model/items'
   import { hasOverrides } from '../../state/model/project'
   import { project } from '../../state/project.svelte'
   import { selection } from '../../state/selection.svelte'
@@ -35,11 +35,11 @@
   import { view } from '../../state/view.svelte'
   import { Button, ColorPicker, Icon, NumberField, Segmented, Slider, Tag, Toggle } from '../../ui'
   import { GLOBAL } from '../keymaps'
-  import { layoutScene } from '../scene'
+  import { compositionScene } from '../scene'
   import { ZOOM_MAX, ZOOM_MIN } from '../snapping'
   import AnchorGrid from './AnchorGrid.svelte'
   import { pickBackground } from './eyedropper'
-  import LayoutInspector from './LayoutInspector.svelte'
+  import CompositionInspector from './CompositionInspector.svelte'
   import Row from './Row.svelte'
 
   const FITS: { value: FitMode; label: string; title: string }[] = [
@@ -51,27 +51,29 @@
   ]
 
   const board = $derived(project.board)
-  const isLayout = (key: string) => items.entry(key)?.kind === 'layout'
-  // In the single view on a layout: that layout, and the cell being framed in it (if one is).
-  const openLayout = $derived(view.mode === 'single' && selection.focus && isLayout(selection.focus) ? selection.focus : null)
+  const isComposition = (key: string) => items.entry(key)?.kind === 'composition'
+  // In the single view on a composition: that composition, and the cell being framed in it (if one is).
+  const openComposition = $derived(view.mode === 'single' && selection.focus && isComposition(selection.focus) ? selection.focus : null)
   const slotKey = $derived(editingSlot())
-  /** The layouts whose settings show: the open one with no cell chosen, or a selection of only layouts. */
-  const layouts = $derived(openLayout ? (slotKey ? [] : [openLayout]) : selection.names.length && selection.names.every(isLayout) ? selection.names : [])
-  const layoutKey = $derived(layouts.length ? (selection.focus && layouts.includes(selection.focus) ? selection.focus : layouts[0]) : null)
-  const layout = $derived(layoutOf(project.file, layoutKey))
-  // The open layout as it sits here, for a cell's size and what it shows.
-  const scene = $derived(openLayout ? layoutScene(openLayout, board) : null)
+  /** The compositions whose settings show: the open one with no cell chosen, or a selection of only compositions. */
+  const compositions = $derived(
+    openComposition ? (slotKey ? [] : [openComposition]) : selection.names.length && selection.names.every(isComposition) ? selection.names : []
+  )
+  const compositionKey = $derived(compositions.length ? (selection.focus && compositions.includes(selection.focus) ? selection.focus : compositions[0]) : null)
+  const composition = $derived(compositionOf(project.file, compositionKey))
+  // The open composition as it sits here, for a cell's size and what it shows.
+  const scene = $derived(openComposition ? compositionScene(openComposition, board) : null)
   const slotCell = $derived(slotKey && scene ? scene.arrangement.cells.find((c) => c.slot.id === selection.slot) : undefined)
   const slotAsset = $derived(slotCell?.slot.item ? items.asset(slotCell.slot.item) : undefined)
 
-  /** What edits apply to (see `targets`): a cell, or the selected assets (not layouts). */
+  /** What edits apply to (see `targets`): a cell, or the selected assets (not compositions). */
   const names = $derived(slotKey ? [slotKey] : targets())
   const editing = $derived(names.length > 0)
   /** The asset whose values are shown: the focused one if it's selected, else the first. */
   const primary = $derived(slotKey ?? (editing ? (selection.focus && names.includes(selection.focus) ? selection.focus : names[0]) : null))
   const primaryAsset = $derived(slotKey ? slotAsset : names.length === 1 ? items.asset(primary) : undefined)
   // The selected assets, found in one pass (selections can be the whole folder).
-  const chosen = $derived(slotKey ? (slotAsset ? [slotAsset] : []) : items.all.filter((a) => a.kind !== 'layout' && selection.has(a.name)))
+  const chosen = $derived(slotKey ? (slotAsset ? [slotAsset] : []) : items.all.filter((a) => a.kind !== 'composition' && selection.has(a.name)))
   const s: CropSettings = $derived(primary ? resolveSettings(board, primary) : board.defaults)
   // A cell's framing is measured in the cell, as an asset's is in the artboard.
   const W = $derived(slotCell?.rect.w ?? board.width)
@@ -117,7 +119,7 @@
       : !editing
         ? [
             `${board.width}×${board.height}`,
-            plural(items.all.filter((a) => a.kind !== 'layout').length, 'asset'),
+            plural(items.all.filter((a) => a.kind !== 'composition').length, 'asset'),
             plural(items.all.filter((a) => hasOverrides(board, a.name)).length, 'adjusted', 'adjusted')
           ]
         : names.length === 1 && primaryAsset
@@ -129,19 +131,19 @@
             ]
   )
 
-  // A layout's settings apply to every selected layout; leaving out, to them all too.
-  const layoutTags = $derived(
-    layout && layoutKey
+  // A composition's settings apply to every selected composition; leaving out, to them all too.
+  const compositionTags = $derived(
+    composition && compositionKey
       ? [
-          layouts.length > 1 ? plural(layouts.length, 'layout') : `${board.width}×${board.height}`,
-          plural(slotsOf(layout.root).length, 'cell'),
+          ...(compositions.length > 1 ? [plural(compositions.length, 'composition')] : [COMPOSITION_TYPES[composition.type], `${board.width}×${board.height}`]),
+          plural(slotsOf(composition.root).length, 'cell'),
           ...(scene?.duration ? [fmtTime(scene.duration)] : [])
         ]
       : []
   )
-  /** A layout's longest video, as trimmed (0: none). */
+  /** A composition's longest video, as trimmed (0: none). */
   function longestOf(key: string): number {
-    const g = layoutOf(project.file, key)
+    const g = compositionOf(project.file, key)
     if (!g) return 0
     return Math.max(
       0,
@@ -153,12 +155,12 @@
       })
     )
   }
-  const layoutSkip = $derived(layouts.filter((k) => resolveSettings(board, k).skip).length)
-  const editLayouts = (patch: Partial<LayoutItem>) => layouts.forEach((k) => project.editLayout(k, patch))
+  const compositionSkip = $derived(compositions.filter((k) => resolveSettings(board, k).skip).length)
+  const editCompositions = (patch: Partial<CompositionItem>) => compositions.forEach((k) => project.editComposition(k, patch))
 
-  // Renaming a variant or layout in place: click its name above. Enter or leaving it saves, Esc cancels.
+  // Renaming a variant or composition in place: click its name above. Enter or leaving it saves, Esc cancels.
   let renaming = $state(false)
-  const renameKey = $derived(layout ? layoutKey : names.length === 1 && primary && isVirtual(primary) && !slotKey ? primary : null)
+  const renameKey = $derived(composition ? compositionKey : names.length === 1 && primary && isVirtual(primary) && !slotKey ? primary : null)
   $effect(() => {
     // Asked from a menu while the grid's captions aren't showing to rename in.
     if (shell.renamingItem && shell.renamingItem === renameKey && !(view.mode === 'grid' && view.prefs.names)) {
@@ -194,19 +196,19 @@
 
 <aside class="inspector">
   <header class="insp-head">
-    <!-- Breadcrumb: the artboard's defaults are the parent of whatever is selected; a layout is the
+    <!-- Breadcrumb: the artboard's defaults are the parent of whatever is selected; a composition is the
          parent of its cells. -->
     <nav class="crumbs">
-      {#if layout && layoutKey}
+      {#if composition && compositionKey}
         <button class="crumb" title={`Edit the defaults every asset follows (${hint(GLOBAL.actions.back)})`} onclick={() => clearSelection()}
           >{board.name}</button
         >
         <span class="crumb-sep"><Icon name="next" size={12} /></span>
-        {@render current(layouts.length > 1 ? plural(layouts.length, 'layout') : layout.name, layouts.length === 1)}
-      {:else if slotKey && openLayout}
+        {@render current(compositions.length > 1 ? plural(compositions.length, 'composition') : composition.name, compositions.length === 1)}
+      {:else if slotKey && openComposition}
         <span class="crumb muted-crumb">{board.name}</span>
         <span class="crumb-sep"><Icon name="next" size={12} /></span>
-        <button class="crumb" title="The layout's own settings" onclick={() => (selection.slot = null)}>{label(openLayout)}</button>
+        <button class="crumb" title="The composition's own settings" onclick={() => (selection.slot = null)}>{label(openComposition)}</button>
         <span class="crumb-sep"><Icon name="next" size={12} /></span>
         <span class="crumb current" {title}>{title}</span>
       {:else if editing}
@@ -220,7 +222,7 @@
       {/if}
     </nav>
     <div class="tags">
-      {#each layout ? layoutTags : tags as t (t)}<Tag>{t}</Tag>{/each}
+      {#each composition ? compositionTags : tags as t (t)}<Tag>{t}</Tag>{/each}
     </div>
   </header>
 
@@ -234,17 +236,17 @@
     {/if}
   {/snippet}
 
-  {#if layout && layoutKey}
+  {#if composition && compositionKey}
     <div class="insp-body">
-      <LayoutInspector
-        {layout}
+      <CompositionInspector
+        {composition}
         boardName={board.name}
-        arranged={!!board.splits?.[layoutKey]}
-        longest={longestOf(layoutKey)}
+        arranged={!!board.splits?.[compositionKey]}
+        longest={longestOf(compositionKey)}
         picking={shell.picking}
         pickHint={hint(GLOBAL.actions.pick)}
-        onEdit={editLayouts}
-        onResetArrangement={() => layouts.forEach((k) => project.resetSplits(k))}
+        onEdit={editCompositions}
+        onResetArrangement={() => compositions.forEach((k) => project.resetSplits(k))}
         onPick={pickBackground}
       />
     </div>
@@ -255,9 +257,9 @@
         icon="leaveOut"
         iconSize={14}
         tone="danger"
-        pressed={layoutSkip === layouts.length ? true : layoutSkip > 0 ? 'mixed' : false}
+        pressed={compositionSkip === compositions.length ? true : compositionSkip > 0 ? 'mixed' : false}
         title={`Leave out of the ${board.name} export`}
-        onclick={() => project.edit(layouts, { skip: layoutSkip < layouts.length })}
+        onclick={() => project.edit(compositions, { skip: compositionSkip < compositions.length })}
       />
     </footer>
   {:else}
@@ -270,7 +272,7 @@
           </div>
         </Row>
         {#if slotAsset?.kind === 'video'}
-          <Row label="When shorter than the layout" overridden={slotCell.slot.end === 'hold'} onReset={() => setSlot(slotCell.slot.id, { end: 'loop' })}>
+          <Row label="When shorter than the composition" overridden={slotCell.slot.end === 'hold'} onReset={() => setSlot(slotCell.slot.id, { end: 'loop' })}>
             <Segmented
               value={slotCell.slot.end ?? 'loop'}
               options={[

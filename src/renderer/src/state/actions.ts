@@ -1,4 +1,4 @@
-import { slotKey, type Dir } from '@shared/arrangement'
+import { slotKey, type Dir } from '@shared/composition/bento'
 import type { CropSettings, FolderScan, Slot, SettingKey } from '@shared/types'
 import { api } from '../lib/bridge'
 import { hint } from '../lib/keymap.svelte'
@@ -132,28 +132,28 @@ export function clearSelection(): void {
   selection.clear(view.mode === 'single')
 }
 
-// ---- editing: the selection, or with nothing selected, the artboard's defaults. In a layout, the
+// ---- editing: the selection, or with nothing selected, the artboard's defaults. In a composition, the
 // slot being edited.
 
-/** The slot being edited in the layout on screen, by its key in the overrides. */
+/** The slot being edited in the composition on screen, by its key in the overrides. */
 export function editingSlot(): string | null {
   return view.mode === 'single' && selection.focus && selection.slot ? slotKey(selection.focus, selection.slot) : null
 }
 
-const isLayout = (key: string) => items.entry(key)?.kind === 'layout'
+const isComposition = (key: string) => items.entry(key)?.kind === 'composition'
 
 /**
- * What edits apply to: the slot being edited in a layout, or else the selection. A layout has no
+ * What edits apply to: the slot being edited in a composition, or else the selection. A composition has no
  * framing of its own (its slots do), so of the settings it only takes being left out of an export.
  */
 export function targets(patch?: Partial<CropSettings>): string[] {
   const slot = editingSlot()
   if (slot) return [slot]
   const framing = !patch || Object.keys(patch).some((k) => k !== 'skip')
-  return framing ? selection.names.filter((n) => !isLayout(n)) : selection.names
+  return framing ? selection.names.filter((n) => !isComposition(n)) : selection.names
 }
 
-/** Edits the targets; nothing at all when only layouts are selected (rather than the defaults). */
+/** Edits the targets; nothing at all when only compositions are selected (rather than the defaults). */
 export function edit(patch: Partial<CropSettings>): void {
   const names = targets(patch)
   if (names.length || !selection.size) project.edit(names, patch)
@@ -192,7 +192,7 @@ export function resetSelection(): void {
 
 export function copy(): void {
   const from = editingSlot() ?? selection.focus
-  if (!from || isLayout(from)) return
+  if (!from || isComposition(from)) return
   const n = project.copy(from)
   showToast(n ? `Copied ${n} setting${n === 1 ? '' : 's'}` : 'Copied defaults')
 }
@@ -202,12 +202,12 @@ export function paste(): void {
   if (project.paste(names)) showToast(names.length > 1 ? `Pasted to ${names.length} items` : 'Pasted')
 }
 
-// ---- variants and layouts
+// ---- variants and compositions
 
 /** The selection in on-screen order. */
 const inOrder = (names: string[]) => view.visible.filter((e) => names.includes(e.name)).map((e) => e.name)
 
-/** Copies of the selected items, selected in their place: variants of files, and copies of layouts. */
+/** Copies of the selected items, selected in their place: variants of files, and copies of compositions. */
 export function duplicateSelection(): void {
   const keys = inOrder(selection.names)
   if (!keys.length) return
@@ -222,9 +222,9 @@ export function duplicateSelection(): void {
   showToast(`Duplicated ${made.length === 1 ? `as “${items.entry(made[0])?.label}”` : plural(made.length, 'item')}${others}`)
 }
 
-/** A new layout of the selected assets (in on-screen order), selected. */
+/** A new composition of the selected assets (in on-screen order), selected. */
 export function combineSelection(): void {
-  const members = inOrder(selection.names).filter((n) => !isLayout(n))
+  const members = inOrder(selection.names).filter((n) => !isComposition(n))
   if (!members.length) return
   let key = ''
   project.change((f) => {
@@ -237,24 +237,24 @@ export function combineSelection(): void {
   showToast(`Made “${items.entry(key)?.label}” · ${hint(GRID_OPEN)} to arrange it`)
 }
 
-/** Adds the selected assets to the end of a layout. */
-export function addToLayout(key: string): void {
-  const members = inOrder(selection.names).filter((n) => !isLayout(n))
+/** Adds the selected assets to the end of a composition. */
+export function addToComposition(key: string): void {
+  const members = inOrder(selection.names).filter((n) => !isComposition(n))
   if (!members.length) return
   project.change((f) => model.append(f, key, members))
   showToast(`Added ${plural(members.length, 'item')} to “${items.entry(key)?.label}”`)
 }
 
-/** Deletes the selected variants and layouts (files stay: they're the folder's). */
+/** Deletes the selected variants and compositions (files stay: they're the folder's). */
 export function deleteSelection(): void {
   const keys = selection.names.filter(model.isVirtual)
   if (!keys.length) return
   const label = keys.length === 1 ? `“${items.entry(keys[0])?.label}”` : plural(keys.length, 'item')
-  const layouts = model.layoutsShowing(project.file, keys)
+  const compositions = model.compositionsShowing(project.file, keys)
   project.change((f) => model.remove(f, keys))
   selection.keepOnly(new Set(view.visible.map((e) => e.name)))
   if (!selection.focus) view.mode = 'grid'
-  showToast(`Deleted ${label}${layouts ? `, emptying cells in ${plural(layouts, 'layout')}` : ''} · ${undoHint}`)
+  showToast(`Deleted ${label}${compositions ? `, emptying cells in ${plural(compositions, 'composition')}` : ''} · ${undoHint}`)
 }
 
 export function renameItem(key: string, name: string): void {
@@ -262,18 +262,18 @@ export function renameItem(key: string, name: string): void {
   if (n) project.change((f) => model.rename(f, key, n))
 }
 
-// ---- layout slots (in the single view, on the layout in focus)
+// ---- composition slots (in the single view, on the composition in focus)
 
-const focusLayout = () => (selection.focus && isLayout(selection.focus) ? selection.focus : null)
+const focusComposition = () => (selection.focus && isComposition(selection.focus) ? selection.focus : null)
 
 /** A new empty slot beside or below the one being edited, ready to fill. */
 export function splitSlot(dir: Dir): void {
-  const layout = focusLayout()
+  const composition = focusComposition()
   const slot = selection.slot
-  if (!layout || !slot) return
+  if (!composition || !slot) return
   let made = ''
   project.change((f) => {
-    const r = model.splitSlot(f, layout, slot, dir, project.boardId)
+    const r = model.splitSlot(f, composition, slot, dir, project.boardId)
     made = r.slot
     return r.file
   })
@@ -282,22 +282,22 @@ export function splitSlot(dir: Dir): void {
 }
 
 export function removeSlot(): void {
-  const layout = focusLayout()
+  const composition = focusComposition()
   const slot = selection.slot
-  if (!layout || !slot) return
-  project.change((f) => model.removeSlot(f, layout, slot))
+  if (!composition || !slot) return
+  project.change((f) => model.removeSlot(f, composition, slot))
   selection.slot = null
 }
 
 export function swapSlots(a: string, b: string): void {
-  const layout = focusLayout()
-  if (layout) project.change((f) => model.swapSlots(f, layout, a, b))
+  const composition = focusComposition()
+  if (composition) project.change((f) => model.swapSlots(f, composition, a, b))
 }
 
 /** What a slot shows (its framing starts over), or how it ends. */
 export function setSlot(slot: string, patch: Partial<Omit<Slot, 'id'>>): void {
-  const layout = focusLayout()
-  if (layout) project.change((f) => model.setSlot(f, layout, slot, patch))
+  const composition = focusComposition()
+  if (composition) project.change((f) => model.setSlot(f, composition, slot, patch))
 }
 
 export function undo(): void {

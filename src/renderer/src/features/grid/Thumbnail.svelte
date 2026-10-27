@@ -1,12 +1,12 @@
 <!--
   One item in the grid: the artboard as it will export, with its name below (and an adjusted dot,
-  and a video's length). A variant is marked as one; a layout is drawn from its cells' thumbnails.
+  and a video's length). A variant is marked as one; a composition is drawn from its cells' thumbnails.
   Videos play in place on hover. Drag the picture to move it within the artboard; click to select
   (shift for a range, ⌘/Ctrl to add); double-click to open it.
 -->
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'
-  import { drawLayout } from '@shared/arrangement'
+  import { drawBento } from '@shared/composition/bento'
   import { drawFrame, resolveSettings } from '@shared/layout'
   import { visibility } from '../../lib/attach'
   import { trackPointer } from '../../lib/drag'
@@ -24,7 +24,7 @@
 
   let { entry, width }: { entry: Entry; width: number } = $props()
   const g = useGrid()
-  const scene = $derived(entry.kind === 'layout' ? g.composite(entry.name) : null)
+  const scene = $derived(entry.kind === 'composition' ? g.composite(entry.name) : null)
   const home = $derived(entry.source ?? entry.name)
   const copying = $derived(g.copying(entry))
 
@@ -70,7 +70,7 @@
     const ctx = canvas.getContext('2d')!
     const kk = k * dpr
     if (scene) {
-      drawLayout(ctx, scene.layout, scene.arrangement, board.width, board.height, kk, thumbSource(scene), EMPTY)
+      drawBento(ctx, scene.composition, scene.arrangement, board.width, board.height, kk, thumbSource(scene), EMPTY)
       drawn = key
       return
     }
@@ -110,7 +110,7 @@
     drawn = video || g.x.length || g.y.length ? '' : key
   }
 
-  // Where a layout's cell has nothing in it yet.
+  // Where a composition's cell has nothing in it yet.
   const EMPTY = 'rgba(128, 128, 128, 0.22)'
 
   // The rename field: focused with its text selected; Enter or leaving it saves, Esc cancels.
@@ -217,16 +217,16 @@
   {#if g.names}
     <div class="cell-meta">
       {#if overridden}<Dot title="Adjusted" />{/if}
-      {#if entry.kind === 'layout'}
-        <span class="cell-kind" title="Layout"><Icon name="layout" size={12} /></span>
+      {#if entry.kind === 'composition'}
+        <span class="cell-kind" title="Composition"><Icon name="composition" size={12} /></span>
       {:else if entry.source}
         <span class="cell-kind" title={`Variant of ${entry.source}`}><Icon name="variant" size={12} /></span>
       {/if}
       {#if g.renaming(entry.name)}
         <input class="cell-rename" value={entry.label} aria-label="Name" spellcheck="false" onpointerdown={(e) => e.stopPropagation()} {@attach renameField} />
       {:else}
-        <span class="cell-name" title={entry.source ? `${entry.label} · from ${entry.source}` : entry.kind === 'layout' ? entry.label : asset.name}>
-          {#if g.withFolder && entry.kind !== 'layout' && folderOf(home)}<span class="cell-folder">{folderOf(home)}/</span>{/if}{entry.label}
+        <span class="cell-name" title={entry.source ? `${entry.label} · from ${entry.source}` : entry.kind === 'composition' ? entry.label : asset.name}>
+          {#if g.withFolder && entry.kind !== 'composition' && folderOf(home)}<span class="cell-folder">{folderOf(home)}/</span>{/if}{entry.label}
         </span>
       {/if}
       {#if asset.kind === 'video' && asset.duration > 0}
@@ -379,7 +379,7 @@
     white-space: nowrap;
   }
 
-  /* What kind of item it is, when not a file: a variant or a layout. */
+  /* What kind of item it is, when not a file: a variant or a composition. */
   .cell-kind {
     display: grid;
     place-items: center;

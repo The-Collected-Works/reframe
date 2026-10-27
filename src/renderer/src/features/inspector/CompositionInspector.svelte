@@ -1,16 +1,16 @@
 <!--
-  A layout's own settings: the spacing around and between its cells, their corners, the background,
+  A composition's own settings: the spacing around and between its cells, their corners, the background,
   how long it runs, and whether this artboard's arrangement has been changed from the automatic
   one. Takes props; the inspector connects it.
 -->
 <script lang="ts">
-  import type { LayoutItem } from '@shared/types'
+  import type { CompositionItem } from '@shared/types'
   import { fmtTime } from '../../lib/format'
   import { Button, ColorPicker, NumberField, Segmented, Slider } from '../../ui'
   import Row from './Row.svelte'
 
   let {
-    layout,
+    composition,
     boardName,
     arranged,
     longest,
@@ -20,7 +20,7 @@
     onResetArrangement,
     onPick
   }: {
-    layout: LayoutItem
+    composition: CompositionItem
     boardName: string
     /** This artboard's arrangement has been changed (dividers dragged, directions set). */
     arranged: boolean
@@ -28,7 +28,7 @@
     longest: number
     picking: boolean
     pickHint: string
-    onEdit: (patch: Partial<LayoutItem>) => void
+    onEdit: (patch: Partial<CompositionItem>) => void
     onResetArrangement: () => void
     onPick: () => void
   } = $props()
@@ -38,10 +38,18 @@
 
 <Row label="Spacing" overridden={false} onReset={() => {}}>
   <div class="pair">
-    <NumberField label="Gap" value={layout.gap} step={1} min={0} max={400} onChange={(gap) => onEdit({ gap })} onReset={() => onEdit({ gap: DEFAULTS.gap })} />
+    <NumberField
+      label="Gap"
+      value={composition.gap}
+      step={1}
+      min={0}
+      max={400}
+      onChange={(gap) => onEdit({ gap })}
+      onReset={() => onEdit({ gap: DEFAULTS.gap })}
+    />
     <NumberField
       label="Edge"
-      value={layout.padding}
+      value={composition.padding}
       step={1}
       min={0}
       max={400}
@@ -53,13 +61,21 @@
 
 <Row label="Corners" overridden={false} onReset={() => {}}>
   <div class="slider-row">
-    <Slider value={layout.radius} min={0} max={200} step={1} curve={1.6} onChange={(radius) => onEdit({ radius })} onReset={() => onEdit({ radius: 0 })} />
-    <NumberField value={layout.radius} step={1} min={0} max={1000} width={64} onChange={(radius) => onEdit({ radius })} onReset={() => onEdit({ radius: 0 })} />
+    <Slider value={composition.radius} min={0} max={200} step={1} curve={1.6} onChange={(radius) => onEdit({ radius })} onReset={() => onEdit({ radius: 0 })} />
+    <NumberField
+      value={composition.radius}
+      step={1}
+      min={0}
+      max={1000}
+      width={64}
+      onChange={(radius) => onEdit({ radius })}
+      onReset={() => onEdit({ radius: 0 })}
+    />
   </div>
 </Row>
 
 <Row label="Background" overridden={false} onReset={() => {}}>
-  <ColorPicker value={layout.bgColor} onChange={(bgColor) => onEdit({ bgColor })}>
+  <ColorPicker value={composition.bgColor} onChange={(bgColor) => onEdit({ bgColor })}>
     <Button variant="icon" icon="pipette" tone={picking ? 'accent' : undefined} title={`Pick from media (${pickHint})`} onclick={onPick} />
   </ColorPicker>
 </Row>
@@ -71,19 +87,19 @@
 </Row>
 
 {#if longest > 0}
-  <Row label="Duration" overridden={layout.duration != null} onReset={() => onEdit({ duration: null })}>
+  <Row label="Duration" overridden={composition.duration != null} onReset={() => onEdit({ duration: null })}>
     <Segmented
-      value={layout.duration == null ? 'auto' : 'set'}
+      value={composition.duration == null ? 'auto' : 'set'}
       options={[
         { value: 'auto', label: `Longest · ${fmtTime(longest)}`, title: 'As long as its longest video' },
         { value: 'set', label: 'Set', title: 'A length of your choosing; shorter videos loop or hold' }
       ]}
       onChange={(v) => onEdit({ duration: v === 'auto' ? null : Math.round(longest) || 1 })}
     />
-    {#if layout.duration != null}
+    {#if composition.duration != null}
       <NumberField
         label="Seconds"
-        value={layout.duration}
+        value={composition.duration}
         step={0.1}
         min={0.1}
         max={600}

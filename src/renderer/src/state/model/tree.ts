@@ -6,12 +6,12 @@ import { hasOverrides } from './project'
 
 /**
  * The library: every item as the grid shows it, a tree of folders filtered and sorted by the view
- * options, with the layouts in a section of their own above. Asset names are paths relative to the
+ * options, with the compositions in a section of their own above. Asset names are paths relative to the
  * open folder, "/"-separated; a variant sits in its file's folder, right after it.
  */
 
-/** The layouts' section, folded and remembered like a folder. Not a path: no folder is called that. */
-export const LAYOUTS = '~layouts'
+/** The compositions' section, folded and remembered like a folder. Not a path: no folder is called that. */
+export const COMPOSITIONS = '~compositions'
 
 /** An asset's file name, without the folders it's in ("Shoot A/clip.mp4" → "clip.mp4"). */
 export const baseName = (name: string): string => name.slice(name.lastIndexOf('/') + 1)
@@ -38,10 +38,10 @@ export interface FolderNode {
 }
 
 /** `sectioned`: folders get headers (to fold them by); without, it's one plain run of thumbnails. */
-export type Layout = { tree: FolderNode[]; visible: Entry[]; sectioned: boolean }
+export type GridLayout = { tree: FolderNode[]; visible: Entry[]; sectioned: boolean }
 
 /**
- * What the grid shows, from the items and the view options. The layouts come first, in a section of
+ * What the grid shows, from the items and the view options. The compositions come first, in a section of
  * their own. Grouped, then a tree of folders: the top level's own files first (if any), then each
  * top-level folder with its subfolders inside it. Not grouped, one node holding everything else.
  * Also the flat list of visible assets in on-screen
@@ -49,7 +49,7 @@ export type Layout = { tree: FolderNode[]; visible: Entry[]; sectioned: boolean 
  * filmstrip, arrow keys, Select All, shift-click ranges and the export dialog's "Visible" scope
  * all follow. `board` is only given when the filter looks at edits.
  */
-export function layout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skipped: SkippedFolder[], board: Artboard | null): Layout {
+export function gridLayout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skipped: SkippedFolder[], board: Artboard | null): GridLayout {
   const { filter, sort, group } = prefs
   const pass = (a: Entry) =>
     filter === 'images'
@@ -71,10 +71,19 @@ export function layout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skip
         ? (a: Entry, b: Entry) => natural(a.kind, b.kind) || byName(a, b)
         : byName
   const cmp = (a: Entry, b: Entry) => files(a, b) || +!!a.source - +!!b.source || natural(a.label, b.label)
-  const layouts = all.filter((a) => a.kind === 'layout' && pass(a)).sort((a, b) => natural(a.label, b.label))
-  const assets = all.filter((a) => a.kind !== 'layout')
-  const layoutNode: FolderNode[] = layouts.length
-    ? [{ folder: LAYOUTS, name: 'Layouts', assets: layouts, children: [], count: layouts.length, collapsed: group && collapsed.includes(LAYOUTS) }]
+  const compositions = all.filter((a) => a.kind === 'composition' && pass(a)).sort((a, b) => natural(a.label, b.label))
+  const assets = all.filter((a) => a.kind !== 'composition')
+  const compositionNode: FolderNode[] = compositions.length
+    ? [
+        {
+          folder: COMPOSITIONS,
+          name: 'Compositions',
+          assets: compositions,
+          children: [],
+          count: compositions.length,
+          collapsed: group && collapsed.includes(COMPOSITIONS)
+        }
+      ]
     : []
   const node = (folder: string): FolderNode => ({
     folder,
@@ -87,7 +96,7 @@ export function layout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skip
   if (!group) {
     const flat = { ...node(''), collapsed: false, assets: assets.filter(pass).sort(cmp) }
     flat.count = flat.assets.length
-    return { tree: [...layoutNode, ...(flat.count ? [flat] : [])], visible: [...layouts, ...flat.assets], sectioned: false }
+    return { tree: [...compositionNode, ...(flat.count ? [flat] : [])], visible: [...compositions, ...flat.assets], sectioned: false }
   }
 
   // Build the tree: every folder with something to show, and the folders leading to it.
@@ -119,10 +128,10 @@ export function layout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skip
   roots.sort((a, b) => natural(a.name, b.name)).forEach(finish)
   top.assets.sort(cmp)
   top.count = top.assets.length
-  const tree = [...layoutNode, ...(top.assets.length ? [top] : []), ...roots]
+  const tree = [...compositionNode, ...(top.assets.length ? [top] : []), ...roots]
   // A flat folder needs no headers; as soon as there's anything else (subfolders, excluded ones,
-  // layouts), every section gets one. Without headers nothing can be folded: a fold left from when
-  // there were (the layouts since deleted, say) would otherwise hide everything, out of reach.
+  // compositions), every section gets one. Without headers nothing can be folded: a fold left from when
+  // there were (the compositions since deleted, say) would otherwise hide everything, out of reach.
   const sectioned = tree.length > 1 || (tree.length === 1 && tree[0].folder !== '')
   if (!sectioned) tree.forEach((n) => (n.collapsed = false))
 

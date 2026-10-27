@@ -4,7 +4,7 @@ Notes for picking up work on the `grids` branch on another machine. Everything h
 
 ## How playback works now
 
-Everything that plays video goes through `src/renderer/src/lib/playback/`: the single view and layouts play through it, and hover previews in the grid play its copies.
+Everything that plays video goes through `src/renderer/src/lib/playback/`: the single view and compositions play through it, and hover previews in the grid play its copies.
 
 The engine is plain TypeScript with no Svelte inside. It's told what to do through methods, and it says when something changed through change signals (`emitter.ts`). The media worker comes in as an interface (`host.ts`), so the engine runs in Node against fakes: `npm test` runs its unit tests. `state/playback.svelte.ts` is the one place it meets Svelte:
 - the app's single `Copies` store, wrapped so each read follows what it depends on (what's made or wanted, and for progress, each step);
@@ -21,7 +21,7 @@ The engine is plain TypeScript with no Svelte inside. It's told what to do throu
   - only the newest seek target is kept;
   - the last frame is held during a seek, captured asynchronously and only just before seeking;
   - a new source takes over only once it has the right frame, so there's never a gap.
-- **`playback.ts`** is one clock with any number of tracks: a single video is one track, a layout is one per video cell.
+- **`playback.ts`** is one clock with any number of tracks: a single video is one track, a composition is one per video layer.
   - Each track's source, in order of preference: its best copy for its size on screen, then the stream of its copy being made, then (single view only) the original.
   - Sound plays from the original file through a separate `Audio` element.
   - Exact frames come from ffmpeg when paused, but only when no copy is sharp enough (zoomed in past 1920).
@@ -38,8 +38,8 @@ The engine is plain TypeScript with no Svelte inside. It's told what to do throu
 
 | | Page fps | Distinct pictures/s |
 |---|---|---|
-| Layout of four, playing | 144 | 60–72 |
-| Layout, scrubbing | 113 | 53 |
+| Composition of four, playing | 144 | 60–72 |
+| Composition, scrubbing | 113 | 53 |
 | Single video from its copy | 109–137 | 45–60 |
 | Single video, scrubbing | 133 | 58 |
 | Single video with no copy (streaming) | – | 59–61 from the first second |
@@ -69,13 +69,13 @@ Done on 2026-10-26: see "How playback works now" above. What changed:
 **Watch for:**
 - the cache key needs a new version (`copy1` → `copy2` in `copyPath`);
 - the streamed fMP4 then carries two tracks, so `StreamFeed`'s MIME type becomes `video/mp4; codecs="avc1.64002A, mp4a.40.2"`;
-- layout sound (mixing cells via Web Audio) builds on this.
+- composition sound (mixing layers via Web Audio) builds on this.
 
 **Files:** `main/ffmpeg.ts` (`buildCopy`), `lib/playback/stream.ts`, `lib/playback/playback.ts` (`updateSound`, `sync`), `lib/playback/clip.ts` (videos are `silentVideo`s now).
 
 ### 3. Make more than one copy at a time
 
-**Now:** one at a time, and only that one streams. A layout of four new clips plays its first cell at once, while the others show stills until their turn.
+**Now:** one at a time, and only that one streams. A composition of four new clips plays its first cell at once, while the others show stills until their turn.
 **Do:** run N copies at once, where N comes from the core count (2 on this machine, 1 on small ones). Track `current` per running job (it's a single value now) and let each first copy stream (`live` becomes a map by file).
 **Files:**
 - `lib/playback/copies.ts`: `next()`, `current`, `live`, `preempt`;
@@ -118,7 +118,7 @@ The measurements above came from scripts that drive the built app over the Chrom
 
 ## Other open threads
 
-- **Finer layout control.** The user wants to define layouts more precisely than the split tree allows. The ideas discussed were a column-and-row grid where cells span tracks, typed-in sizes, and saved layout templates per artboard. Not started.
-- **Layout sound.** Layouts are silent in preview and export. It depends on #2 (sound in the copies).
-- **An unreproduced bug.** The user once saw playback stop after "deleting an asset from the grid". Removing cells and deleting a variant used by a layout were both tested, and work. It may have been the rescan bug fixed in `4a90136`. If it comes back, get the exact steps.
+- **Finer control over arrangements.** The user wants to define compositions more precisely than the bento's split tree allows. The ideas discussed were a column-and-row grid where cells span tracks, typed-in sizes, and saved templates per artboard. Not started. The column-and-row grid fits as a second composition type next to `bento`.
+- **Composition sound.** Compositions are silent in preview and export. It depends on #2 (sound in the copies).
+- **An unreproduced bug.** The user once saw playback stop after "deleting an asset from the grid". Removing cells and deleting a variant used by a composition were both tested, and work. It may have been the rescan bug fixed in `4a90136`. If it comes back, get the exact steps.
 - **Clear Cache is global.** It clears every folder's copies, not just the open one's. Fine for now; per-folder would need copies grouped by folder.

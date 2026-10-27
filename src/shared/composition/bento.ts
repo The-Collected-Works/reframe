@@ -1,32 +1,32 @@
-import { drawFrame, type Rect } from './layout'
-import type { CropSettings, LayoutItem, LayoutNode, Slot, Split, SplitArrangement } from './types'
+import { drawFrame, type Rect } from '../layout'
+import type { CropSettings, CompositionItem, BentoNode, Slot, Split, SplitArrangement } from '../types'
 
 /**
- * Layouts: several items laid out on one artboard. The arrangement is a tree of splits, each laying its
+ * Compositions: several items laid out on one artboard. The arrangement is a tree of splits, each laying its
  * children side by side or stacked. What's in it (the tree, which item each slot shows) is the
  * same on every artboard; how it's arranged (each split's direction and proportions) is per
  * artboard, and follows the artboard's shape until set. Shared, so the preview and the export lay
- * out and draw a layout the same way.
+ * out and draw a composition the same way.
  */
 
 export type Dir = 'row' | 'col'
 
 /** A slot's key in an artboard's overrides (its framing there). */
-export const slotKey = (layout: string, slot: string): string => `${layout}/${slot}`
+export const slotKey = (composition: string, slot: string): string => `${composition}/${slot}`
 
-export const isSplit = (n: LayoutNode): n is Split => 'children' in n
+export const isSplit = (n: BentoNode): n is Split => 'children' in n
 
 /** Every slot, in reading order. */
-export function slotsOf(n: LayoutNode): Slot[] {
+export function slotsOf(n: BentoNode): Slot[] {
   return isSplit(n) ? n.children.flatMap(slotsOf) : [n]
 }
 
 /** Every split, outermost first. */
-export function splitsOf(n: LayoutNode): Split[] {
+export function splitsOf(n: BentoNode): Split[] {
   return isSplit(n) ? [n, ...n.children.flatMap(splitsOf)] : []
 }
 
-export function findNode(n: LayoutNode, id: string): LayoutNode | null {
+export function findNode(n: BentoNode, id: string): BentoNode | null {
   if (n.id === id) return n
   if (!isSplit(n)) return null
   for (const c of n.children) {
@@ -36,7 +36,7 @@ export function findNode(n: LayoutNode, id: string): LayoutNode | null {
   return null
 }
 
-export function parentOf(n: LayoutNode, id: string): Split | null {
+export function parentOf(n: BentoNode, id: string): Split | null {
   if (!isSplit(n)) return null
   for (const c of n.children) {
     if (c.id === id) return n
@@ -47,7 +47,7 @@ export function parentOf(n: LayoutNode, id: string): Split | null {
 }
 
 /** The tree with node `id` replaced by what `fn` returns (the rest is shared, not copied). */
-export function mapNode(n: LayoutNode, id: string, fn: (n: LayoutNode) => LayoutNode): LayoutNode {
+export function mapNode(n: BentoNode, id: string, fn: (n: BentoNode) => BentoNode): BentoNode {
   if (n.id === id) return fn(n)
   if (!isSplit(n)) return n
   const children = n.children.map((c) => mapNode(c, id, fn))
@@ -88,7 +88,7 @@ export interface Arrangement {
 
 /**
  * A split's direction where it's given no other: along the longer side of its space. A square one
- * stacks, so a layout's groups read as rows, left to right then down.
+ * stacks, so a composition's groups read as rows, left to right then down.
  */
 export const autoDir = (r: Rect): Dir => (r.w > r.h ? 'row' : 'col')
 
@@ -103,13 +103,18 @@ export function sharesOf(split: Split, set: SplitArrangement | undefined): numbe
 }
 
 /**
- * Where everything in a layout goes on a W×H artboard: each slot's rectangle (whole pixels, edges
+ * Where everything in a composition goes on a W×H artboard: each slot's rectangle (whole pixels, edges
  * shared exactly between neighbours), the dividers between them, and how each split was placed.
  */
-export function arrange(layout: Pick<LayoutItem, 'root' | 'gap' | 'padding'>, W: number, H: number, splits?: Record<string, SplitArrangement>): Arrangement {
+export function arrange(
+  composition: Pick<CompositionItem, 'root' | 'gap' | 'padding'>,
+  W: number,
+  H: number,
+  splits?: Record<string, SplitArrangement>
+): Arrangement {
   const out: Arrangement = { cells: [], dividers: [], splits: new Map() }
-  const pad = Math.max(0, Math.min(layout.padding, W / 2 - 1, H / 2 - 1))
-  const place = (n: LayoutNode, r: Rect) => {
+  const pad = Math.max(0, Math.min(composition.padding, W / 2 - 1, H / 2 - 1))
+  const place = (n: BentoNode, r: Rect) => {
     if (!isSplit(n)) {
       const x0 = Math.round(r.x)
       const y0 = Math.round(r.y)
@@ -120,7 +125,7 @@ export function arrange(layout: Pick<LayoutItem, 'root' | 'gap' | 'padding'>, W:
     const dir = set?.dir ?? autoDir(r)
     const shares = sharesOf(n, set)
     const along = dir === 'row' ? r.w : r.h
-    const gap = Math.max(0, Math.min(layout.gap, (along - n.children.length) / Math.max(1, n.children.length - 1)))
+    const gap = Math.max(0, Math.min(composition.gap, (along - n.children.length) / Math.max(1, n.children.length - 1)))
     const free = Math.max(0, along - gap * (n.children.length - 1))
     const rects: Rect[] = []
     let at = dir === 'row' ? r.x : r.y
@@ -141,7 +146,7 @@ export function arrange(layout: Pick<LayoutItem, 'root' | 'gap' | 'padding'>, W:
     out.splits.set(n.id, { rect: r, dir, shares, rects })
     n.children.forEach((c, i) => place(c, rects[i]))
   }
-  place(layout.root, { x: pad, y: pad, w: W - pad * 2, h: H - pad * 2 })
+  place(composition.root, { x: pad, y: pad, w: W - pad * 2, h: H - pad * 2 })
   return out
 }
 
@@ -162,13 +167,13 @@ export function cellPath(ctx: Ctx, r: Rect, radius: number, k: number): void {
 }
 
 /**
- * Draws a layout: its background, then each cell framed into its (rounded) rectangle. `k` maps
+ * Draws a composition: its background, then each cell framed into its (rounded) rectangle. `k` maps
  * artboard pixels to canvas pixels, as for drawFrame. A cell with nothing to show is left as
  * background, or filled with `empty` (the editor's placeholder).
  */
-export function drawLayout(
+export function drawBento(
   ctx: Ctx,
-  layout: Pick<LayoutItem, 'radius' | 'bgColor'>,
+  composition: Pick<CompositionItem, 'radius' | 'bgColor'>,
   arrangement: Arrangement,
   W: number,
   H: number,
@@ -177,11 +182,11 @@ export function drawLayout(
   empty?: string
 ): void {
   ctx.save()
-  ctx.fillStyle = layout.bgColor
+  ctx.fillStyle = composition.bgColor
   ctx.fillRect(0, 0, W * k, H * k)
   for (const { slot, rect } of arrangement.cells) {
     const s = source(slot)
-    cellPath(ctx, rect, layout.radius, k)
+    cellPath(ctx, rect, composition.radius, k)
     if (s?.hole) {
       ctx.save()
       ctx.globalCompositeOperation = 'destination-out'
@@ -203,13 +208,13 @@ export function drawLayout(
 
 // ---- time
 
-/** How long a layout runs: its set duration, or its longest video. 0: no video, so it's a still. */
-export function layoutDuration(duration: number | null, lengths: number[]): number {
+/** How long a composition runs: its set duration, or its longest video. 0: no video, so it's a still. */
+export function compositionDuration(duration: number | null, lengths: number[]): number {
   if (!lengths.length) return 0
   return Math.max(0.1, duration ?? Math.max(...lengths))
 }
 
-/** Where a slot's video is (in its own time) at `t` seconds into the layout. */
+/** Where a slot's video is (in its own time) at `t` seconds into the composition. */
 export function slotTime(t: number, start: number, length: number, end: 'loop' | 'hold' = 'loop'): number {
   if (length <= 0) return start
   return start + (end === 'hold' ? Math.min(t, Math.max(0, length - 1 / 60)) : t % length)

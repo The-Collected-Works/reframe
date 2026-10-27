@@ -4,8 +4,8 @@ import { promises as fs, type Stats } from 'node:fs'
 import { constants as os, setPriority } from 'node:os'
 import { join } from 'node:path'
 import { inColor, OUT_TAGS, parseColor } from '@shared/color'
-import { layoutArgs, videoArgs } from '@shared/filtergraph'
-import type { ColorMeta, LayoutExportJob, PosterResult, VideoExportJob } from '@shared/types'
+import { compositionArgs, videoArgs } from '@shared/filtergraph'
+import type { ColorMeta, CompositionExportJob, PosterResult, VideoExportJob } from '@shared/types'
 import { writeJsonAtomic } from './fsutil'
 
 // Runs inside the media worker (see worker.ts); the main process passes these in.
@@ -100,14 +100,14 @@ async function encode(args: string[], seconds: number, onProgress: (p: number) =
 }
 
 /**
- * Renders a layout with video in it, in two passes. First each video is framed into a file the size
+ * Renders a composition with video in it, in two passes. First each video is framed into a file the size
  * of its cell, exactly as a single video is framed into an artboard (trimmed, so a whole file is
  * one loop). Then those are laid over the background, looping or holding, under the renderer's
  * layer of everything that doesn't move. Working files go once it's done (or cut short).
  */
-export async function exportLayout(job: LayoutExportJob, onProgress: (p: number) => void): Promise<void> {
+export async function exportComposition(job: CompositionExportJob, onProgress: (p: number) => void): Promise<void> {
   exportCancelled = false
-  const dir = join(CACHE, 'layout')
+  const dir = join(CACHE, 'composition')
   await fs.mkdir(dir, { recursive: true })
   const tag = createHash('sha1').update(`${job.output}|${Date.now()}`).digest('hex').slice(0, 12)
   const layer = join(dir, `${tag}-layer.png`)
@@ -115,7 +115,7 @@ export async function exportLayout(job: LayoutExportJob, onProgress: (p: number)
   const part = partOf(job.output)
   const working = [layer, ...cells, part]
   working.forEach((f) => partFiles.add(f))
-  // Progress: each cell's pass in proportion to its length, then the layout's for its own.
+  // Progress: each cell's pass in proportion to its length, then the composition's for its own.
   const total = job.cells.reduce((n, c) => n + c.length, 0) + job.duration
   let before = 0
   const step = (seconds: number) => (p: number) => onProgress((before + p * seconds) / total)
@@ -142,7 +142,7 @@ export async function exportLayout(job: LayoutExportJob, onProgress: (p: number)
       before += c.length
     }
     if (exportCancelled) throw new Error('cancelled')
-    await encode(layoutArgs(job, layer, cells, part), job.duration, step(job.duration))
+    await encode(compositionArgs(job, layer, cells, part), job.duration, step(job.duration))
     await fs.rename(part, job.output)
     onProgress(1)
   } finally {

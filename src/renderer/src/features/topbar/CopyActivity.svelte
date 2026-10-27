@@ -1,7 +1,7 @@
 <!--
   In the title bar while videos' playback copies are being made: how many are done of how many,
   with the one in progress on the ring (or a sharper copy of the open video being made). Until a
-  video's copy is ready it plays and scrubs more slowly (or, in a layout, shows a still), so this
+  video's copy is ready it plays and scrubs more slowly (or, in a composition, shows a still), so this
   says why, and that it's on its way.
 -->
 <script lang="ts">

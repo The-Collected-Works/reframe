@@ -82,9 +82,9 @@ export const ICONS = {
   // Named by the axis line, not the motion: mirroring left-right is the vertical-axis glyph.
   flipH: TrianglesCenterlineDashedVertical,
   flipV: TrianglesCenterlineDashedHorizontal,
-  // Variants and layouts.
+  // Variants and compositions.
   variant: Layers2,
-  layout: LayoutDashboard,
+  composition: LayoutDashboard,
   splitRow: Columns2,
   splitCol: Rows2,
   replace: Replace,
