@@ -63,10 +63,10 @@ describe('removeNode', () => {
     expect(show(removeNode(split('r', 'row', split('c', 'col', slot('a'), slot('b')), slot('d')), 'a')!)).toBe('row(b d)')
   })
 
-  it('folds a group into the split around it when that leaves them running the same way', () => {
-    // row( col( row(a b) x ) c ) minus x: the inner row joins the outer one.
-    const root = split('r', 'row', split('c', 'col', split('i', 'row', slot('a'), slot('b')), slot('x')), slot('c'))
-    expect(show(removeNode(root, 'x')!)).toBe('row(a b c)')
+  it("keeps a group that's left inside one running the same way (only ungrouping flattens)", () => {
+    // row( col( row(a b) x ) c ) minus x: the column gives way to the inner row, which stays a group.
+    const root = split('r', 'row', split('k', 'col', split('i', 'row', slot('a'), slot('b')), slot('x')), slot('c'))
+    expect(show(removeNode(root, 'x')!)).toBe('row(row(a b) c)')
   })
 
   it('removing everything leaves nothing', () => {
@@ -95,6 +95,27 @@ describe('moveNode', () => {
     const root = split('r', 'row', split('g', 'same', slot('a'), slot('b')), split('s', 'col', slot('x'), slot('y')))
     expect(show(moveNode(root, 'a', 'b', 'right', dirOf, newId).root)).toBe('row(same(b a) col(x y))')
     expect(show(moveNode(root, 'x', 'y', 'bottom', dirOf, newId).root)).toBe('row(same(a b) col(y x))')
+  })
+
+  it('one of a pair moved across the other turns the pair, and back again', () => {
+    // The user's case: two side by side (a group of their own) beside a stack.
+    const root = split('r', 'row', split('g', 'same', slot('a'), slot('b')), split('s', 'col', slot('x'), slot('y')))
+    const down = moveNode(root, 'a', 'b', 'bottom', dirOf, newId).root
+    expect(show(down)).toBe('row(col(b a) col(x y))')
+    expect((down as Split).children[0].id).toBe('g')
+    const back = moveNode(down, 'a', 'b', 'left', (s) => fixedDir(s) ?? 'row', newId).root
+    expect(show(back)).toBe('row(same(a b) col(x y))')
+    // On its own (nothing around it), it runs the way it's turned.
+    expect(show(moveNode(split('p', 'row', slot('a'), slot('b')), 'b', 'a', 'top', dirOf, newId).root)).toBe('col(b a)')
+  })
+
+  it('one of three moved across another makes a pair there, which keeps their space, and stays a group', () => {
+    n = 0
+    const root = split('r', 'row', slot('a'), slot('b'), slot('c'))
+    const down = moveNode(root, 'a', 'b', 'bottom', dirOf, newId).root
+    expect(show(down)).toBe('row(col(b a) c)')
+    expect(reconcileWeights(root, down, { r: { weights: [1, 1, 2] } })).toEqual({ r: { weights: [0.5, 0.5] } })
+    expect(show(moveNode(down, 'a', 'b', 'right', dirOf, newId).root)).toBe('row(same(b a) c)')
   })
 
   it('moved within its group, keeps its share', () => {
@@ -153,13 +174,13 @@ describe('direction and grouping', () => {
     expect(dirsOn(arrange(layout, 500, 1000))(inner)).toBe('col')
   })
 
-  it('a group running the same way takes the direction of the split it replaces, or joins the one around', () => {
+  it('a group running the same way takes the direction of the split it replaces', () => {
     const lone = split('r', 'col', { id: 'g', dir: 'same', children: [slot('a'), slot('b')] }, slot('c'))
     expect(show(removeNode(lone, 'c')!)).toBe('col(a b)')
     const nested = split('o', 'row', split('r', 'col', { id: 'g', dir: 'same', children: [slot('a'), slot('b')] }, slot('c')), slot('d'))
     expect(show(removeNode(nested, 'c')!)).toBe('row(col(a b) d)')
     const joins = split('o', 'row', split('r', 'same', { id: 'g', dir: 'same', children: [slot('a'), slot('b')] }, slot('c')), slot('d'))
-    expect(show(removeNode(joins, 'c')!)).toBe('row(a b d)')
+    expect(show(removeNode(joins, 'c')!)).toBe('row(same(a b) d)')
   })
 
   it("an Auto split's direction comes from where it's placed", () => {

@@ -204,9 +204,8 @@ export function insertBeside(
 
 /**
  * The tree without node `id` (null: it was the whole tree). A split left with one child gives way
- * to it (a split running the same way as it, taking its direction); and where that leaves a split
- * inside one running the same way (both set, or the inner one `same`), the inner one's children
- * join the outer.
+ * to it, in its place (a split running the same way as it taking its direction). Nothing else is
+ * flattened: groups stay until they're ungrouped.
  */
 export function removeNode(root: BentoNode, id: string): BentoNode | null {
   if (root.id === id) return null
@@ -214,11 +213,6 @@ export function removeNode(root: BentoNode, id: string): BentoNode | null {
   const rest = parent.children.filter((c) => c.id !== id)
   if (rest.length > 1) return mapNode(root, parent.id, (p) => ({ ...p, children: rest }))
   const only = isSplit(rest[0]) && rest[0].dir === 'same' ? withDir(rest[0], parent.dir) : rest[0]
-  const grand = parentOf(root, parent.id)
-  if (grand && isSplit(only) && only.dir && (only.dir === 'same' || only.dir === grand.dir)) {
-    const i = grand.children.findIndex((c) => c.id === parent.id)
-    return mapNode(root, grand.id, (g) => ({ ...g, children: [...grand.children.slice(0, i), ...only.children, ...grand.children.slice(i + 1)] }))
-  }
   return mapNode(root, parent.id, () => only)
 }
 
@@ -233,14 +227,24 @@ const MOVING = '\u0000moving'
 
 /**
  * Node `id` moved to `side` of node `target` (see `insertBeside`). Moving a node beside itself or
- * into itself changes nothing. It's put in its new place before it's taken out of its old one, so
- * a group only closes up behind it if that leaves it with one child: moving one of a pair beside the
- * other reorders the pair (it doesn't break it up), and moving one of a pair beside the pair puts it
- * beside what remains of it. Moved within its own group, it keeps its share of it.
+ * into itself changes nothing. One of a pair moved across the other turns the pair (the same group,
+ * running that way; the same way as the group around it, if that's how that one runs). Otherwise
+ * it's put in its new place before it's taken out of its old one, so a group only closes up behind
+ * it if that leaves it with one child: one of a pair moved along the other reorders the pair, and
+ * one of a pair moved beside the pair goes beside what remains of it. Moved within its own group,
+ * it keeps its share of it.
  */
 export function moveNode(root: BentoNode, id: string, target: string, side: Side, dirOf: DirOf, newId: () => string): { root: BentoNode; born?: Born } {
   const node = findNode(root, id)
   if (!node || id === root.id || id === target || within(root, id, target)) return { root }
+  const parent = parentOf(root, id)!
+  const other = parent.children.find((c) => c.id !== id)!
+  const dir = sideDir(side)
+  if (parent.children.length === 2 && other.id === target && dirOf(parent) !== dir) {
+    const around = parentOf(root, parent.id)
+    const turned = withDir(parent, around && dirOf(around) === dir ? 'same' : dir)
+    return { root: mapNode(root, parent.id, () => ({ ...turned, children: isAfter(side) ? [other, node] : [node, other] })) }
+  }
   const marked = mapNode(root, id, () => ({ id: MOVING, item: null }))
   // Directions as they were: the split being moved into hasn't changed shape.
   const r = insertBeside(marked, target, side, node, (s) => fixedDir(s) ?? dirOf((findNode(root, s.id) as Split | null) ?? s), newId)
