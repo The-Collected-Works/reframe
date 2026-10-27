@@ -158,8 +158,55 @@ export function cancelExport(): void {
 
 // ---------- caches ----------
 
-/** Cache file name for a source file as it is now (a changed file gets a new entry). */
+const exists = (f: string) =>
+  fs.access(f).then(
+    () => true,
+    () => false
+  )
+
+/** Cache file name for a source file by where it is, as it was keyed until 0.6 (see `contentKey`). */
 const cacheKey = (tag: string, path: string, st: Stats) => createHash('sha1').update(`${tag}|${path}|${st.size}|${st.mtimeMs}`).digest('hex')
+
+/** How much of a file's start, middle and end its content key reads. */
+const SAMPLE = 64 * 1024
+/** Content keys by path as the file was, so each file is read once for as long as it's unchanged. */
+const contentKeys = new Map<string, string>()
+
+/**
+ * Cache file name for a source file by what's in it, not where it is: its size and a hash of 64 KB
+ * from its start, middle and end (where a video's header and index are). Moved, renamed or
+ * reorganised by a sync service, a file keeps its cache entries; edited, it gets new ones.
+ */
+async function contentKey(tag: string, path: string, st: Stats): Promise<string> {
+  const memo = `${path}|${st.size}|${st.mtimeMs}`
+  let key = contentKeys.get(memo)
+  if (!key) {
+    const hash = createHash('sha1').update(`${st.size}|`)
+    const fh = await fs.open(path, 'r')
+    try {
+      const n = Math.min(SAMPLE, st.size)
+      for (const at of [0, Math.max(0, Math.floor(st.size / 2 - n / 2)), Math.max(0, st.size - n)]) {
+        const buf = Buffer.alloc(n)
+        const { bytesRead } = await fh.read(buf, 0, n, at)
+        hash.update(buf.subarray(0, bytesRead))
+      }
+    } finally {
+      await fh.close()
+    }
+    contentKeys.set(memo, (key = hash.digest('hex')))
+  }
+  return createHash('sha1').update(`${tag}|${key}`).digest('hex')
+}
+
+/**
+ * `files` as they're named now, taking over any made under the old keys (by where the source was):
+ * a cache from before 0.6 isn't made again. Renamed only if the new names are all free.
+ */
+async function adopt(files: string[], old: string[]): Promise<void> {
+  if (await exists(files[0])) return
+  if (!(await Promise.all(old.map(exists))).every(Boolean)) return
+  await Promise.all(old.map((f, i) => fs.rename(f, files[i]))).catch(() => {})
+}
 
 /** Marks a cache entry as just used, so pruning keeps what's in use rather than what's newest. */
 const touch = (...files: string[]) => {
@@ -235,9 +282,11 @@ const grabFrame = (kind: Kind, path: string, time: number, color: ColorMeta | un
  */
 export async function poster(path: string): Promise<PosterResult> {
   const st = await fs.stat(path)
-  const key = cacheKey('v4', path, st)
+  const key = await contentKey('poster1', path, st)
   const jpg = join(CACHE, key + '.jpg')
   const meta = join(CACHE, key + '.json')
+  const old = cacheKey('v4', path, st)
+  await adopt([jpg, meta], [join(CACHE, old + '.jpg'), join(CACHE, old + '.json')])
   try {
     const [data, info] = await Promise.all([fs.readFile(jpg), fs.readFile(meta, 'utf8')])
     const { duration, color, audio, fps } = JSON.parse(info)
@@ -292,12 +341,13 @@ let copyChain: Promise<unknown> = Promise.resolve()
 const copying = new Map<string, Promise<string>>()
 let copyCancelled = false
 
-const copyPath = async (path: string, edge: number) => join(COPIES, `${cacheKey('copy1', path, await fs.stat(path))}-${edge}.mp4`)
-const exists = (f: string) =>
-  fs.access(f).then(
-    () => true,
-    () => false
-  )
+/** Where a copy of `path` at `edge` lives (taking over one made under its old name). */
+async function copyPath(path: string, edge: number): Promise<string> {
+  const st = await fs.stat(path)
+  const out = join(COPIES, `${await contentKey('copy2', path, st)}-${edge}.mp4`)
+  await adopt([out], [join(COPIES, `${cacheKey('copy1', path, st)}-${edge}.mp4`)])
+  return out
+}
 
 /**
  * Which of these copies are made already (path, or null), without making any: kept between
