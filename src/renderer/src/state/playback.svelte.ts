@@ -1,3 +1,4 @@
+import { untrack } from 'svelte'
 import { api, mediaUrl } from '../lib/bridge'
 import { Copies, type CopyActivity, type CopyState, type MediaFile } from '../lib/playback/copies'
 import type { MediaHost } from '../lib/playback/host'
@@ -99,6 +100,8 @@ export interface PlayerInputs {
   hold?: () => boolean
   /** While a track's copy is being made, play its original (see PlaybackOptions). */
   originals?: boolean
+  /** Start playing as soon as it has its inputs. */
+  autoplay?: boolean
 }
 
 /**
@@ -111,7 +114,8 @@ export class Player {
   scrubbing = $state(false)
   /** Playing, with a track that has nothing to show yet. */
   waiting = $state(false)
-  /** Changes whenever anything there is to draw does. */
+  /** Changes when a track gets a new source or frame to show (a seek landing, a copy arriving). While
+      playing, videos move on by themselves: `time` changes every frame. */
   version = $state(0)
 
   private core: Playback
@@ -133,17 +137,29 @@ export class Player {
       $effect(() => core.setRange(inputs.range()))
       $effect(() => core.setSound(inputs.sound?.() ?? null))
       $effect(() => core.setHold(inputs.hold?.() ?? false))
+      // Once, after the inputs above have reached it (effects run in the order they're made).
+      $effect(() => {
+        if (inputs.autoplay) untrack(() => core.play())
+      })
       return off
     })
   }
 
-  /** What to draw for a track now (read `version` alongside to redraw when it changes). */
+  /** What to draw for a track now (read `version` and `time` alongside, to redraw when it changes). */
   frame(id: string): CanvasImageSource | null {
     return this.core.frame(id)
   }
 
   toggle(): void {
     this.core.toggle()
+  }
+
+  play(): void {
+    this.core.play()
+  }
+
+  pause(): void {
+    this.core.pause()
   }
 
   seek(t: number): void {
@@ -166,7 +182,11 @@ export class Player {
     this.core.preview(id, t, draw)
   }
 
+  private destroyed = false
+
   destroy(): void {
+    if (this.destroyed) return
+    this.destroyed = true
     this.stop()
     this.core.destroy()
   }

@@ -2,28 +2,32 @@ import { untrack } from 'svelte'
 import { cubicOut } from 'svelte/easing'
 import { Tween } from 'svelte/motion'
 import type { Clip } from '@shared/types'
-import { mediaUrl } from '../../lib/bridge'
-import { releaseVideo, silentVideo } from '../../lib/playback/video'
-import { copies, sizesOf } from '../../state/playback.svelte'
 import type { Asset } from '../../state/library.svelte'
+import { Player } from '../../state/playback.svelte'
 import { scroll } from './context'
 
 const SCROLL_SETTLE = 250
 const DWELL = 150
+/** The preview's one track. */
+const TRACK = 'hover'
 
 /**
- * A video thumbnail playing in place while hovered. A hover becomes a preview only once the pointer
- * has rested on it and the grid has stopped scrolling (thumbnails sliding under a still pointer
- * mid-scroll shouldn't each start loading a video). It starts on the thumbnail's own frame and fades
- * in only once the video has presented one, so there's no jump or blank flash either way; leaving
- * holds the last frame and fades back. Create it while a component initialises.
+ * A video thumbnail playing in place while hovered, through the playback engine (one track: the
+ * video's trim, looping, from its smallest copy, or one being made, or the file meanwhile). A hover
+ * becomes a preview only once the pointer has rested on it and the grid has stopped scrolling
+ * (thumbnails sliding under a still pointer mid-scroll shouldn't each start a video). It starts on
+ * the frame the thumbnail shows and fades in only once it has a frame of its own, so there's no
+ * jump or blank flash either way; leaving holds the last frame and fades back. Create it while a
+ * component initialises.
  */
 export class HoverPreview {
   hovering = $state(false)
-  /** The playing video (also while fading out), drawn over the thumbnail at `fade`. */
-  video: HTMLVideoElement | null = null
+  /** Drawn over the thumbnail at this opacity. */
   readonly fade = new Tween(0, { duration: 180, easing: cubicOut })
   private ready = $state(false)
+  /** The preview on screen (also while fading out), and one starting that has no frame yet. */
+  private shown = $state.raw<Player | null>(null)
+  private incoming = $state.raw<Player | null>(null)
   private held = false
 
   /** `enabled`: the grid is showing and the eyedropper isn't (it needs the exact thumbnail). */
@@ -42,62 +46,81 @@ export class HoverPreview {
       return () => clearTimeout(t)
     })
 
+    // The clock moving, each new frame and each step of the fade redraw the thumbnail.
     $effect(() => {
       void this.fade.current
-      if (this.video) untrack(redraw)
+      const p = this.shown
+      if (!p) return
+      void p.version
+      void p.time
+      untrack(redraw)
+    })
+
+    // A preview takes over once it has a frame (from one still fading out, at its opacity).
+    $effect(() => {
+      const p = this.incoming
+      if (!p) return
+      void p.version
+      if (!p.frame(TRACK)) return
+      untrack(() => {
+        if (this.shown && this.shown !== p) this.shown.destroy()
+        this.shown = p
+        this.incoming = null
+        if (this.held) p.pause()
+        this.fade.target = 1
+      })
     })
 
     $effect(() => {
       const a = asset()
       if (!this.ready || !enabled() || a.kind !== 'video' || !a.w) return
-      // A playback copy where there's one already (it starts and loops at once); else the file.
-      const v = silentVideo(untrack(() => copies.best(a, sizesOf(a)[0]))?.url ?? mediaUrl(a.path))
-      const start = clip()?.start ?? 0
-      const end = clip()?.end ?? a.duration
-      // From where playback starts, like the thumbnail it takes over from.
-      v.currentTime = start
-      let alive = true
-      // A frame on every presented video frame, looping within the trim.
-      const onFrame = () => {
-        if (!alive) return
-        if (v.currentTime >= end - 0.03) v.currentTime = start
-        if (this.video === v) redraw()
-        v.requestVideoFrameCallback(onFrame)
-      }
-      const first = () => {
-        if (!alive) return
-        // A previous hover may still be fading out; this one takes over from its current opacity.
-        if (this.video && this.video !== v) releaseVideo(this.video)
-        if (this.held) v.pause()
-        this.video = v
-        this.fade.target = 1
-        onFrame()
-      }
-      v.play()
-        .then(() => v.requestVideoFrameCallback(first))
-        .catch(() => {})
+      const p = untrack(
+        () =>
+          new Player({
+            tracks: () => {
+              const c = clip()
+              const start = c?.start ?? 0
+              const length = Math.max(0.05, (c?.end ?? a.duration) - start)
+              return [{ id: TRACK, file: a, start, length, end: 'loop', need: 0 }]
+            },
+            range: () => {
+              const c = clip()
+              return { start: 0, end: Math.max(0.05, (c?.end ?? a.duration) - (c?.start ?? 0)) }
+            },
+            originals: true,
+            autoplay: true
+          })
+      )
+      this.incoming = p
       return () => {
-        alive = false
-        if (this.video !== v) return releaseVideo(v)
-        v.pause()
+        if (this.incoming === p) {
+          this.incoming = null
+          return p.destroy()
+        }
+        p.pause()
         this.fade.set(0).then(() => {
-          if (this.video === v) this.video = null
-          releaseVideo(v)
+          if (this.shown !== p) return
+          this.shown = null
+          p.destroy()
         })
       }
     })
   }
 
+  /** What to draw over the thumbnail (at `fade`), if anything. */
+  get picture(): CanvasImageSource | null {
+    return this.shown?.frame(TRACK) ?? null
+  }
+
   /**
-   * While the thumbnail is dragged, the video holds still on its frame: playing, it would redraw
+   * While the thumbnail is dragged, the preview holds still on its frame: playing, it would redraw
    * the cell every frame on top of the drag's own redraws. It plays on when let go.
    */
   hold(on: boolean): void {
     this.held = on
-    const v = this.video
-    if (!v || !this.ready) return
-    if (on) v.pause()
-    // Its frame callback is still waiting, and picks up again with the next frame.
-    else v.play().catch(() => {})
+    const p = this.shown
+    if (!p || !this.ready) return
+    if (on) p.pause()
+    else p.play()
   }
 }

@@ -75,7 +75,7 @@
       return
     }
     const fade = preview.fade.current
-    const video = fade > 0 ? preview.video : null
+    const video = fade > 0 ? preview.picture : null
     if (video && fade >= 1) {
       drawFrame(ctx, video, asset.w, asset.h, board.width, board.height, settings, kk)
     } else {
