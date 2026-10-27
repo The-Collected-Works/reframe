@@ -64,12 +64,11 @@
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
       <MenuLabel>Show</MenuLabel>
-      <MenuItem icon={prefs.filters.length ? 'exclude' : 'show'} dim={prefs.filters.length > 0} onclick={() => onChange({ filters: [] })}>All</MenuItem>
+      <MenuItem mark="show" checked={!prefs.filters.length} onclick={() => onChange({ filters: [] })}>All</MenuItem>
       {#each FILTER_GROUPS as group, i (i)}
         <div class="filter-gap"></div>
         {#each group as f (f)}
-          {@const on = prefs.filters.includes(f)}
-          <MenuItem icon={on ? 'show' : 'exclude'} dim={!on} onclick={() => toggle(f)}>{LABELS[f]}</MenuItem>
+          <MenuItem mark="show" checked={prefs.filters.includes(f)} onclick={() => toggle(f)}>{LABELS[f]}</MenuItem>
         {/each}
       {/each}
       <MenuSeparator />
