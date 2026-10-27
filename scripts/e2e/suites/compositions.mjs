@@ -140,6 +140,25 @@ export default {
       }
     ],
     [
+      'the eyedropper picks a composition’s background',
+      async ({ app, folder }) => {
+        const comp = () => Object.values(JSON.parse(readFileSync(join(folder, '.reframe.json'), 'utf8')).items).find((i) => i.name === 'Composition 1')
+        const was = comp().bgColor
+        await app.clickOn('.cell[data-name^="~"] .frame')
+        await app.key('i')
+        const p = await app.point('.cell[data-name="h264.mp4"] canvas')
+        await app.hover(p.x, p.y)
+        await app.waitFor(`/^[0-9a-f]{6}$/.test(document.querySelector('.eyedropper .readout')?.textContent.trim())`, 3000, 'a colour under the pointer')
+        const hex = '#' + (await app.eval(`document.querySelector('.eyedropper .readout').textContent.trim()`))
+        assert.notEqual(hex, was, 'a colour other than the background already')
+        await app.click(p.x, p.y)
+        await sleep(800)
+        assert.equal(comp().bgColor, hex)
+        await app.key('z', 'ctrl')
+        await app.key('Escape')
+      }
+    ],
+    [
       'builds three stacked beside a big one, with the + on the edges',
       async ({ app }) => {
         await app.clickOn('.cell[data-name="h264.mp4"] .frame')

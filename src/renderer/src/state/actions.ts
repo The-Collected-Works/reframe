@@ -16,7 +16,7 @@ import {
   moveInto,
   group as groupTree
 } from '@shared/composition/bento'
-import type { BentoNode, CropSettings, FolderScan, Slot, SettingKey } from '@shared/types'
+import type { BentoNode, CompositionItem, CropSettings, FolderScan, Slot, SettingKey } from '@shared/types'
 import { api } from '../lib/bridge'
 import { hint } from '../lib/keymap.svelte'
 import { fmtSize, plural } from '../lib/format'
@@ -163,6 +163,17 @@ export function editingSlot(): string | null {
 }
 
 const isComposition = (key: string) => items.entry(key)?.kind === 'composition'
+
+/** The compositions whose own settings are being edited: the one open with no cell chosen, or a selection of only compositions. */
+export function editedCompositions(): string[] {
+  const focus = selection.focus
+  if (view.mode === 'single' && focus && isComposition(focus)) return editingSlot() ? [] : [focus]
+  return selection.names.length && selection.names.every(isComposition) ? selection.names : []
+}
+
+export function editCompositions(patch: Partial<CompositionItem>): void {
+  for (const k of editedCompositions()) project.editComposition(k, patch)
+}
 
 /**
  * What edits apply to: the slot being edited in a composition, or else the selection. A composition has no

@@ -8,7 +8,7 @@
   import type { Attachment } from 'svelte/attachments'
   import { findNode, isSplit, parentOf, slotsOf } from '@shared/composition/bento'
   import { DEFAULT_SETTINGS, normDeg, resolveSettings } from '@shared/framing/framing'
-  import type { CropSettings, FitMode, CompositionItem, SettingKey } from '@shared/types'
+  import type { CropSettings, FitMode, SettingKey } from '@shared/types'
   import { fmtSize, fmtTime, plural } from '../../lib/format'
   import { hint } from '../../lib/keymap.svelte'
   import {
@@ -18,6 +18,8 @@
     edit,
     editEach,
     editingSlot,
+    editCompositions,
+    editedCompositions,
     evenOut,
     makeDefault,
     paste,
@@ -61,10 +63,8 @@
   // In the single view on a composition: that composition, and the cell being framed in it (if one is).
   const openComposition = $derived(view.mode === 'single' && selection.focus && isComposition(selection.focus) ? selection.focus : null)
   const slotKey = $derived(editingSlot())
-  /** The compositions whose settings show: the open one with no cell chosen, or a selection of only compositions. */
-  const compositions = $derived(
-    openComposition ? (slotKey ? [] : [openComposition]) : selection.names.length && selection.names.every(isComposition) ? selection.names : []
-  )
+  /** The compositions whose settings show. */
+  const compositions = $derived(editedCompositions())
   const compositionKey = $derived(compositions.length ? (selection.focus && compositions.includes(selection.focus) ? selection.focus : compositions[0]) : null)
   const composition = $derived(compositionOf(project.file, compositionKey))
   // The open composition as it sits here, for a cell's size and what it shows.
@@ -167,7 +167,6 @@
     )
   }
   const compositionSkip = $derived(compositions.filter((k) => resolveSettings(board, k).skip).length)
-  const editCompositions = (patch: Partial<CompositionItem>) => compositions.forEach((k) => project.editComposition(k, patch))
 
   // Renaming a variant or composition in place: click its name above. Enter or leaving it saves, Esc cancels.
   let renaming = $state(false)

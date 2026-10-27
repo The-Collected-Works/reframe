@@ -1,4 +1,4 @@
-import { edit } from '../../state/actions'
+import { edit, editCompositions, editedCompositions } from '../../state/actions'
 import { shell } from '../../state/shell.svelte'
 
 /**
@@ -11,8 +11,13 @@ export function pickBackground(): void {
   shell.picking = !shell.picking
 }
 
-/** Closes the eyedropper, setting the colour it picked (null: cancelled). */
+/**
+ * Closes the eyedropper, setting the colour it picked (null: cancelled) as the background of what the
+ * inspector shows: the compositions being edited, or else the assets (or the cell being framed).
+ */
 export function finishPick(hex: string | null): void {
   shell.picking = false
-  if (hex) edit({ bg: 'color', bgColor: hex })
+  if (!hex) return
+  if (editedCompositions().length) editCompositions({ bgColor: hex })
+  else edit({ bg: 'color', bgColor: hex })
 }
