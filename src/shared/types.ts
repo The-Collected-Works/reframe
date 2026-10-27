@@ -285,7 +285,7 @@ export interface ReframeApi {
   /** Leaves a subfolder (relative to the open folder) out of the project, or brings it back. */
   excludeFolder(rel: string): Promise<void>
   includeFolder(rel: string): Promise<void>
-  /** Marks export destinations as output, so their files are never scanned as assets. */
+  /** Marks an export destination as output (`dirs`: it, then its artboards' folders), so its files are never scanned as assets. */
   markOutput(dirs: string[]): Promise<void>
   /** Recently opened folders that still exist, newest first. */
   recentFolders(): Promise<string[]>

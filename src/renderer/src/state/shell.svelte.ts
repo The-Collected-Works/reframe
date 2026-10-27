@@ -13,6 +13,10 @@ class Shell {
   renamingItem = $state.raw<string | null>(null)
   /** Eyedropper armed: the next click on the screen samples the background colour. */
   picking = $state.raw(false)
+  /** Which assets the last export went for, so the next starts there (trying settings on one asset stays on it). */
+  exportScope = $state.raw<ExportScope | null>(null)
 }
+
+export type ExportScope = 'all' | 'visible' | 'selected'
 
 export const shell = new Shell()

@@ -226,14 +226,22 @@ ipcMain.handle('exclude-folder', async (_e, rel: string) => {
 })
 ipcMain.handle('include-folder', (_e, rel: string) => unmarkFolder(subfolder(rel)))
 // Export destinations get the marker before anything is written, so exports never show up as
-// assets. The open folder itself (or a folder containing it) is never marked: that would hide
-// the whole project; exports always go into a subfolder per artboard, which is marked instead.
+// assets. `dirs` is the destination, then its artboards' folders, and one marker goes as high as
+// it can: the destination's skips everything inside it, so its artboards' folders lose theirs (from
+// before). The open folder itself (or a folder containing it) is never marked: that would hide the
+// whole project; exports always go into a subfolder per artboard, which is marked instead.
 ipcMain.handle('mark-output', async (_e, dirs: string[]) => {
+  const marked: string[] = []
   for (const d of dirs) {
     const abs = normalize(d)
     outputRoots.add(abs)
     if (currentDir && (abs === currentDir || within(abs, currentDir))) continue
+    if (marked.some((m) => within(m, abs))) {
+      await unmarkFolder(abs, 'export')
+      continue
+    }
     await markFolder(abs, 'export')
+    marked.push(abs)
     if (currentDir && within(currentDir, abs)) noteSkipped(relative(currentDir, abs).split(/[\\/]/).join('/'))
   }
 })

@@ -2,7 +2,7 @@
 // zooming, and exporting.
 
 import assert from 'node:assert/strict'
-import { readdirSync } from 'node:fs'
+import { existsSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { launch } from '../app.mjs'
 import { sleep } from '../cdp.mjs'
@@ -181,6 +181,32 @@ export default {
         }
         assert.ok(!readdirSync(dir).some((f) => f.includes('.part')), 'no working files left')
         await app.key('Escape')
+      }
+    ],
+    [
+      'the next export goes for the same assets, and only the destination is marked',
+      async ({ app, folder }) => {
+        // An artboard's folder marked by an older version loses its marker: the destination's covers it.
+        writeFileSync(join(folder, 'export', 'Square', '.reframe-output'), '{"app":"Reframe","reason":"export"}\n')
+        await app.waitFor(`!document.querySelector('[role=dialog]')`, 5000, 'the dialog closed')
+        await app.clickOn(cell('hevc.mp4'))
+        const button = (label) => `[...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
+        const exportOnce = async () => {
+          await app.clickOn('.tools .primary')
+          await app.waitFor(`!!${button('Selected 1')}`, 3000, 'the dialog')
+        }
+        await exportOnce()
+        await app.eval(`${button('Selected 1')}.click()`)
+        await app.eval(`${button('Export')}.click()`)
+        await app.waitFor(`/exported/.test(document.querySelector('.overall-meta')?.textContent ?? '')`, 120000, 'the export')
+        assert.match(await app.eval(`document.querySelector('.overall-meta').textContent`), /^1 exported/)
+        await app.key('Escape')
+        await app.waitFor(`!document.querySelector('[role=dialog]')`, 5000, 'the dialog closed')
+        await exportOnce()
+        assert.ok(await app.eval(`${button('Selected 1')}.classList.contains('on')`), 'still just the selected asset')
+        await app.key('Escape')
+        assert.ok(existsSync(join(folder, 'export', '.reframe-output')), 'the destination is marked')
+        assert.ok(!existsSync(join(folder, 'export', 'Square', '.reframe-output')), 'its artboard folder is not')
       }
     ]
   ]

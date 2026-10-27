@@ -11,11 +11,11 @@
   import { library } from '../../state/library.svelte'
   import { project } from '../../state/project.svelte'
   import { selection } from '../../state/selection.svelte'
-  import { shell } from '../../state/shell.svelte'
+  import { shell, type ExportScope } from '../../state/shell.svelte'
   import { view } from '../../state/view.svelte'
   import { Button, Dialog } from '../../ui'
   import ExportProgress from './ExportProgress.svelte'
-  import ExportSetup, { type Scope } from './ExportSetup.svelte'
+  import ExportSetup from './ExportSetup.svelte'
   import { ExportJob } from './job.svelte'
   import { plan } from './plan'
 
@@ -24,8 +24,15 @@
 
   const included = new SvelteSet(untrack(() => project.file.artboards.map((b) => b.id)))
   const counts = $derived({ all: all.all.length, visible: view.visible.length, selected: selection.size })
-  // A wider choice than "all" starts out chosen: several selected, or a filtered grid.
-  let scope = $state<Scope>(untrack(() => (selection.size > 1 ? 'selected' : view.visible.length < all.all.length ? 'visible' : 'all')))
+  // The last export's choice, if it's still offered; else a narrower one than "all" when there is
+  // one: several selected, or a filtered grid.
+  const offered = (s: ExportScope | null) => (s === 'selected' ? counts.selected > 0 : s === 'visible' ? counts.visible < counts.all : s === 'all')
+  let scope = $state<ExportScope>(
+    untrack(() =>
+      offered(shell.exportScope) ? shell.exportScope! : selection.size > 1 ? 'selected' : view.visible.length < all.all.length ? 'visible' : 'all'
+    )
+  )
+  const choose = (s: ExportScope) => (scope = shell.exportScope = s)
   const items = $derived.by(() => {
     const boards = project.file.artboards.filter((b) => included.has(b.id))
     const pool = scope === 'selected' ? all.all.filter((a) => selection.has(a.name)) : scope === 'visible' ? view.visible : all.all
@@ -34,7 +41,10 @@
 
   let job = $state.raw<ExportJob | null>(null)
   const running = $derived(!!job && !job.finished)
-  const start = () => (job = new ExportJob(items, out, prefs)).run()
+  const start = () => {
+    shell.exportScope = scope
+    return (job = new ExportJob(items, out, prefs)).run()
+  }
   const close = () => (shell.exportOpen = false)
 
   // Progress on the taskbar / Dock icon while running.
@@ -63,7 +73,7 @@
         if (d) project.setExportPrefs({ dir: d })
       }}
       onToggleBoard={(id, on) => (on ? included.add(id) : included.delete(id))}
-      onScope={(s) => (scope = s)}
+      onScope={choose}
       onPrefs={(patch) => project.setExportPrefs(patch)}
     />
   {/if}

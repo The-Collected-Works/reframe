@@ -1,9 +1,8 @@
 <!-- What to export and how: where to, which artboards, which assets, and image and video formats. -->
 <script lang="ts">
   import type { Artboard, ExportPrefs, GifDither } from '@shared/types'
+  import type { ExportScope as Scope } from '../../state/shell.svelte'
   import { Button, Checkbox, Field, Segmented, Slider } from '../../ui'
-
-  export type Scope = 'all' | 'visible' | 'selected'
 
   let {
     out,

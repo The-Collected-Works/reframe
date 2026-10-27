@@ -118,8 +118,11 @@ export async function markFolder(dir: string, reason: SkippedFolder['reason']): 
   if (process.platform === 'win32') execFile('attrib', ['+h', file], { windowsHide: true }, () => {})
 }
 
-export async function unmarkFolder(dir: string): Promise<void> {
-  await fs.rm(join(dir, OUTPUT_MARKER), { force: true })
+/** Removes the marker from `dir`; with `reason`, only a marker put there for that reason. */
+export async function unmarkFolder(dir: string, reason?: SkippedFolder['reason']): Promise<void> {
+  const file = join(dir, OUTPUT_MARKER)
+  if (reason && (await markerReason(file)) !== reason) return
+  await fs.rm(file, { force: true })
 }
 
 /** Folders the open folder's scan skipped (relative, "/"-separated), so the watcher ignores them. */
