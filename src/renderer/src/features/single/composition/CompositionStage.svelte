@@ -33,6 +33,7 @@
   import { dragTo, hitTest, type DragStart, type Mode as GizmoMode } from '../gizmo'
   import { fitBoard } from '../fit'
   import { WheelNav } from '../nav'
+  import { bitmapProxies } from '../proxy.svelte'
   import { zoomTransitions } from '../zoom.svelte'
   import { dropAt, landed, type Landing } from './drop'
   import { dragGap, gapAt } from './gaps'
@@ -274,11 +275,23 @@
     view: () => cam.current
   })
 
-  /** A cell's picture now: its video frame while one is playing, else its thumbnail. */
+  // Never draw a full-resolution source (a 24MP photo stalls every frame): each cell draws a copy
+  // sized to what's on screen, as the single view does. A video trimmed to start later keeps its
+  // start frame (its thumbnail) rather than its first.
+  const proxies = bitmapProxies(() =>
+    comp.layers.flatMap((l) => {
+      const a = l.source
+      if (!a?.w || a.kind === 'composition' || (a.kind === 'video' && l.start > 0)) return []
+      const p = computePlacement(l.rect.w, l.rect.h, a.w, a.h, l.settings)
+      return [{ key: l.id, asset: a, need: Math.max(p.w, p.h) * k * dpr, floor: a.thumb ? Math.max(a.thumb.width, a.thumb.height) : 0 }]
+    })
+  )
+
+  /** A cell's picture now: its video frame while one is playing, else its still, sized to the screen. */
   const pictureOf = (l: Layer<Asset> | undefined): LayerPicture | null => {
     const a = l?.source
     if (!l || !a?.w) return null
-    return { src: player?.frame(l.id) ?? a.thumb, sw: a.w, sh: a.h, settings: l.settings }
+    return { src: player?.frame(l.id) ?? proxies.get(l.id) ?? a.thumb, sw: a.w, sh: a.h, settings: l.settings }
   }
   /**
    * What each cell shows, mid-drag: what's moving leaves its place empty (the placeholder shows where
