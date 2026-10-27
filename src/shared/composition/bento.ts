@@ -310,20 +310,24 @@ export function group(root: BentoNode, ids: string[], newId: () => string): { ro
   return { root: mapNode(root, parent.id, (p) => ({ ...p, children })), id: g.id }
 }
 
-/** Whether split `id` can be dissolved into the split around it (they run the same way). */
-export function canUngroup(root: BentoNode, id: string, dirOf: DirOf): boolean {
+/** Whether split `id` can be dissolved into the split around it (any group but the whole composition). */
+export function canUngroup(root: BentoNode, id: string): boolean {
   const node = findNode(root, id)
-  const parent = parentOf(root, id)
-  return !!node && isSplit(node) && !!parent && dirOf(parent) === dirOf(node)
+  return !!node && isSplit(node) && !!parentOf(root, id)
 }
 
-/** Split `id` dissolved: its children take its place in the split around it (see `canUngroup`). */
+/**
+ * Split `id` dissolved: its children take its place in the split around it, running its way (see
+ * `canUngroup`). Those that ran the same way as it keep running the way they did.
+ */
 export function ungroup(root: BentoNode, id: string, dirOf: DirOf): BentoNode {
-  if (!canUngroup(root, id, dirOf)) return root
+  if (!canUngroup(root, id)) return root
   const node = findNode(root, id) as Split
   const parent = parentOf(root, id)!
   const i = parent.children.findIndex((c) => c.id === id)
-  return mapNode(root, parent.id, (p) => ({ ...p, children: [...parent.children.slice(0, i), ...node.children, ...parent.children.slice(i + 1)] }))
+  const was = dirOf(node)
+  const kept = node.children.map((c) => (isSplit(c) && c.dir === 'same' && dirOf(parent) !== was ? withDir(c, was) : c))
+  return mapNode(root, parent.id, (p) => ({ ...p, children: [...parent.children.slice(0, i), ...kept, ...parent.children.slice(i + 1)] }))
 }
 
 /**

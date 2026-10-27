@@ -138,13 +138,22 @@ describe('direction and grouping', () => {
     expect(show(setSplitDir(root, 'r', undefined))).toBe('auto(a b)')
   })
 
-  it('ungroups a split into one running the same way, and only then', () => {
+  it('ungroups a split into the one around it, running its way', () => {
     const same = split('r', 'row', split('g', 'row', slot('a'), slot('b')), slot('c'))
-    expect(canUngroup(same, 'g', dirOf)).toBe(true)
+    expect(canUngroup(same, 'g')).toBe(true)
     expect(show(ungroup(same, 'g', dirOf))).toBe('row(a b c)')
+    // A stack beside cells: its cells go side by side with them.
     const across = split('r', 'row', split('g', 'col', slot('a'), slot('b')), slot('c'))
-    expect(canUngroup(across, 'g', dirOf)).toBe(false)
-    expect(ungroup(across, 'g', dirOf)).toBe(across)
+    expect(show(ungroup(across, 'g', dirOf))).toBe('row(a b c)')
+    // Not the whole composition.
+    expect(canUngroup(across, 'r')).toBe(false)
+    expect(canUngroup(across, 'a')).toBe(false)
+  })
+
+  it('ungrouping keeps a group inside running the way it did', () => {
+    // row( col( same(a b) c ) d ): the pair ran stacked with its column.
+    const root = split('r', 'row', split('g', 'col', { id: 'p', dir: 'same', children: [slot('a'), slot('b')] }, slot('c')), slot('d'))
+    expect(show(ungroup(root, 'g', dirOf))).toBe('row(col(a b) c d)')
   })
 
   it('groups some of a split, running the same way, where the first of them was', () => {

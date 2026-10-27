@@ -360,14 +360,10 @@ export function setGroupDir(id: string, dir: Dir | 'same' | null): void {
   restructure((root) => ({ root: setSplitDir(root, id, dir ?? undefined) }))
 }
 
-/** Whether a group can be dissolved into the one around it (they run the same way). */
+/** Whether a group can be dissolved into the one around it (any but the whole composition). */
 export function canUngroupNode(id: string): boolean {
   const root = treeOf()
-  const composition = focusComposition()
-  const board = project.board
-  if (!root || !composition) return false
-  const placed = model.placedOn(project.file, composition, board)
-  return !!placed && canUngroup(root, id, placed)
+  return !!root && canUngroup(root, id)
 }
 
 /** A group dissolved into the one around it; what was in it stays selected as the parent. */
