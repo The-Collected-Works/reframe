@@ -34,6 +34,13 @@
     adjusted: 'Adjusted',
     excluded: 'Excluded from export'
   }
+  // Showing everything (All): every eye open, greyed. Otherwise on is lit, off is greyed and shut.
+  const eye = (f: FilterKey) =>
+    !prefs.filters.length
+      ? { icon: 'show' as const, dim: true }
+      : prefs.filters.includes(f)
+        ? { icon: 'show' as const }
+        : { icon: 'exclude' as const, dim: true }
   // Each toggles; All clears them.
   const toggle = (f: FilterKey) => onChange({ filters: prefs.filters.includes(f) ? prefs.filters.filter((x) => x !== f) : [...prefs.filters, f] })
   const SORTS: { value: SortKey; label: string }[] = [
@@ -64,11 +71,11 @@
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
       <MenuLabel>Show</MenuLabel>
-      <MenuItem mark="show" checked={!prefs.filters.length} onclick={() => onChange({ filters: [] })}>All</MenuItem>
+      <MenuItem indicator={prefs.filters.length ? { icon: 'exclude', dim: true } : { icon: 'show' }} onclick={() => onChange({ filters: [] })}>All</MenuItem>
       {#each FILTER_GROUPS as group, i (i)}
         <div class="filter-gap"></div>
         {#each group as f (f)}
-          <MenuItem mark="show" checked={prefs.filters.includes(f)} onclick={() => toggle(f)}>{LABELS[f]}</MenuItem>
+          <MenuItem indicator={eye(f)} onclick={() => toggle(f)}>{LABELS[f]}</MenuItem>
         {/each}
       {/each}
       <MenuSeparator />

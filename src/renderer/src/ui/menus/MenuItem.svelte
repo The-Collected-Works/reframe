@@ -1,7 +1,7 @@
 <!--
   A row in a popover menu: its label (the children), then on the right a `detail` (a size, a
-  shortcut) or, when `checked`, a check (or another `mark`: an eye for a filter that's showing).
-  Other attributes (onclick, disabled, title…) go on the row.
+  shortcut), a check when `checked`, or an `indicator`: an icon of its own, dimmed when it's off
+  (the view filters' eyes). Other attributes (onclick, disabled, title…) go on the row.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte'
@@ -9,14 +9,20 @@
   import Icon from '../icons/Icon.svelte'
   import type { IconName } from '../icons/icons'
 
-  type Props = HTMLButtonAttributes & { detail?: string; checked?: boolean; mark?: IconName; children: Snippet }
-  let { detail, checked = false, mark = 'check', children, ...rest }: Props = $props()
+  type Props = HTMLButtonAttributes & {
+    detail?: string
+    checked?: boolean
+    indicator?: { icon: IconName; dim?: boolean }
+    children: Snippet
+  }
+  let { detail, checked = false, indicator, children, ...rest }: Props = $props()
 </script>
 
 <button class="menu-item" {...rest}>
   {@render children()}
   {#if detail}<span class="detail">{detail}</span>{/if}
-  {#if checked}<Icon name={mark} size={14} />{/if}
+  {#if checked}<Icon name="check" size={14} />{/if}
+  {#if indicator}<span class={['indicator', { dim: indicator.dim }]}><Icon name={indicator.icon} size={14} /></span>{/if}
 </button>
 
 <style>
@@ -39,6 +45,15 @@
 
   .menu-item:hover {
     background: var(--hover);
+  }
+
+  .indicator {
+    display: grid;
+    place-items: center;
+  }
+
+  .indicator.dim :global(svg) {
+    color: var(--faint);
   }
 
   .detail {
