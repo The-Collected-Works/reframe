@@ -7,9 +7,21 @@ import { cacheSize, cancelCopy, cancelExport, clearCache, copiesMade, copy, expo
 export type WorkerRequest =
   | { id: number; type: 'poster'; path: string }
   | { id: number; type: 'frame'; path: string; time: number; color?: ColorMeta; tag?: string; edge?: number }
-  | { id: number; type: 'copy'; path: string; w: number; h: number; color?: ColorMeta; edge: number; duration: number; background: boolean; stream: boolean }
+  | {
+      id: number
+      type: 'copy'
+      copyId: number
+      path: string
+      w: number
+      h: number
+      color?: ColorMeta
+      edge: number
+      duration: number
+      background: boolean
+      stream: boolean
+    }
   | { id: number; type: 'copies-made'; list: { path: string; edge: number }[] }
-  | { type: 'cancel-copy' }
+  | { type: 'cancel-copy'; copyId?: number }
   | { id: number; type: 'cache-size' }
   | { id: number; type: 'clear-cache' }
   | { id: number; type: 'export'; job: VideoExportJob }
@@ -24,7 +36,7 @@ const port = process.parentPort
 port.on('message', async ({ data }) => {
   const req = data as WorkerRequest
   if (req.type === 'cancel') return cancelExport()
-  if (req.type === 'cancel-copy') return cancelCopy()
+  if (req.type === 'cancel-copy') return cancelCopy(req.copyId)
   // Stop every ffmpeg and remove half-written files before the app quits.
   if (req.type === 'shutdown') return shutdown().finally(() => process.exit(0))
   const reply = (m: WorkerReply) => port.postMessage(m)
@@ -34,7 +46,7 @@ port.on('message', async ({ data }) => {
     else if (req.type === 'copy')
       reply({
         id: req.id,
-        result: await copy(req.path, req.w, req.h, req.color, req.edge, req.duration, req.background, req.stream, (progress, stream) =>
+        result: await copy(req.copyId, req.path, req.w, req.h, req.color, req.edge, req.duration, req.background, req.stream, (progress, stream) =>
           reply({ id: req.id, progress, stream })
         )
       })

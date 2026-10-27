@@ -146,4 +146,45 @@ describe('Copies', () => {
     expect(copies.failed(a)).toBe(true)
     expect(copies.pending(a)).toBe(false)
   })
+
+  describe('with more than one slot', () => {
+    it('makes as many at once', async () => {
+      const f = fakeHost()
+      const copies = new Copies(f.host, { slots: 2 })
+      copies.prepare([video('a'), video('b'), video('c')])
+      await settle()
+      expect(f.making.map((c) => c.path)).toEqual(['/v/a', '/v/b'])
+      f.making[0].finish('/c/a.mp4')
+      await settle()
+      expect(f.making.map((c) => c.path)).toEqual(['/v/b', '/v/c'])
+    })
+
+    it('stops only the least urgent for something more urgent, when every slot is busy', async () => {
+      const f = fakeHost()
+      const copies = new Copies(f.host, { slots: 2 })
+      copies.want(video('next'), 960, SOON)
+      copies.prepare([video('later')])
+      await settle()
+      expect(f.making.map((c) => c.path)).toEqual(['/v/next', '/v/later'])
+      copies.want(video('now'), 960)
+      await settle()
+      expect(f.cancels).toBe(1)
+      expect(f.making.map((c) => c.path).sort()).toEqual(['/v/next', '/v/now'])
+    })
+
+    it('streams each first copy as it is made', async () => {
+      const f = fakeHost({ streams: true })
+      const copies = new Copies(f.host, { slots: 2 })
+      copies.want(video('a'), 960)
+      copies.want(video('b'), 960)
+      await settle()
+      const [a, b] = f.making
+      f.progress({ id: a.id, progress: 0.5, stream: '/s/a.mp4' })
+      f.progress({ id: b.id, progress: 0.25, stream: '/s/b.mp4' })
+      expect(copies.streamUrl(video('a'))).toBe('media:/s/a.mp4')
+      expect(copies.streamUrl(video('b'))).toBe('media:/s/b.mp4')
+      expect(copies.ready(video('b'))).toBeCloseTo(2.5)
+      expect(copies.activity()).toMatchObject({ done: 0, total: 2, progress: 0.75 })
+    })
+  })
 })

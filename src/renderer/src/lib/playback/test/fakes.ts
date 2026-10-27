@@ -58,9 +58,9 @@ export function fakeHost(opts: { made?: string[]; streams?: boolean } = {}) {
         calls.push(call)
       }),
     copiesMade: async (list) => list.map(({ path, edge }) => (made.has(`${path}@${edge}`) ? `/copies${path}@${edge}.mp4` : null)),
-    cancelCopy: () => {
+    cancelCopy: (id) => {
       cancels++
-      for (const c of calls) if (!c.done) c.finish(null)
+      calls.find((c) => c.id === id && !c.done)?.finish(null)
     },
     onCopyProgress: (cb) => {
       progress = cb
@@ -74,9 +74,13 @@ export function fakeHost(opts: { made?: string[]; streams?: boolean } = {}) {
     get cancels() {
       return cancels
     },
-    /** The copy being made now, if any. */
+    /** The copy being made now (the first, if there are several), if any. */
     get running(): CopyCall | undefined {
       return calls.find((c) => !c.done)
+    },
+    /** Every copy being made now. */
+    get making(): CopyCall[] {
+      return calls.filter((c) => !c.done)
     },
     progress: (p: { id: number; progress: number; stream?: string }) => progress?.(p)
   }

@@ -335,11 +335,11 @@ export async function frame(path: string, time: number, color?: ColorMeta, tag =
 
 const COPIES = join(CACHE, 'copies')
 const COPY_BYTES = 8 * 1024 ** 3
-// One at a time: the renderer decides the order, and stops one that something more urgent needs
-// the machine for (see cancelCopy).
-let copyChain: Promise<unknown> = Promise.resolve()
+// The renderer decides how many are made at once and in what order, and stops one that something
+// more urgent needs the machine for (see cancelCopy). Each is known by the renderer's id for it.
 const copying = new Map<string, Promise<string>>()
-let copyCancelled = false
+const copyProcs = new Map<number, ChildProcess>()
+const cancelled = new Set<number>()
 
 /** Where a copy of `path` at `edge` lives (taking over one made under its old name). */
 async function copyPath(path: string, edge: number): Promise<string> {
@@ -373,6 +373,7 @@ export async function copiesMade(list: { path: string; edge: number }[]): Promis
  * recently used going first). `background`: made at low priority, so the app stays responsive.
  */
 export async function copy(
+  id: number,
   path: string,
   w: number,
   h: number,
@@ -390,11 +391,7 @@ export async function copy(
   }
   let job = copying.get(out)
   if (!job) {
-    job = copyChain
-      .catch(() => {})
-      .then(() => buildCopy(path, out, w, h, color, edge, duration, background, stream, onProgress))
-      .then(() => out)
-    copyChain = job
+    job = buildCopy(id, path, out, w, h, color, edge, duration, background, stream, onProgress).then(() => out)
     copying.set(out, job)
     job.finally(() => copying.delete(out)).catch(() => {})
   }
@@ -429,20 +426,28 @@ export async function cacheSize(): Promise<number> {
 export async function clearCache(): Promise<number> {
   const before = await cacheSize()
   cancelCopy()
-  await copyChain.catch(() => {})
+  await Promise.allSettled([...copying.values()])
   await fs.rm(COPIES, { recursive: true, force: true }).catch(() => {})
   const names = await fs.readdir(CACHE).catch(() => [] as string[])
   await Promise.all(names.map((n) => fs.rm(join(CACHE, n), { force: true }).catch(() => {})))
   return before - (await cacheSize())
 }
 
-/** Stops the copy being made (something more urgent needs the machine); its request fails. */
-export function cancelCopy(): void {
-  copyCancelled = true
-  kill('copy')
+/**
+ * Stops copy `id` (something more urgent needs the machine), or with no id every copy being made;
+ * its request gives null.
+ */
+export function cancelCopy(id?: number): void {
+  for (const [i, proc] of copyProcs) {
+    if (id !== undefined && i !== id) continue
+    cancelled.add(i)
+    proc.kill('SIGKILL')
+  }
+  if (id !== undefined) cancelled.add(id)
 }
 
 async function buildCopy(
+  id: number,
   path: string,
   out: string,
   w: number,
@@ -454,7 +459,6 @@ async function buildCopy(
   stream: boolean,
   onProgress: (p: number, stream?: string) => void
 ): Promise<void> {
-  copyCancelled = false
   await fs.mkdir(COPIES, { recursive: true })
   const s = Math.min(1, edge / Math.max(w, h, 1))
   const even = (n: number) => Math.max(2, Math.round((n * s) / 2) * 2)
@@ -514,6 +518,7 @@ async function buildCopy(
     ...output(liveOf(hw))
   ]
   const attempt = async (hw: boolean) => {
+    if (cancelled.has(id)) return false
     if (live) {
       partFiles.delete(live)
       await fs.rm(live, { force: true })
@@ -533,6 +538,7 @@ async function buildCopy(
         if (m && duration > 0) onProgress(Math.min(1, Number(m[1]) / 1e6 / duration), live ?? undefined)
       }
     })
+    copyProcs.set(id, proc)
     // Making copies ahead of time stays out of the way of everything else.
     if (background && proc.pid)
       try {
@@ -540,18 +546,22 @@ async function buildCopy(
       } catch {
         // Not permitted here; run at normal priority.
       }
-    return (await done).code === 0
+    const ok = (await done).code === 0
+    copyProcs.delete(id)
+    return ok
   }
   partFiles.add(part)
   let made = false
   try {
     // Hardware decoding where it works, else software.
-    if (!(await attempt(true)) && !copyCancelled && !(await attempt(false))) throw new Error('Could not make a playback copy')
-    if (copyCancelled) throw new Error('cancelled')
+    if (!(await attempt(true)) && !cancelled.has(id) && !(await attempt(false))) throw new Error('Could not make a playback copy')
+    if (cancelled.has(id)) throw new Error('cancelled')
     await fs.rename(part, out)
     made = true
     onProgress(1)
   } finally {
+    cancelled.delete(id)
+    copyProcs.delete(id)
     partFiles.delete(part)
     await fs.rm(part, { force: true })
     const lv = live

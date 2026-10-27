@@ -283,8 +283,8 @@ export interface ReframeApi {
   ): Promise<string | null>
   /** Which of these copies are made already (their paths, or null), making none. */
   copiesMade(list: { path: string; edge: number }[]): Promise<(string | null)[]>
-  /** Stops the copy being made; its request gives null. */
-  cancelCopy(): Promise<void>
+  /** Stops copy `id` (or with none, every copy being made); its request gives null. */
+  cancelCopy(id?: number): Promise<void>
   /** What the caches (posters, playback copies) hold, in bytes. */
   cacheSize(): Promise<number>
   /** Empties the caches; gives how many bytes went. */

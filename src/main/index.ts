@@ -295,7 +295,7 @@ ipcMain.handle(
     stream: boolean
   ) => {
     mustRead(path)
-    const out = await copy(path, w, h, color, edge, duration, background, stream, (progress, live) => {
+    const out = await copy(id, path, w, h, color, edge, duration, background, stream, (progress, live) => {
       // A copy streamed while it's made: readable from the moment it exists.
       if (live) copiesOut.add(normalize(live))
       e.sender.send('copy-progress', { id, progress, stream: live })
@@ -314,7 +314,7 @@ ipcMain.handle('copies-made', async (_e, list: { path: string; edge: number }[])
     return out
   })
 })
-ipcMain.handle('cancel-copy', () => cancelCopy())
+ipcMain.handle('cancel-copy', (_e, id?: number) => cancelCopy(id))
 ipcMain.handle('cache-size', () => cacheSize())
 ipcMain.handle('clear-cache', () => clearCache())
 // Export progress on the taskbar / Dock icon (-1 clears it).

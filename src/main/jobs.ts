@@ -70,6 +70,7 @@ export const poster = (path: string) => call<PosterResult>({ type: 'poster', pat
 export const frame = (path: string, time: number, color?: ColorMeta, tag?: string, edge?: number) =>
   call<Uint8Array | null>({ type: 'frame', path, time, color, tag, edge })
 export const copy = (
+  copyId: number,
   path: string,
   w: number,
   h: number,
@@ -79,9 +80,9 @@ export const copy = (
   background: boolean,
   stream: boolean,
   onProgress: (p: number, stream?: string) => void
-) => call<string | null>({ type: 'copy', path, w, h, color, edge, duration, background, stream }, onProgress)
+) => call<string | null>({ type: 'copy', copyId, path, w, h, color, edge, duration, background, stream }, onProgress)
 export const copiesMade = (list: { path: string; edge: number }[]) => call<(string | null)[]>({ type: 'copies-made', list })
-export const cancelCopy = (): void => worker?.postMessage({ type: 'cancel-copy' } satisfies WorkerRequest)
+export const cancelCopy = (copyId?: number): void => worker?.postMessage({ type: 'cancel-copy', copyId } satisfies WorkerRequest)
 export const cacheSize = () => call<number>({ type: 'cache-size' })
 export const clearCache = () => call<number>({ type: 'clear-cache' })
 export const exportVideo = (job: VideoExportJob, onProgress: (p: number) => void) => call<void>({ type: 'export', job }, onProgress)

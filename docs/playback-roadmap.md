@@ -73,19 +73,13 @@ Done on 2026-10-26: see "How playback works now" above. What changed:
 
 **Files:** `main/ffmpeg.ts` (`buildCopy`), `lib/playback/stream.ts`, `lib/playback/playback.ts` (`updateSound`, `sync`), `lib/playback/clip.ts` (videos are `silentVideo`s now).
 
-### 3. Make more than one copy at a time
+### 3. Make more than one copy at a time (done)
 
-**Now:** one at a time, and only that one streams. A composition of four new clips plays its first cell at once, while the others show stills until their turn.
-**Do:** run N copies at once, where N comes from the core count (2 on this machine, 1 on small ones). Track `current` per running job (it's a single value now) and let each first copy stream (`live` becomes a map by file).
-**Files:**
-- `lib/playback/copies.ts`: `next()`, `current`, `live`, `preempt`;
-- `main/ffmpeg.ts`: `copyChain` serialises builds; `cancelCopy` kills every `copy` process, so it needs a job id.
+Done on 2026-10-26. `Copies` runs up to `slots` copies at once: `state/playback.svelte.ts` gives it one per 12 threads (2 on a 32-thread machine, 1 on 16 or fewer, at most 3). Each first copy streams on its own, and with every slot busy, something more urgent stops only the least urgent copy. The worker no longer queues copies (the renderer decides how many run), and `cancelCopy(id)` stops one by the renderer's id. Not yet measured on the 4K captures this was tuned for.
 
-### 4. Key the cache by content, not path
+### 4. Key the cache by content, not path (done)
 
-**Now:** `cacheKey('copy1', path, stat)` uses path, size and mtime, so moving or renaming a folder rebuilds every copy.
-**Do:** key on size plus a hash of the first and last few MB. Renames and Dropbox reorganising then keep their copies.
-**Files:** `main/ffmpeg.ts` (`cacheKey`, `copyPath`, `copiesMade`).
+Done on 2026-10-26. Copies and posters are named by the file's size and a hash of 64 KB from its start, middle and end, read once per file per session. Moving, renaming or a sync service reorganising a folder keeps them. Ones made under the old path-based names are renamed the first time they're looked up.
 
 ### 5. Scrubbing past the cache line
 

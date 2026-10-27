@@ -65,11 +65,11 @@ export interface CopyActivity {
 /**
  * The playback copies of video files: small, every frame a keyframe, so they play several at once
  * and seek instantly where originals (4K, 60fps, keyframes seconds apart) can't. Made by the media
- * worker one at a time, most urgent first: what's on screen now, then what's likely next, then
+ * worker a few at a time (`slots`, from how many cores the machine has), most urgent first: what's on screen now, then what's likely next, then
  * every other video in the folder, ahead of time, at low priority. Within each, smaller sizes first
  * (something playable soonest), then in the order asked. When something more urgent comes up while
- * a less urgent copy is being made, that one stops and waits its turn again, so what you're looking
- * at never waits behind anything. Copies are kept between sessions: opening a folder first asks
+ * every slot is making something less urgent, the least urgent of those stops and waits its turn
+ * again, so what you're looking at never waits behind anything. Copies are kept between sessions: opening a folder first asks
  * which are made already.
  *
  * Plain TypeScript: told what's wanted through its methods, it says when anything changed through
@@ -92,14 +92,16 @@ export class Copies {
   private wanted = new Map<string, { job: Job; refs: number }>()
   /** Every video in the folder, made ahead of time at the smallest size. */
   private ahead: MediaFile[] = []
-  /** The copy being made: how far along, and (a first copy) the stream it can be played from meanwhile. */
-  private current: { id: number; job: Job; progress: number; stream?: string } | null = null
-  /** That stream on its own, by file: it changes only when a stream starts or ends. */
-  private live: { file: string; url: string } | null = null
+  /** The copies being made, by id: how far along, and (a first copy) the stream it plays from meanwhile. */
+  private running = new Map<number, { id: number; job: Job; progress: number; stream?: string }>()
+  /** Those streams on their own, by file: each changes only when a stream starts or ends. */
+  private live = new Map<string, string>()
+  /** Copies being stopped (their slots free once they have). */
+  private stopping = new Set<number>()
   private ids = 0
   private asked = 0
-  private stopping = 0
-  private running = false
+  /** How many copies are made at once. */
+  private slots: number
   /** Copies made since there was last nothing to do, for overall progress. */
   private finished = new Set<string>()
   /** Something is playing or being scrubbed: only what's on screen is made meanwhile. */
@@ -113,13 +115,18 @@ export class Copies {
   private cache: { todo: Job[]; waiting: Set<string> } | null = null
   private unlisten: () => void
 
-  constructor(private host: MediaHost) {
+  constructor(
+    private host: MediaHost,
+    opts: { slots?: number } = {}
+  ) {
+    this.slots = Math.max(1, opts.slots ?? 1)
     this.unlisten = host.onCopyProgress(({ id, progress, stream }) => {
-      const cur = this.current
-      if (cur?.id !== id) return
-      this.current = { ...cur, progress, stream: stream ?? cur.stream }
-      if (stream && this.live?.url !== host.url(stream)) {
-        this.live = { file: fileKey(cur.job.file), url: host.url(stream) }
+      const cur = this.running.get(id)
+      if (!cur) return
+      this.running.set(id, { ...cur, progress, stream: stream ?? cur.stream })
+      const fk = fileKey(cur.job.file)
+      if (stream && this.live.get(fk) !== host.url(stream)) {
+        this.live.set(fk, host.url(stream))
         this.touch()
       }
       this.progressed.emit()
@@ -222,15 +229,20 @@ export class Copies {
    * are encoded so far. Null when there's none.
    */
   streaming(file: MediaFile): { url: string; ready: number } | null {
-    const cur = this.current
-    if (!cur?.stream || fileKey(cur.job.file) !== fileKey(file) || !this.first(cur.job)) return null
+    const cur = this.firstMaking(fileKey(file))
+    if (!cur?.stream) return null
     return { url: this.host.url(cur.stream), ready: cur.progress * file.duration }
   }
 
   /** The address of a first copy's stream while it's being made (see `streaming`), and nothing else. */
   streamUrl(file: MediaFile): string | null {
-    const live = this.live
-    return live && live.file === fileKey(file) ? live.url : null
+    return this.live.get(fileKey(file)) ?? null
+  }
+
+  /** The copy being made of a file's first (smallest) size, if one is. */
+  private firstMaking(fk: string) {
+    for (const r of this.running.values()) if (fileKey(r.job.file) === fk && this.first(r.job)) return r
+    return undefined
   }
 
   /**
@@ -318,24 +330,26 @@ export class Copies {
    */
   state(file: Pick<MediaFile, 'path' | 'mtime'>): CopyState {
     const fk = fileKey(file)
-    const cur = this.current
-    if (cur && fileKey(cur.job.file) === fk && this.first(cur.job)) return { state: 'making', progress: cur.progress }
+    const cur = this.firstMaking(fk)
+    if (cur) return { state: 'making', progress: cur.progress }
     return this.plan().waiting.has(fk) ? { state: 'queued' } : null
   }
 
   /**
-   * Overall: videos made smooth, of how many need it (the one in progress counted with its
-   * progress); or, with all of them done, a sharper copy being made; null with nothing to do.
+   * Overall: videos made smooth, of how many need it (those in progress counted with their
+   * progress); or, with all of them done, sharper copies being made; null with nothing to do.
    */
   activity(): CopyActivity | null {
-    const cur = this.current
+    const firsts = [...this.running.values()].filter((r) => this.first(r.job))
     const files = new Set(this.plan().waiting)
-    if (cur && this.first(cur.job)) files.add(fileKey(cur.job.file))
+    for (const r of firsts) files.add(fileKey(r.job.file))
     if (files.size) {
       const done = [...this.finished].filter((f) => !files.has(f)).length
-      return { label: 'Preparing videos', done, total: done + files.size, progress: cur && this.first(cur.job) ? cur.progress : 0 }
+      return { label: 'Preparing videos', done, total: done + files.size, progress: firsts.reduce((n, r) => n + r.progress, 0) }
     }
-    return cur ? { label: 'Sharpening for full view', done: 0, total: 1, progress: cur.progress } : null
+    const sharper = [...this.running.values()]
+    if (!sharper.length) return null
+    return { label: 'Sharpening for full view', done: 0, total: sharper.length, progress: sharper.reduce((n, r) => n + r.progress, 0) }
   }
 
   /** It's a file's smallest copy: the one that makes it play smoothly. */
@@ -370,9 +384,10 @@ export class Copies {
     return this.plan().todo.find((j) => j.key === key)?.priority ?? LATER + 1
   }
 
-  /** The next copy to make, if any may be made now. */
+  /** The next copy to make, if any may be made now (and isn't being made already). */
   private pick(): Job | undefined {
-    return this.plan().todo.find((j) => this.allowed(j))
+    const making = new Set([...this.running.values()].map((r) => r.job.key))
+    return this.plan().todo.find((j) => this.allowed(j) && !making.has(j.key))
   }
 
   /** Looks up which copies of these files are made already, in one go. */
@@ -401,58 +416,68 @@ export class Copies {
   }
 
   /**
-   * Stops the copy being made if something waiting is more urgent, or if it mayn't be made while
-   * something plays.
+   * Stops copies that mayn't be made while something plays; and with every slot taken, the least
+   * urgent copy being made if something waiting is more urgent.
    */
   private preempt() {
-    const cur = this.current
-    if (!cur || this.stopping === cur.id) return
-    const now = { ...cur.job, priority: this.urgency(cur.job.key) }
+    const live = [...this.running.values()].filter((r) => !this.stopping.has(r.id))
+    const urgency = new Map(live.map((r) => [r.id, this.urgency(r.job.key)]))
+    for (const r of live) if (!this.allowed({ ...r.job, priority: urgency.get(r.id)! })) this.stop(r.id)
+    if (this.running.size < this.slots) return
     const top = this.pick()
-    if (!this.allowed(now) || (top && top.key !== cur.job.key && top.priority < now.priority)) {
-      this.stopping = cur.id
-      this.host.cancelCopy()
+    const least = live.filter((r) => !this.stopping.has(r.id)).sort((a, b) => urgency.get(b.id)! - urgency.get(a.id)!)[0]
+    if (top && least && top.priority < urgency.get(least.id)!) this.stop(least.id)
+  }
+
+  private stop(id: number) {
+    this.stopping.add(id)
+    this.host.cancelCopy(id)
+  }
+
+  /** Starts copies until every slot is busy (or nothing more may be made now). */
+  private next() {
+    this.preempt()
+    while (this.running.size < this.slots) {
+      const job = this.pick()
+      if (!job) break
+      this.start(job)
     }
   }
 
-  private async next() {
-    if (this.running) return this.preempt()
-    this.running = true
-    for (;;) {
-      const job = this.pick()
-      if (!job) break
-      const id = ++this.ids
-      this.current = { id, job, progress: 0 }
-      this.live = null
-      this.touch()
-      // A first copy streams while it's made: what's been encoded plays at once (see StreamFeed).
-      try {
-        const path = await this.host.copy(
-          id,
-          job.file.path,
-          job.file.w,
-          job.file.h,
-          job.file.color,
-          job.size,
-          job.file.duration,
-          job.priority === LATER,
-          this.first(job) && this.host.streams
-        )
-        // Null: stopped for something more urgent (or while something plays); it waits its turn again.
-        if (!path) continue
-        this.made.set(job.key, path)
-        if (this.first(job)) this.finished.add(fileKey(job.file))
-      } catch {
-        // It can't be made: the original stands in.
-        this.made.set(job.key, null)
-      }
-      this.touch()
-    }
-    this.current = null
-    this.live = null
-    this.running = false
-    // Held back (something's playing), not done: progress so far still counts.
-    if (!this.plan().todo.length) this.finished.clear()
+  private start(job: Job) {
+    const id = ++this.ids
+    const fk = fileKey(job.file)
+    this.running.set(id, { id, job, progress: 0 })
     this.touch()
+    // A first copy streams while it's made: what's been encoded plays at once (see StreamFeed).
+    this.host
+      .copy(
+        id,
+        job.file.path,
+        job.file.w,
+        job.file.h,
+        job.file.color,
+        job.size,
+        job.file.duration,
+        job.priority === LATER,
+        this.first(job) && this.host.streams
+      )
+      .then((path) => {
+        // Null: stopped for something more urgent (or while something plays); it waits its turn again.
+        if (!path) return
+        this.made.set(job.key, path)
+        if (this.first(job)) this.finished.add(fk)
+      })
+      // It can't be made: the original stands in.
+      .catch(() => void this.made.set(job.key, null))
+      .finally(() => {
+        this.running.delete(id)
+        this.stopping.delete(id)
+        if (this.first(job)) this.live.delete(fk)
+        this.touch()
+        this.next()
+        // Held back (something's playing), not done: progress so far still counts.
+        if (!this.running.size && !this.plan().todo.length) this.finished.clear()
+      })
   }
 }

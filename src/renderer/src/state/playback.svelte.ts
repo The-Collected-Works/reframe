@@ -16,12 +16,14 @@ const host: MediaHost = {
   streams: canStream(),
   copy: (...args) => api.copy(...args),
   copiesMade: (list) => api.copiesMade(list),
-  cancelCopy: () => api.cancelCopy(),
+  cancelCopy: (id) => api.cancelCopy(id),
   onCopyProgress: (cb) => api.onCopyProgress(cb),
   frame: (path, time, color, tag, edge) => api.frame(path, time, color, tag, edge)
 }
 
-const store = new Copies(host)
+// Copies made at once: decoding 4K is the limit, and it takes most of a mid-range machine on its
+// own (two on 32 threads, one on 16 or fewer, at most three).
+const store = new Copies(host, { slots: Math.min(3, Math.max(1, Math.floor((navigator.hardwareConcurrency || 4) / 12))) })
 
 /**
  * The playback copies, for the UI: each read follows what it depends on (what's made or wanted,

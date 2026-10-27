@@ -24,8 +24,8 @@ export interface MediaHost {
   ): Promise<string | null>
   /** Which of these copies are made already (their paths, or null). */
   copiesMade(list: { path: string; edge: number }[]): Promise<(string | null)[]>
-  /** Stops the copy being made; its `copy` call gives null. */
-  cancelCopy(): unknown
+  /** Stops copy `id` (as given to `copy`); its `copy` call gives null. */
+  cancelCopy(id: number): unknown
   onCopyProgress(cb: (p: { id: number; progress: number; stream?: string }) => void): () => void
   /** An exact frame as JPEG (see ReframeApi.frame); null when a newer request with the same tag replaced it. */
   frame(path: string, time: number, color: ColorMeta | undefined, tag: string, edge: number): Promise<Uint8Array | null>
