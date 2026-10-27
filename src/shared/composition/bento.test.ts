@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { BentoNode, Split } from '../types'
-import { arrange, canUngroup, dirsOn, flipSplit, insertBeside, moveNode, reconcileWeights, removeNode, setSplitDir, ungroup, type DirOf } from './bento'
+import {
+  arrange,
+  canUngroup,
+  dirsOn,
+  flipSplit,
+  insertBeside,
+  moveInto,
+  moveNode,
+  reconcileWeights,
+  removeNode,
+  setSplitDir,
+  ungroup,
+  type DirOf
+} from './bento'
 
 /** A tree as text: slots by id, splits as row(…) / col(…) / auto(…). */
 const show = (n: BentoNode): string => ('children' in n ? `${n.dir ?? 'auto'}(${n.children.map(show).join(' ')})` : n.id)
@@ -133,5 +146,31 @@ describe('reconcileWeights', () => {
   it('leaves alone what had no proportions set', () => {
     const before = split('r', 'row', slot('a'), slot('b'))
     expect(reconcileWeights(before, removeNode(before, 'a')!, undefined)).toBeUndefined()
+  })
+})
+
+describe('moveInto', () => {
+  const tree = () => split('r', 'row', split('g', 'col', slot('a'), slot('b'), slot('c')), slot('d'))
+
+  it('reorders within a group, as a layers list does', () => {
+    expect(show(moveInto(tree(), 'c', 'g', 0))).toBe('row(col(c a b) d)')
+    expect(show(moveInto(tree(), 'a', 'g', 3))).toBe('row(col(b c a) d)')
+  })
+
+  it('moves into another group', () => {
+    expect(show(moveInto(tree(), 'd', 'g', 1))).toBe('col(a d b c)')
+    expect(show(moveInto(tree(), 'b', 'r', 2))).toBe('row(col(a c) d b)')
+  })
+
+  it('closes up behind: a group left with one gives way to it', () => {
+    const t = split('r', 'row', split('g', 'col', slot('a'), slot('b')), slot('d'))
+    expect(show(moveInto(t, 'a', 'r', 2))).toBe('row(b d a)')
+  })
+
+  it('changes nothing moving a node to where it is, or a group into itself', () => {
+    const t = tree()
+    expect(moveInto(t, 'b', 'g', 1)).toBe(t)
+    expect(moveInto(t, 'b', 'g', 2)).toBe(t)
+    expect(moveInto(t, 'g', 'g', 0)).toBe(t)
   })
 })

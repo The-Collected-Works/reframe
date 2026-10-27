@@ -8,7 +8,8 @@
   let { at, stageWidth, children }: { at: { x: number; y: number; w: number; h: number }; stageWidth: number; children: Snippet } = $props()
 
   let width = $state(0)
-  const ABOVE = 44
+  // Clear of the + on the rectangle's top edge.
+  const ABOVE = 52
   const left = $derived(Math.max(8, Math.min(stageWidth - width - 8, at.x + at.w / 2 - width / 2)))
   const top = $derived(at.y - ABOVE >= 8 ? at.y - ABOVE : at.y + 8)
 </script>

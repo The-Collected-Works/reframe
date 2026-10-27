@@ -11,7 +11,8 @@ import {
   slotKey,
   ungroup as ungroupTree,
   type Dir,
-  type Side
+  type Side,
+  moveInto
 } from '@shared/composition/bento'
 import type { CropSettings, FolderScan, Slot, SettingKey } from '@shared/types'
 import { api } from '../lib/bridge'
@@ -306,6 +307,12 @@ export function addCell(target: string, side: Side): void {
 /** Node `id` moved to `side` of node `target`; it stays selected. */
 export function moveNode(id: string, target: string, side: Side): void {
   restructure((root, dirOf) => moveTreeNode(root, id, target, side, dirOf, model.newSlotId))
+  selection.node = id
+}
+
+/** Node `id` moved into group `parent` before its child at `index` (as in the layers list); it stays selected. */
+export function moveIntoGroup(id: string, parent: string, index: number): void {
+  restructure((root) => ({ root: moveInto(root, id, parent, index) }))
   selection.node = id
 }
 

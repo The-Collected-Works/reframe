@@ -8,10 +8,15 @@ import { launch } from '../app.mjs'
 import { sleep } from '../cdp.mjs'
 import { probe } from '../media.mjs'
 
-/** The open composition's structure, as the inspector outlines it (· for each level in; * selected). */
+/** The open composition's structure, as its layers panel shows it (· for each level in; * selected). */
 const outline = (app) =>
   app.eval(
-    `[...document.querySelectorAll('.outline .line')].map((l) => '·'.repeat((parseInt(l.style.paddingLeft) - 8) / 14) + l.textContent.replace(/\\s+/g, ' ').trim() + (l.classList.contains('on') ? '*' : '')).join(' | ')`
+    `[...document.querySelectorAll('.layers .row')].map((l) => '·'.repeat((parseInt(l.style.paddingLeft) - 6) / 14) + l.textContent.replace(/\\s+/g, ' ').trim() + (l.classList.contains('on') ? '*' : '')).join(' | ')`
+  )
+/** The middle of the layers panel's row `i`. */
+const row = (app, i) =>
+  app.eval(
+    `(() => { const r = document.querySelectorAll('.layers .row')[${i}].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, h: r.height } })()`
   )
 const names = (app) => app.eval(`[...document.querySelectorAll('.cell')].map((c) => c.querySelector('.cell-name')?.textContent.trim())`)
 
@@ -122,7 +127,7 @@ export default {
         })()`)
         await app.click(p.x, p.y)
         await app.key('e')
-        await app.waitFor(`document.querySelector('.modes')`, 5000, 'the composition editor')
+        await app.waitFor(`document.querySelector('.layers')`, 5000, 'the composition editor')
         await sleep(1500)
         const c = await app.point('.stage canvas', 0.5, 0.45)
         await app.click(c.x, c.y)
@@ -156,7 +161,30 @@ export default {
       }
     ],
     [
-      'Esc selects the group around a cell, then nothing; Delete removes; double-click frames',
+      'rearranges by dragging a layer, and undoes',
+      async ({ app }) => {
+        // The video's row (last) up above the column's row (second): first in the group.
+        const from = await row(app, 5)
+        const to = await row(app, 1)
+        await app.drag(from.x, from.y, to.x, to.y - to.h * 0.4, { steps: 12 })
+        await sleep(400)
+        assert.equal(await outline(app), 'Side by side 2 | ·h264.mp4* | ·Stacked 3 | ··Empty | ··Empty | ··Empty')
+        // Into the middle of the column's row: the end of the column.
+        const a = await row(app, 1)
+        const b = await row(app, 2)
+        await app.drag(a.x, a.y, b.x, b.y, { steps: 12 })
+        await sleep(400)
+        assert.equal(await outline(app), 'Stacked 4 | ·Empty | ·Empty | ·Empty | ·h264.mp4*')
+        await app.key('z', 'ctrl')
+        await sleep(200)
+        await app.key('z', 'ctrl')
+        await sleep(300)
+        assert.equal((await outline(app)).replaceAll('*', ''), 'Side by side 2 | ·Stacked 3 | ··Empty | ··Empty | ··Empty | ·h264.mp4')
+        await app.key('Escape')
+      }
+    ],
+    [
+      'Esc selects the group around a cell, then nothing; Delete removes; double-click adjusts',
       async ({ app }) => {
         const top = await app.eval(
           `(() => { const b = document.querySelectorAll('.choose')[0].getBoundingClientRect(); return { x: b.left + b.width / 2 + 60, y: b.top + b.height / 2 } })()`
@@ -172,8 +200,11 @@ export default {
         const c = await app.point('.stage canvas', 0.5, 0.45)
         await app.click(c.x, c.y, { count: 2 })
         await sleep(400)
-        assert.equal(await app.eval(`document.querySelector('.modes button.on').textContent.trim()`), 'Frame')
-        await app.key('l')
+        assert.match(await app.eval(`document.querySelector('.bar .label')?.textContent ?? ''`), /^Adjusting/)
+        // Esc: done adjusting (still selected), then nothing selected, then the grid.
+        await app.key('Escape')
+        await sleep(200)
+        assert.doesNotMatch(await app.eval(`document.querySelector('.bar .label')?.textContent ?? ''`), /^Adjusting/)
         await app.key('Escape')
         await app.key('Escape')
         await app.waitFor(`!document.querySelector('.single')`, 5000, 'the grid')

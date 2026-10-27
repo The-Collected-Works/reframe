@@ -1,6 +1,7 @@
+import { reconcileWeights, type Born } from '@shared/composition/bento'
 import { compose, type Composition, type Layer, type LayerPicture } from '@shared/composition/compose'
 import { computePlacement } from '@shared/framing/framing'
-import type { Artboard } from '@shared/types'
+import type { Artboard, BentoNode, CompositionItem } from '@shared/types'
 import type { Track } from '../lib/playback/playback'
 import { items } from './items.svelte'
 import type { Asset } from './library.svelte'
@@ -19,7 +20,21 @@ export type Composed = Composition<Asset> & {
  */
 export function composed(key: string, board: Artboard): Composed | null {
   const item = compositionOf(project.file, key)
+  return item ? build(key, item, board) : null
+}
+
+/**
+ * The composition `key` on `board` as it would be with its tree `root` instead (to show a change
+ * before it's made): this artboard's sizes carried over as the change would carry them.
+ */
+export function composedWith(key: string, board: Artboard, root: BentoNode, born?: Born): Composed | null {
+  const item = compositionOf(project.file, key)
   if (!item) return null
+  const splits = reconcileWeights(item.root, root, board.splits?.[key], born)
+  return build(key, { ...item, root }, { ...board, splits: { ...board.splits, ...(splits ? { [key]: splits } : {}) } })
+}
+
+function build(key: string, item: CompositionItem, board: Artboard): Composed {
   const c = compose(key, item, {
     board,
     source: (k) => {

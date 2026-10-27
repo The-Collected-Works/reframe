@@ -243,6 +243,28 @@ export function moveNode(root: BentoNode, id: string, target: string, side: Side
   return insertBeside(rest, at, side, node, (s) => (s.dir ? s.dir : dirOf((findNode(root, s.id) as Split | null) ?? s)), newId)
 }
 
+/**
+ * Node `id` moved into group `parent`, before its child at `index` (its number of children: at the
+ * end), as a layers list moves a row. Where it came from closes up behind it (see `removeNode`).
+ * Moving a group into itself, or a node to where it already is, changes nothing.
+ */
+export function moveInto(root: BentoNode, id: string, parent: string, index: number): BentoNode {
+  const node = findNode(root, id)
+  const into = findNode(root, parent)
+  if (!node || !into || !isSplit(into) || within(root, id, parent)) return root
+  const at = into.children.findIndex((c) => c.id === id)
+  if (at >= 0 && (index === at || index === at + 1)) return root
+  // Mark where it was, put it where it goes, then take the mark out (closing up behind it).
+  const MARK = '\u0000moving'
+  let next = mapNode(root, id, () => ({ id: MARK, item: null }))
+  next = mapNode(next, parent, (p) => {
+    const kids = (p as Split).children
+    const i = Math.max(0, Math.min(index, kids.length))
+    return { ...p, children: [...kids.slice(0, i), node, ...kids.slice(i)] }
+  })
+  return removeNode(next, MARK) ?? root
+}
+
 /** Split `id` running the other way (an Auto one, the other way from how it runs now). */
 export function flipSplit(root: BentoNode, id: string, dirOf: DirOf): BentoNode {
   return mapNode(root, id, (s) => (isSplit(s) ? { ...s, dir: dirOf(s) === 'row' ? 'col' : 'row' } : s))

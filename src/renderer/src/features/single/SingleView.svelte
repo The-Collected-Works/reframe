@@ -8,9 +8,22 @@
   import { slotKey } from '@shared/composition/bento'
   import { drawFrame } from '@shared/framing/framing'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
-  import { addCell, canUngroupNode, evenOut, flipGroup, moveNode, removeNode, setMode, setSlot, swapSlots, ungroupNode } from '../../state/actions'
+  import {
+    addCell,
+    canUngroupNode,
+    evenOut,
+    flipGroup,
+    moveIntoGroup,
+    moveNode,
+    removeNode,
+    setMode,
+    setSlot,
+    swapSlots,
+    ungroupNode
+  } from '../../state/actions'
   import { items } from '../../state/items.svelte'
   import { prioritize } from '../../state/loading'
+  import { newSlotId } from '../../state/model/items'
   import { clipFor } from '../../state/model/project'
   import { preview } from '../../state/preview.svelte'
   import { project } from '../../state/project.svelte'
@@ -21,7 +34,7 @@
   import { Button } from '../../ui'
   import { SINGLE } from '../../config/keymaps'
   import { assetMenu, slotMenu } from '../menus'
-  import { composed, quantize, tracksOf } from '../../state/composition'
+  import { composed, composedWith, quantize, tracksOf } from '../../state/composition'
   import Filmstrip from './Filmstrip.svelte'
   import CompositionStage from './composition/CompositionStage.svelte'
   import ItemPicker from './ItemPicker.svelte'
@@ -155,19 +168,22 @@
       {board}
       {comp}
       node={selection.node}
-      mode={shell.compositionMode}
+      adjusting={shell.adjusting}
       player={compositionPlayer}
       picking={shell.picking}
       canUngroup={canUngroupNode}
       onScale={(k) => (scale = k)}
-      onMode={(m) => (shell.compositionMode = m)}
+      recompose={(root, born) => composedWith(compositionKey, board, root, born)}
+      newId={newSlotId}
       onSelect={(id) => (selection.node = id)}
+      onAdjust={(slot) => (shell.adjusting = slot)}
       onEdit={(slot, patch) => project.edit([slotKey(compositionKey, slot)], patch)}
       onReset={(slot, keys) => project.resetKeys([slotKey(compositionKey, slot)], keys)}
       onArrange={(split, weights) => project.setSplit(compositionKey, split, { weights })}
       onEvenOut={evenOut}
       onAdd={addCell}
       onMove={moveNode}
+      onMoveInto={moveIntoGroup}
       onSwap={swapSlots}
       onRemove={removeNode}
       onFlip={flipGroup}

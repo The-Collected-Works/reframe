@@ -132,7 +132,7 @@ export async function slotMenu(slot: string, filled: boolean, video: boolean, en
   selection.node = slot
   const id = await showMenu(at.x, at.y, [
     { id: 'choose', label: filled ? 'Replace…' : 'Choose…', icon: 'choose' },
-    ...(filled ? [{ id: 'frame', label: 'Frame', icon: 'frameMode' as const, shortcut: hint(COMPOSITION_EDITOR.actions.frame) }] : []),
+    ...(filled ? [{ id: 'adjust', label: 'Adjust', icon: 'frameMode' as const, shortcut: hint(COMPOSITION_EDITOR.actions.adjust) }] : []),
     { separator: true },
     { id: 'left', label: 'Add Cell to the Left', icon: 'plus' },
     { id: 'right', label: 'Add Cell to the Right', icon: 'plus' },
@@ -144,7 +144,7 @@ export async function slotMenu(slot: string, filled: boolean, video: boolean, en
     { id: 'remove', label: 'Remove Cell', icon: 'trash', shortcut: hint(COMPOSITION_EDITOR.actions.remove), danger: true }
   ])
   if (id === 'choose') shell.choosing = slot
-  else if (id === 'frame') shell.compositionMode = 'frame'
+  else if (id === 'adjust') shell.adjusting = slot
   else if (id === 'left' || id === 'right' || id === 'top' || id === 'bottom') addCell(slot, id)
   else if (id === 'hold') setSlot(slot, { end: end === 'hold' ? 'loop' : 'hold' })
   else if (id === 'parent') selectParent()

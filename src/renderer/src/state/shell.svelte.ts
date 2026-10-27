@@ -5,8 +5,8 @@ class Shell {
   editingBoard = $state.raw<string | null>(null)
   /** The artboard whose tab is being renamed in place, if any. */
   renamingBoard = $state.raw<string | null>(null)
-  /** The composition editor's mode: arranging the cells, or framing what one shows. */
-  compositionMode = $state.raw<'layout' | 'frame'>('layout')
+  /** A composition's cell whose picture is being adjusted (moved, scaled, rotated in its cell), if any. */
+  adjusting = $state.raw<string | null>(null)
   /** A composition's slot whose content is being chosen (the picker is open). */
   choosing = $state.raw<string | null>(null)
   /** A variant or composition being renamed in place, if any. */

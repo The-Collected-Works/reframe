@@ -1,4 +1,4 @@
-import { findNode, within, type Arrangement, type Side } from '@shared/composition/bento'
+import { findNode, moveInto, moveNode, within, type Arrangement, type Born, type DirOf, type Side } from '@shared/composition/bento'
 import type { Rect } from '@shared/framing/framing'
 import type { BentoNode } from '@shared/types'
 
@@ -68,4 +68,17 @@ export function dropAt(root: BentoNode, arrangement: Arrangement, W: number, H: 
   const board = { x: 0, y: 0, w: W, h: H }
   const { side } = nearest(board, pt)
   return { kind: 'beside', target: root.id, side, rect: board, zone: zoneOf(board, side) }
+}
+
+/** Where something dragged lands: on the stage (see `dropAt`), or in the layers list (into a group, at a place). */
+export type Landing = Drop | { kind: 'into'; parent: string; index: number }
+
+/**
+ * The tree as it would be with node `moving` landed (to show it before it's let go): moved beside a
+ * cell, or into a group. A swap leaves the tree as it is (only what two cells show changes).
+ */
+export function landed(root: BentoNode, moving: string, landing: Landing, dirOf: DirOf, newId: () => string): { root: BentoNode; born?: Born } {
+  if (landing.kind === 'swap') return { root }
+  if (landing.kind === 'into') return { root: moveInto(root, moving, landing.parent, landing.index) }
+  return moveNode(root, moving, landing.target, landing.side, dirOf, newId)
 }
