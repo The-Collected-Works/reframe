@@ -1,4 +1,4 @@
-import { autoDir, arrange, mapNode, parentOf, slotKey, slotsOf, type Dir } from '@shared/composition/bento'
+import { arrange, dirsOn, mapNode, reconcileWeights, slotKey, slotsOf, type Born, type DirOf } from '@shared/composition/bento'
 import type {
   Artboard,
   AssetEntry,
@@ -258,51 +258,63 @@ export function withSplit(b: Artboard, composition: string, split: string, set: 
   return { ...b, splits }
 }
 
-/**
- * Adds an empty slot beside a slot (`dir` row) or below it (col), as it's arranged on `boardId`:
- * into the same split if that already runs that way there, or else splitting the slot in two.
- */
-export function splitSlot(file: ProjectFile, key: string, slotId: string, dir: Dir, boardId: string): { file: ProjectFile; slot: string } {
-  const composition = compositionOf(file, key)!
-  const board = file.artboards.find((b) => b.id === boardId)!
-  const placed = arrange(composition, board.width, board.height, board.splits?.[key])
-  const parent = parentOf(composition.root, slotId)
-  const fresh: Slot = { id: uid(), item: null }
-  if (parent && placed.splits.get(parent.id)?.dir === dir) {
-    const i = parent.children.findIndex((c) => c.id === slotId)
-    const root = mapNode(composition.root, parent.id, (p) => ({ ...p, children: [...parent.children.slice(0, i + 1), fresh, ...parent.children.slice(i + 1)] }))
-    // Where the split's proportions were set, the slot's share is halved between it and the new one.
-    const artboards = file.artboards.map((b) => {
-      const w = b.splits?.[key]?.[parent.id]?.weights
-      if (!w || w.length !== parent.children.length) return b
-      return withSplit(b, key, parent.id, { weights: [...w.slice(0, i), w[i] / 2, w[i] / 2, ...w.slice(i + 1)] })
-    })
-    return { file: withComposition({ ...file, artboards }, key, { root }), slot: fresh.id }
-  }
-  const id = uid()
-  const root = mapNode(composition.root, slotId, (s) => ({ id, children: [s, fresh] }))
-  // On this artboard it runs the way asked (if that isn't how it would run anyway); elsewhere it
-  // follows each artboard's shape.
-  const cell = placed.cells.find((c) => c.slot.id === slotId)!
-  const artboards = autoDir(cell.rect) === dir ? file.artboards : file.artboards.map((b) => (b.id === boardId ? withSplit(b, key, id, { dir }) : b))
-  return { file: withComposition({ ...file, artboards }, key, { root }), slot: fresh.id }
+/** A new id for a slot or split. */
+export const newSlotId = (): string => uid()
+
+/** Which way each of a composition's splits runs on `board` (Auto ones as they're placed there). */
+export function placedOn(file: ProjectFile, key: string, board: Artboard): DirOf | null {
+  const composition = compositionOf(file, key)
+  return composition ? dirsOn(arrange(composition, board.width, board.height, board.splits?.[key])) : null
 }
 
-/** Removes a slot (its split closes up behind it); the only slot left is emptied instead. */
-export function removeSlot(file: ProjectFile, key: string, slotId: string): ProjectFile {
-  const composition = compositionOf(file, key)!
-  const parent = parentOf(composition.root, slotId)
-  let artboards = file.artboards.map((b) => withOverride(b, slotKey(key, slotId), null))
-  if (!parent) return withComposition({ ...file, artboards }, key, { root: { ...(composition.root as Slot), item: null } })
-  const i = parent.children.findIndex((c) => c.id === slotId)
-  const rest = parent.children.filter((c) => c.id !== slotId)
-  const root = mapNode(composition.root, parent.id, (p) => (rest.length === 1 ? rest[0] : { ...p, children: rest }))
-  artboards = artboards.map((b) => {
-    const w = b.splits?.[key]?.[parent.id]?.weights
-    if (rest.length === 1) return withSplit(b, key, parent.id, null)
-    return w && w.length === parent.children.length ? withSplit(b, key, parent.id, { weights: w.filter((_, j) => j !== i) }) : b
+/**
+ * A composition's tree changed by `change` (given which way each split runs on artboard `boardId`,
+ * Auto ones included). Every artboard's proportions follow the change (see reconcileWeights), and
+ * the framing of slots that are gone goes too. Nothing left: one empty slot.
+ */
+export function restructure(
+  file: ProjectFile,
+  key: string,
+  boardId: string,
+  change: (root: BentoNode, dirOf: DirOf) => { root: BentoNode | null; born?: Born }
+): ProjectFile {
+  const composition = compositionOf(file, key)
+  const board = file.artboards.find((b) => b.id === boardId)
+  if (!composition || !board) return file
+  const before = composition.root
+  const r = change(before, dirsOn(arrange(composition, board.width, board.height, board.splits?.[key])))
+  const root: BentoNode = r.root ?? { id: uid(), item: null }
+  if (root === before) return file
+  const kept = new Set(slotsOf(root).map((s) => s.id))
+  const gone = slotsOf(before).filter((s) => !kept.has(s.id))
+  const artboards = file.artboards.map((b) => {
+    let next = b
+    for (const s of gone) next = withOverride(next, slotKey(key, s.id), null)
+    const set = reconcileWeights(before, root, b.splits?.[key], r.born)
+    if (set === b.splits?.[key]) return next
+    const splits = { ...next.splits }
+    if (set) splits[key] = set
+    else delete splits[key]
+    return { ...next, splits }
   })
   return withComposition({ ...file, artboards }, key, { root })
+}
+
+/** Split `splitId`'s children sharing its space equally again, on artboard `boardId`. */
+export function evenOut(file: ProjectFile, key: string, boardId: string, splitId: string): ProjectFile {
+  const artboards = file.artboards.map((b) => {
+    const set = b.splits?.[key]?.[splitId]
+    if (b.id !== boardId || !set?.weights) return b
+    const { weights: _w, ...rest } = set
+    const forComposition = { ...b.splits![key] }
+    if (Object.keys(rest).length) forComposition[splitId] = rest
+    else delete forComposition[splitId]
+    const splits = { ...b.splits }
+    if (Object.keys(forComposition).length) splits[key] = forComposition
+    else delete splits[key]
+    return { ...b, splits }
+  })
+  return { ...file, artboards }
 }
 
 /** Swaps what two slots show, framing and all. */

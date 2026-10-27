@@ -5,6 +5,7 @@
   one its framing there. The inspector's connection to app state.
 -->
 <script lang="ts">
+  import { dirsOn } from '@shared/composition/bento'
   import type { Attachment } from 'svelte/attachments'
   import { slotsOf } from '@shared/composition/bento'
   import { DEFAULT_SETTINGS, normDeg, resolveSettings } from '@shared/framing/framing'
@@ -17,11 +18,13 @@
     edit,
     editEach,
     editingSlot,
+    evenOut,
     makeDefault,
     paste,
     renameItem,
     resetKeys,
     resetSelection,
+    setGroupDir,
     setSlot,
     targets
   } from '../../state/actions'
@@ -41,6 +44,7 @@
   import AnchorGrid from './AnchorGrid.svelte'
   import { pickBackground } from './eyedropper'
   import CompositionInspector from './CompositionInspector.svelte'
+  import CompositionStructure from './CompositionStructure.svelte'
   import Row from './Row.svelte'
 
   const FITS: { value: FitMode; label: string; title: string }[] = [
@@ -64,7 +68,7 @@
   const composition = $derived(compositionOf(project.file, compositionKey))
   // The open composition as it sits here, for a cell's size and what it shows.
   const comp = $derived(openComposition ? composed(openComposition, board) : null)
-  const slotCell = $derived(slotKey && comp ? comp.arrangement.cells.find((c) => c.slot.id === selection.slot) : undefined)
+  const slotCell = $derived(slotKey && comp ? comp.arrangement.cells.find((c) => c.slot.id === selection.node) : undefined)
   const slotAsset = $derived(slotCell?.slot.item ? items.asset(slotCell.slot.item) : undefined)
 
   /** What edits apply to (see `targets`): a cell, or the selected assets (not compositions). */
@@ -209,7 +213,7 @@
       {:else if slotKey && openComposition}
         <span class="crumb muted-crumb">{board.name}</span>
         <span class="crumb-sep"><Icon name="next" size={12} /></span>
-        <button class="crumb" title="The composition's own settings" onclick={() => (selection.slot = null)}>{label(openComposition)}</button>
+        <button class="crumb" title="The composition's own settings" onclick={() => (selection.node = null)}>{label(openComposition)}</button>
         <span class="crumb-sep"><Icon name="next" size={12} /></span>
         <span class="crumb current" {title}>{title}</span>
       {:else if editing}
@@ -226,6 +230,20 @@
       {#each composition ? compositionTags : tags as t (t)}<Tag>{t}</Tag>{/each}
     </div>
   </header>
+
+  {#snippet structure()}
+    {#if comp && openComposition}
+      <CompositionStructure
+        root={comp.item.root}
+        dirOf={dirsOn(comp.arrangement)}
+        labelOf={(id) => comp.layers.find((l) => l.id === id)?.source?.label ?? 'Empty'}
+        selected={selection.node}
+        onSelect={(id) => (selection.node = id)}
+        onDir={setGroupDir}
+        onEvenOut={evenOut}
+      />
+    {/if}
+  {/snippet}
 
   {#snippet current(text: string, renamable: boolean)}
     {#if renaming && renamable}
@@ -250,6 +268,7 @@
         onResetArrangement={() => compositions.forEach((k) => project.resetSplits(k))}
         onPick={pickBackground}
       />
+      {@render structure()}
     </div>
     <footer class="insp-foot">
       <div class="spacer"></div>
@@ -387,6 +406,8 @@
           <Toggle value={s.mute} onChange={(mute) => edit({ mute })} />
         </Row>
       {/if}
+      <!-- A cell's place in its composition. -->
+      {#if slotKey}{@render structure()}{/if}
     </div>
 
     {#if editing}

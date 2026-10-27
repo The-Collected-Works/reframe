@@ -50,9 +50,13 @@ export interface Slot {
   end?: 'loop' | 'hold'
 }
 
-/** In a bento: its children side by side or stacked, whichever way suits the space it gets on each artboard. */
+/**
+ * In a bento: its children side by side (`row`) or stacked (`col`). Without a direction (Auto), it
+ * runs whichever way suits the space it gets on each artboard.
+ */
 export interface Split {
   id: string
+  dir?: 'row' | 'col'
   children: BentoNode[]
 }
 

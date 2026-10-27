@@ -22,6 +22,13 @@ import {
   ListFilter,
   Maximize2,
   Pause,
+  ArrowLeftRight,
+  Equal,
+  Ungroup,
+  CornerLeftUp,
+  LayoutPanelLeft,
+  Crop,
+  ImagePlus,
   PencilLine,
   Pipette,
   Play,
@@ -88,7 +95,15 @@ export const ICONS = {
   splitRow: Columns2,
   splitCol: Rows2,
   replace: Replace,
-  grip: GripVertical
+  grip: GripVertical,
+  // The composition editor.
+  layoutMode: LayoutPanelLeft,
+  frameMode: Crop,
+  flipDir: ArrowLeftRight,
+  evenOut: Equal,
+  ungroup: Ungroup,
+  parent: CornerLeftUp,
+  choose: ImagePlus
 }
 
 /** Drawn solid rather than outlined. */

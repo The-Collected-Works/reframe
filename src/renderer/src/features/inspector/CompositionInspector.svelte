@@ -1,7 +1,7 @@
 <!--
   A composition's own settings: the spacing around and between its cells, their corners, the background,
-  how long it runs, and whether this artboard's arrangement has been changed from the automatic
-  one. Takes props; the inspector connects it.
+  how long it runs, and whether its cells' sizes have been set by hand on this artboard. Takes props;
+  the inspector connects it.
 -->
 <script lang="ts">
   import type { CompositionItem } from '@shared/types'
@@ -22,7 +22,7 @@
   }: {
     composition: CompositionItem
     boardName: string
-    /** This artboard's arrangement has been changed (dividers dragged, directions set). */
+    /** Its cells' sizes have been set by hand on this artboard (gaps dragged). */
     arranged: boolean
     /** Its longest video's length; 0 with no video. */
     longest: number
@@ -80,9 +80,11 @@
   </ColorPicker>
 </Row>
 
-<Row label={`Arrangement on ${boardName}`} overridden={arranged} onReset={onResetArrangement}>
+<Row label={`Sizes on ${boardName}`} overridden={arranged} onReset={onResetArrangement}>
   <p class="note">
-    {arranged ? 'Arranged by hand here. Other artboards keep their own.' : 'Follows the artboard’s shape. Drag the gaps between cells to change it here.'}
+    {arranged
+      ? 'Set by hand on this artboard; other artboards keep their own. Reset to make every cell equal again.'
+      : 'Equal. Drag the gaps between cells to change them on this artboard.'}
   </p>
 </Row>
 

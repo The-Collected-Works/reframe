@@ -8,6 +8,11 @@ import { launch } from '../app.mjs'
 import { sleep } from '../cdp.mjs'
 import { probe } from '../media.mjs'
 
+/** The open composition's structure, as the inspector outlines it (· for each level in; * selected). */
+const outline = (app) =>
+  app.eval(
+    `[...document.querySelectorAll('.outline .line')].map((l) => '·'.repeat((parseInt(l.style.paddingLeft) - 8) / 14) + l.textContent.replace(/\\s+/g, ' ').trim() + (l.classList.contains('on') ? '*' : '')).join(' | ')`
+  )
 const names = (app) => app.eval(`[...document.querySelectorAll('.cell')].map((c) => c.querySelector('.cell-name')?.textContent.trim())`)
 
 async function viewOption(app, label) {
@@ -102,6 +107,76 @@ export default {
         await viewOption(app, 'All')
         assert.equal((await names(app)).length, 6)
         await app.key('Escape')
+      }
+    ],
+    [
+      'builds three stacked beside a big one, with the + on the edges',
+      async ({ app }) => {
+        await app.clickOn('.cell[data-name="h264.mp4"] .frame')
+        await app.key('g', 'ctrl')
+        await app.waitFor(`[...document.querySelectorAll('.cell')].some((c) => /Composition 2/.test(c.textContent))`, 5000, 'a second composition')
+        const p = await app.eval(`(() => {
+          const c = [...document.querySelectorAll('.cell[data-name^="~"]')].find((c) => /Composition 2/.test(c.textContent))
+          const r = c.querySelector('.frame').getBoundingClientRect()
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        })()`)
+        await app.click(p.x, p.y)
+        await app.key('e')
+        await app.waitFor(`document.querySelector('.modes')`, 5000, 'the composition editor')
+        await sleep(1500)
+        const c = await app.point('.stage canvas', 0.5, 0.45)
+        await app.click(c.x, c.y)
+        for (const side of ['left', 'bottom', 'bottom']) {
+          await app.clickOn(`.add.${side}`)
+          await sleep(300)
+        }
+        // Esc steps out: the cell, its column, the whole layout, then nothing.
+        for (let i = 0; i < 3; i++) await app.key('Escape')
+        await sleep(300)
+        assert.equal(await outline(app), 'Side by side 2 | ·Stacked 3 | ··Empty | ··Empty | ··Empty | ·h264.mp4')
+      }
+    ],
+    [
+      'moves a cell by dragging it onto an edge, and undoes',
+      async ({ app }) => {
+        const big = await app.point('.stage canvas', 0.62, 0.45)
+        // The video onto the top empty cell, near its top edge: it goes above it, in the column.
+        const to = await app.eval(`(() => {
+          const [a, b] = [...document.querySelectorAll('.choose')].map((c) => c.getBoundingClientRect())
+          return { x: a.left + a.width / 2, y: a.top + a.height / 2 - (b.top - a.top) * 0.4 }
+        })()`)
+        await app.drag(big.x, big.y, to.x, to.y, { steps: 12 })
+        await sleep(400)
+        // It stays selected.
+        assert.equal(await outline(app), 'Stacked 4 | ·h264.mp4* | ·Empty | ·Empty | ·Empty')
+        await app.key('z', 'ctrl')
+        await sleep(300)
+        assert.equal((await outline(app)).replaceAll('*', ''), 'Side by side 2 | ·Stacked 3 | ··Empty | ··Empty | ··Empty | ·h264.mp4')
+        await app.key('Escape')
+      }
+    ],
+    [
+      'Esc selects the group around a cell, then nothing; Delete removes; double-click frames',
+      async ({ app }) => {
+        const top = await app.eval(
+          `(() => { const b = document.querySelectorAll('.choose')[0].getBoundingClientRect(); return { x: b.left + b.width / 2 + 60, y: b.top + b.height / 2 } })()`
+        )
+        await app.click(top.x, top.y)
+        await sleep(200)
+        await app.key('Escape')
+        await sleep(200)
+        assert.match(await outline(app), /Stacked 3\*/)
+        await app.key('Delete')
+        await sleep(300)
+        assert.equal(await outline(app), 'h264.mp4')
+        const c = await app.point('.stage canvas', 0.5, 0.45)
+        await app.click(c.x, c.y, { count: 2 })
+        await sleep(400)
+        assert.equal(await app.eval(`document.querySelector('.modes button.on').textContent.trim()`), 'Frame')
+        await app.key('l')
+        await app.key('Escape')
+        await app.key('Escape')
+        await app.waitFor(`!document.querySelector('.single')`, 5000, 'the grid')
       }
     ],
     [

@@ -11,6 +11,13 @@ Batch-crop a folder of images and videos into one or more artboard sizes, then e
 5. To leave assets out of an artboard's export, select them and use the leave-out button in the inspector footer (or the right-click menu).
 6. **Export** writes `<destination>/<artboard name>/<file>`. Images go out as PNG, JPG or WebP, and videos as H.264 MP4.
 
+**Compositions** put several items on one artboard: select them and press **⌘/Ctrl+G**, then open the composition (double-click it, or **E**). Its editor has two modes, switched at its top left:
+
+- **Layout** arranges the cells. Click a cell to select it; click again (or **Esc**) for the group it's in. The **+** on each edge of the selection adds a cell there. Drag a cell onto another cell's edge to put it beside it, onto its middle to swap the two, or into the margin to put it beside everything. Drag a gap to resize the cells either side (on this artboard; double-click the gap to make them equal again). The toolbar over a selected group turns it from side by side to stacked, makes its cells equal, or spreads them into the group around it. The inspector shows the whole structure.
+- **Frame** positions what a cell shows, as for a single asset. Double-clicking a cell in Layout frames it.
+
+A group runs the same way on every artboard; set it to **Auto** in the inspector to have it follow each artboard's shape instead. Sizes are each artboard's own.
+
 Edits autosave to `.reframe.json` inside the folder, so reopening the folder restores them.
 
 | | |

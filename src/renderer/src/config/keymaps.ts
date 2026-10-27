@@ -76,15 +76,21 @@ export const SINGLE = keymap({
 export const COMPOSITION_EDITOR = keymap({
   title: 'Composition editor',
   actions: {
-    deselect: { keys: 'escape', label: 'Deselect the cell, then back to grid' },
-    remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Remove the cell' }
+    deselect: { keys: 'escape', label: 'Select the group around it, then nothing' },
+    remove: { keys: ['delete', 'backspace'], show: 'delete', label: 'Remove the cell or group' },
+    layout: { keys: 'l', label: 'Layout: arrange the cells' },
+    frame: { keys: 'f', label: 'Frame: position what a cell shows' }
   },
   notes: [
-    { keys: 'Drag a gap', label: 'Resize the cells either side (this artboard)' },
-    { keys: 'Click a cell', label: 'Frame what it shows' },
-    { keys: 'Drag a cell’s tab', label: 'Swap it with another cell' },
-    { keys: 'Right-click a cell', label: 'Add a cell, replace, remove' },
-    { keys: 'alt', label: 'No snapping', section: 'While dragging a gap' }
+    { keys: 'Click', label: 'Select a cell; again, its group', section: 'Layout' },
+    { keys: 'Drag a cell', label: 'Move it: onto an edge, beside; onto the middle, swap', section: 'Layout' },
+    { keys: '+', label: 'Add a cell on that side of the selection', section: 'Layout' },
+    { keys: 'Drag a gap', label: 'Resize the cells either side (this artboard)', section: 'Layout' },
+    { keys: 'Double-click a gap', label: 'Make the cells it divides equal', section: 'Layout' },
+    { keys: 'Double-click a cell', label: 'Frame what it shows', section: 'Layout' },
+    { keys: 'alt', label: 'No snapping, dragging a gap', section: 'Layout' },
+    { keys: 'Drag', label: 'Move, scale or rotate what a cell shows', section: 'Frame' },
+    { keys: 'Double-click', label: 'Reset its position, scale and rotation', section: 'Frame' }
   ]
 })
 

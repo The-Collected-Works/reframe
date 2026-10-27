@@ -32,8 +32,11 @@
     z-index: 1;
     flex: 1;
     border-radius: 6px;
-    display: grid;
-    place-items: center;
+    /* An icon and a label sit side by side. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     /* Plus the track's 3px padding = the shared control height. */
     height: calc(var(--control) - 6px);
     padding: 0 8px;

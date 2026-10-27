@@ -1,4 +1,3 @@
-import type { Dir } from '@shared/composition/bento'
 import { resolveSettings } from '@shared/framing/framing'
 import { api, mac, win } from '../lib/bridge'
 import { fmtSize } from '../lib/format'
@@ -17,11 +16,12 @@ import {
   excludeFolder,
   includeFolder,
   paste,
-  removeSlot,
+  removeNode,
+  selectParent,
+  addCell,
   resetSelection,
   setMode,
-  setSlot,
-  splitSlot
+  setSlot
 } from '../state/actions'
 import { items } from '../state/items.svelte'
 import { library } from '../state/library.svelte'
@@ -129,20 +129,26 @@ export async function assetMenu(name: string, path: string, at: { x: number; y: 
 
 /** Right-click on a composition's cell in the single view (it's selected first). */
 export async function slotMenu(slot: string, filled: boolean, video: boolean, end: 'loop' | 'hold', at: { x: number; y: number }): Promise<void> {
-  selection.slot = slot
+  selection.node = slot
   const id = await showMenu(at.x, at.y, [
-    { id: 'choose', label: filled ? 'Replace…' : 'Choose…', icon: 'replace' },
+    { id: 'choose', label: filled ? 'Replace…' : 'Choose…', icon: 'choose' },
+    ...(filled ? [{ id: 'frame', label: 'Frame', icon: 'frameMode' as const, shortcut: hint(COMPOSITION_EDITOR.actions.frame) }] : []),
     { separator: true },
-    { id: 'row', label: 'Add Cell Beside', icon: 'splitRow' },
-    { id: 'col', label: 'Add Cell Below', icon: 'splitCol' },
+    { id: 'left', label: 'Add Cell to the Left', icon: 'plus' },
+    { id: 'right', label: 'Add Cell to the Right', icon: 'plus' },
+    { id: 'top', label: 'Add Cell Above', icon: 'plus' },
+    { id: 'bottom', label: 'Add Cell Below', icon: 'plus' },
     ...(video ? [{ separator: true }, { id: 'hold', label: 'Hold Last Frame When Shorter', icon: 'pause' as const, checked: end === 'hold' }] : []),
     { separator: true },
+    { id: 'parent', label: 'Select Its Group', icon: 'parent', shortcut: hint(COMPOSITION_EDITOR.actions.deselect) },
     { id: 'remove', label: 'Remove Cell', icon: 'trash', shortcut: hint(COMPOSITION_EDITOR.actions.remove), danger: true }
   ])
   if (id === 'choose') shell.choosing = slot
-  else if (id === 'row' || id === 'col') splitSlot(id as Dir)
+  else if (id === 'frame') shell.compositionMode = 'frame'
+  else if (id === 'left' || id === 'right' || id === 'top' || id === 'bottom') addCell(slot, id)
   else if (id === 'hold') setSlot(slot, { end: end === 'hold' ? 'loop' : 'hold' })
-  else if (id === 'remove') removeSlot()
+  else if (id === 'parent') selectParent()
+  else if (id === 'remove') removeNode(slot)
 }
 
 /** Right-click menu for an artboard tab. */

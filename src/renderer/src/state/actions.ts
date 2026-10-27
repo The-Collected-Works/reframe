@@ -1,4 +1,18 @@
-import { slotKey, type Dir } from '@shared/composition/bento'
+import {
+  canUngroup,
+  findNode,
+  flipSplit,
+  insertBeside,
+  isSplit,
+  moveNode as moveTreeNode,
+  parentOf,
+  removeNode as removeTreeNode,
+  setSplitDir,
+  slotKey,
+  ungroup as ungroupTree,
+  type Dir,
+  type Side
+} from '@shared/composition/bento'
 import type { CropSettings, FolderScan, Slot, SettingKey } from '@shared/types'
 import { api } from '../lib/bridge'
 import { hint } from '../lib/keymap.svelte'
@@ -135,9 +149,14 @@ export function clearSelection(): void {
 // ---- editing: the selection, or with nothing selected, the artboard's defaults. In a composition, the
 // slot being edited.
 
-/** The slot being edited in the composition on screen, by its key in the overrides. */
+/** The cell selected in the composition on screen (not a group), by its key in the overrides. */
 export function editingSlot(): string | null {
-  return view.mode === 'single' && selection.focus && selection.slot ? slotKey(selection.focus, selection.slot) : null
+  const focus = selection.focus
+  const node = selection.node
+  if (view.mode !== 'single' || !focus || !node) return null
+  const root = model.compositionOf(project.file, focus)?.root
+  const found = root && findNode(root, node)
+  return found && !isSplit(found) ? slotKey(focus, node) : null
 }
 
 const isComposition = (key: string) => items.entry(key)?.kind === 'composition'
@@ -266,27 +285,75 @@ export function renameItem(key: string, name: string): void {
 
 const focusComposition = () => (selection.focus && isComposition(selection.focus) ? selection.focus : null)
 
-/** A new empty slot beside or below the one being edited, ready to fill. */
-export function splitSlot(dir: Dir): void {
+/** The tree of the composition in focus, changed by `change` (see model.restructure). */
+function restructure(change: Parameters<typeof model.restructure>[3]): void {
   const composition = focusComposition()
-  const slot = selection.slot
-  if (!composition || !slot) return
-  let made = ''
-  project.change((f) => {
-    const r = model.splitSlot(f, composition, slot, dir, project.boardId)
-    made = r.slot
-    return r.file
-  })
-  selection.slot = made
-  shell.choosing = made
+  if (composition) project.change((f) => model.restructure(f, composition, project.boardId, change))
 }
 
-export function removeSlot(): void {
+const treeOf = () => {
+  const c = focusComposition()
+  return c ? model.compositionOf(project.file, c)?.root : undefined
+}
+
+/** A new empty cell on `side` of node `target` (a cell or a group), selected, ready to fill. */
+export function addCell(target: string, side: Side): void {
+  const cell: Slot = { id: model.newSlotId(), item: null }
+  restructure((root, dirOf) => insertBeside(root, target, side, cell, dirOf, model.newSlotId))
+  if (treeOf() && findNode(treeOf()!, cell.id)) selection.node = cell.id
+}
+
+/** Node `id` moved to `side` of node `target`; it stays selected. */
+export function moveNode(id: string, target: string, side: Side): void {
+  restructure((root, dirOf) => moveTreeNode(root, id, target, side, dirOf, model.newSlotId))
+  selection.node = id
+}
+
+/** Removes a cell or a group (the selection, unless given); its group closes up behind it. */
+export function removeNode(id = selection.node): void {
+  if (!id) return
+  restructure((root) => ({ root: removeTreeNode(root, id) }))
+  selection.node = null
+}
+
+/** The group around the selection selected instead (none around it: the composition). */
+export function selectParent(): void {
+  const root = treeOf()
+  const node = selection.node
+  if (root && node) selection.node = parentOf(root, node)?.id ?? null
+}
+
+/** A group running the other way. */
+export function flipGroup(id: string): void {
+  restructure((root, dirOf) => ({ root: flipSplit(root, id, dirOf) }))
+}
+
+/** A group's direction (null: Auto, following each artboard's shape). */
+export function setGroupDir(id: string, dir: Dir | null): void {
+  restructure((root) => ({ root: setSplitDir(root, id, dir ?? undefined) }))
+}
+
+/** Whether a group can be dissolved into the one around it (they run the same way). */
+export function canUngroupNode(id: string): boolean {
+  const root = treeOf()
   const composition = focusComposition()
-  const slot = selection.slot
-  if (!composition || !slot) return
-  project.change((f) => model.removeSlot(f, composition, slot))
-  selection.slot = null
+  const board = project.board
+  if (!root || !composition) return false
+  const placed = model.placedOn(project.file, composition, board)
+  return !!placed && canUngroup(root, id, placed)
+}
+
+/** A group dissolved into the one around it; what was in it stays selected as the parent. */
+export function ungroupNode(id: string): void {
+  const parent = treeOf() && parentOf(treeOf()!, id)
+  restructure((root, dirOf) => ({ root: ungroupTree(root, id, dirOf) }))
+  selection.node = parent?.id ?? null
+}
+
+/** A group's cells sharing its space equally again, on this artboard. */
+export function evenOut(id: string): void {
+  const composition = focusComposition()
+  if (composition) project.change((f) => model.evenOut(f, composition, project.boardId, id))
 }
 
 export function swapSlots(a: string, b: string): void {

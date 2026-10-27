@@ -8,7 +8,7 @@
   import { slotKey } from '@shared/composition/bento'
   import { drawFrame } from '@shared/framing/framing'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
-  import { removeSlot, setMode, setSlot, swapSlots } from '../../state/actions'
+  import { addCell, canUngroupNode, evenOut, flipGroup, moveNode, removeNode, setMode, setSlot, swapSlots, ungroupNode } from '../../state/actions'
   import { items } from '../../state/items.svelte'
   import { prioritize } from '../../state/loading'
   import { clipFor } from '../../state/model/project'
@@ -23,7 +23,7 @@
   import { assetMenu, slotMenu } from '../menus'
   import { composed, quantize, tracksOf } from '../../state/composition'
   import Filmstrip from './Filmstrip.svelte'
-  import CompositionStage from './CompositionStage.svelte'
+  import CompositionStage from './composition/CompositionStage.svelte'
   import ItemPicker from './ItemPicker.svelte'
   import PlayerBar from './PlayerBar.svelte'
   import Stage from './Stage.svelte'
@@ -154,20 +154,29 @@
     <CompositionStage
       {board}
       {comp}
-      slot={selection.slot}
+      node={selection.node}
+      mode={shell.compositionMode}
       player={compositionPlayer}
       picking={shell.picking}
+      canUngroup={canUngroupNode}
       onScale={(k) => (scale = k)}
-      onSelect={(slot) => (selection.slot = slot)}
+      onMode={(m) => (shell.compositionMode = m)}
+      onSelect={(id) => (selection.node = id)}
       onEdit={(slot, patch) => project.edit([slotKey(compositionKey, slot)], patch)}
       onReset={(slot, keys) => project.resetKeys([slotKey(compositionKey, slot)], keys)}
       onArrange={(split, weights) => project.setSplit(compositionKey, split, { weights })}
+      onEvenOut={evenOut}
+      onAdd={addCell}
+      onMove={moveNode}
       onSwap={swapSlots}
+      onRemove={removeNode}
+      onFlip={flipGroup}
+      onUngroup={ungroupNode}
       onChoose={(slot) => {
-        selection.slot = slot
+        selection.node = slot
         shell.choosing = slot
       }}
-      onRemove={removeSlot}
+      onHold={(slot, hold) => setSlot(slot, { end: hold ? 'hold' : 'loop' })}
       onMenu={(slot, at) => {
         const layer = comp.layers.find((l) => l.id === slot)
         slotMenu(slot, !!layer?.source, layer?.source?.kind === 'video', layer?.end ?? 'loop', at)

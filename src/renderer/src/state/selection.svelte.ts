@@ -8,15 +8,18 @@ class Selection {
   names = $state.raw<string[]>([])
   focus = $state.raw<string | null>(null)
   private index = $derived(new Set(this.names))
-  private slotIn = $state.raw<{ composition: string; id: string } | null>(null)
+  private nodeIn = $state.raw<{ composition: string; id: string } | null>(null)
 
-  /** With a composition in focus, the slot being edited in it (none: the composition itself). */
-  get slot(): string | null {
-    return this.slotIn && this.slotIn.composition === this.focus ? this.slotIn.id : null
+  /**
+   * With a composition in focus, the part of it selected: a cell or a group of them (none: the
+   * composition itself).
+   */
+  get node(): string | null {
+    return this.nodeIn && this.nodeIn.composition === this.focus ? this.nodeIn.id : null
   }
 
-  set slot(id: string | null) {
-    this.slotIn = id && this.focus ? { composition: this.focus, id } : null
+  set node(id: string | null) {
+    this.nodeIn = id && this.focus ? { composition: this.focus, id } : null
   }
 
   has(name: string): boolean {
