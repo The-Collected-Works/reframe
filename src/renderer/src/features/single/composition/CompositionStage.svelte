@@ -18,7 +18,7 @@
   import { Tween } from 'svelte/motion'
   import { dirsOn, findNode, isSplit, parentOf, within, type Born, type Gap, type Side } from '@shared/composition/bento'
   import type { Layer, LayerPicture } from '@shared/composition/compose'
-  import { bounds, computePlacement, type Placement, type Point, type Rect } from '@shared/framing/framing'
+  import { computePlacement, type Placement, type Point, type Rect } from '@shared/framing/framing'
   import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '@shared/framing/snapping'
   import type { Artboard, BentoNode, CropSettings, SettingKey } from '@shared/types'
   import { COMPOSITION_EDITOR, SINGLE } from '../../../config/keymaps'
@@ -31,6 +31,7 @@
   import { Button, Icon } from '../../../ui'
   import { camera, type View } from '../camera.svelte'
   import { dragTo, hitTest, type DragStart, type Mode as GizmoMode } from '../gizmo'
+  import { fitBoard } from '../fit'
   import { WheelNav } from '../nav'
   import { zoomTransitions } from '../zoom.svelte'
   import { dropAt, landed, type Landing } from './drop'
@@ -122,10 +123,6 @@
     onExit: () => void
   } = $props()
 
-  // The board placed clear of the bottom band (player and filmstrip).
-  const MARGIN_X = 48
-  const MARGIN_TOP = 48
-  const RESERVED = 12 + 64 + 12 + 44 + 12 * 2
   const dpr = window.devicePixelRatio || 1
   const TRANSFORM: SettingKey[] = ['zoom', 'scaleX', 'scaleY', 'offsetX', 'offsetY', 'rotation']
   const SIDES: { side: Side; title: string }[] = [
@@ -235,17 +232,7 @@
   const target = $derived.by((): View => {
     void settled
     if (interacting) return held
-    const availW = width - MARGIN_X * 2
-    const availH = height - MARGIN_TOP - RESERVED
-    const fitK = Math.max(0.01, Math.min(availW / board.width, availH / board.height))
-    let k = fitK
-    if (framing?.placement) {
-      const b = bounds(framing.placement)
-      const ex = Math.max(board.width / 2, board.width / 2 - b.x, b.x + b.w - board.width / 2)
-      const ey = Math.max(board.height / 2, board.height / 2 - b.y, b.y + b.h - board.height / 2)
-      k = Math.max(fitK * 0.45, Math.min(fitK, availW / 2 / ex, availH / 2 / ey))
-    }
-    held = { k, bx: MARGIN_X + (availW - board.width * k) / 2, by: MARGIN_TOP + (availH - board.height * k) / 2 }
+    held = fitBoard(width, height, board, framing?.placement ?? null)
     return held
   })
   const endInteraction = () => {

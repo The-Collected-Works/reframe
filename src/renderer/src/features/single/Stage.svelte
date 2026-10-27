@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { bounds, computePlacement, type Point } from '@shared/framing/framing'
+  import { computePlacement, type Point } from '@shared/framing/framing'
   import type { Artboard, CropSettings, SettingKey } from '@shared/types'
   import { trackPointer } from '../../lib/drag'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
@@ -17,6 +17,7 @@
   import { dragTo, hitTest, type DragStart } from './gizmo'
   import type { Player } from '../../state/playback.svelte'
   import { bitmapProxy } from './proxy.svelte'
+  import { fitBoard } from './fit'
   import { WheelNav } from './nav'
   import { drawStage } from './render'
   import { zoomTransitions } from './zoom.svelte'
@@ -57,12 +58,6 @@
     onMenu: (at: { x: number; y: number }) => void
   } = $props()
 
-  // Board placement inside the stage. The player and filmstrip float over the bottom of the stage,
-  // in a reserved band that's the same for images and videos, so the board never jumps.
-  const MARGIN_X = 48
-  const MARGIN_TOP = 40
-  /** Matches the CSS: .player height, .film-row heights, and the gaps around them. */
-  const RESERVED = 12 + 64 + 12 + 44 + 12 * 2
   const dpr = window.devicePixelRatio || 1
 
   const placement = $derived(asset?.w ? computePlacement(board.width, board.height, asset.w, asset.h, settings) : null)
@@ -91,17 +86,7 @@
   const target = $derived.by((): View => {
     void settled
     if (interacting) return held
-    const availW = width - MARGIN_X * 2
-    const availH = height - MARGIN_TOP - RESERVED
-    const fitK = Math.max(0.01, Math.min(availW / board.width, availH / board.height))
-    let k = fitK
-    if (placement && selected) {
-      const b = bounds(placement)
-      const ex = Math.max(board.width / 2, board.width / 2 - b.x, b.x + b.w - board.width / 2)
-      const ey = Math.max(board.height / 2, board.height / 2 - b.y, b.y + b.h - board.height / 2)
-      k = Math.max(fitK * 0.45, Math.min(fitK, availW / 2 / ex, availH / 2 / ey))
-    }
-    held = { k, bx: (width - board.width * k) / 2, by: MARGIN_TOP + (availH - board.height * k) / 2 }
+    held = fitBoard(width, height, board, placement && selected ? placement : null)
     return held
   })
   const endInteraction = () => {

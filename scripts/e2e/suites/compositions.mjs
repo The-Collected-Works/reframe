@@ -251,6 +251,34 @@ export default {
       }
     ],
     [
+      'stepping from a composition to an asset crossfades, with no flight from the grid',
+      async ({ app }) => {
+        await app.clickOn('.cell[data-name^="~"] .frame')
+        await app.key('e')
+        await app.waitFor(`document.querySelector('.outline')`, 5000, 'the composition editor')
+        await sleep(1200)
+        // Steps on until an asset shows, watching each step for anything flying (moving, not just
+        // fading) while the next item comes up.
+        for (let i = 0; i < 8 && (await app.eval(`!!document.querySelector('.outline')`)); i++) {
+          await app.eval(`window.flew = (async () => {
+            const t0 = performance.now()
+            while (performance.now() - t0 < 600) {
+              for (const f of document.querySelectorAll('.flyer'))
+                for (const a of f.getAnimations()) if (a.effect.getKeyframes().some((k) => k.transform && k.transform !== 'none')) return true
+              await new Promise((r) => requestAnimationFrame(r))
+            }
+            return false
+          })(); 0`)
+          await app.key('ArrowRight')
+          assert.equal(await app.eval(`window.flew`), false)
+        }
+        assert.equal(await app.eval(`!document.querySelector('.outline')`), true)
+        await app.key('Escape')
+        await app.key('Escape')
+        await app.waitFor(`!document.querySelector('.single')`, 5000, 'the grid')
+      }
+    ],
+    [
       'opens projects saved when compositions were called layouts',
       async (ctx) => {
         await sleep(1000)
