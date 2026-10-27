@@ -1,7 +1,7 @@
 /** What's remembered per user (in local storage): view options, folded folders, preview volume. */
 
 export type SortKey = 'name' | 'date' | 'type'
-export type FilterKey = 'all' | 'images' | 'videos' | 'adjusted' | 'excluded'
+export type FilterKey = 'all' | 'sources' | 'variants' | 'compositions' | 'images' | 'videos' | 'adjusted' | 'excluded'
 export interface ViewPrefs {
   filter: FilterKey
   sort: SortKey
@@ -29,7 +29,7 @@ function write(key: string, value: unknown): void {
   }
 }
 
-const FILTERS: FilterKey[] = ['all', 'images', 'videos', 'adjusted', 'excluded']
+const FILTERS: FilterKey[] = ['all', 'sources', 'variants', 'compositions', 'images', 'videos', 'adjusted', 'excluded']
 const SORTS: SortKey[] = ['name', 'date', 'type']
 
 /** Stored view options, each checked (a value from another version falls back to the default). */

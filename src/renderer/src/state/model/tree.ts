@@ -51,16 +51,27 @@ export type GridLayout = { tree: FolderNode[]; visible: Entry[]; sectioned: bool
  */
 export function gridLayout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skipped: SkippedFolder[], board: Artboard | null): GridLayout {
   const { filter, sort, group } = prefs
-  const pass = (a: Entry) =>
-    filter === 'images'
-      ? a.kind === 'image'
-      : filter === 'videos'
-        ? a.kind === 'video'
-        : filter === 'adjusted'
-          ? !!board && hasOverrides(board, a.name)
-          : filter === 'excluded'
-            ? !!board && resolveSettings(board, a.name).skip
-            : true
+  const pass = (a: Entry): boolean => {
+    switch (filter) {
+      // The folder's own files; the variants made from them; compositions.
+      case 'sources':
+        return a.kind !== 'composition' && !a.source
+      case 'variants':
+        return !!a.source
+      case 'compositions':
+        return a.kind === 'composition'
+      case 'images':
+        return a.kind === 'image'
+      case 'videos':
+        return a.kind === 'video'
+      case 'adjusted':
+        return !!board && hasOverrides(board, a.name)
+      case 'excluded':
+        return !!board && resolveSettings(board, a.name).skip
+      default:
+        return true
+    }
+  }
   // A variant sorts as its file does (it has the file's kind and date), then after it, by name.
   const home = (a: Entry) => a.source ?? a.name
   const byName = (a: Entry, b: Entry) => natural(baseName(home(a)), baseName(home(b))) || natural(folderOf(home(a)), folderOf(home(b)))

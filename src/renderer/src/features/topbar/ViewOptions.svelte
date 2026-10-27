@@ -25,13 +25,24 @@
     onReset: () => void
   } = $props()
 
-  const FILTERS: { value: FilterKey; label: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'images', label: 'Images' },
-    { value: 'videos', label: 'Videos' },
-    { value: 'adjusted', label: 'Adjusted' },
-    { value: 'excluded', label: 'Excluded from export' }
+  // In groups: what an item is, what's in it, what's been done to it.
+  const FILTER_GROUPS: { value: FilterKey; label: string }[][] = [
+    [{ value: 'all', label: 'All' }],
+    [
+      { value: 'sources', label: 'Source files' },
+      { value: 'variants', label: 'Variants' },
+      { value: 'compositions', label: 'Compositions' }
+    ],
+    [
+      { value: 'images', label: 'Images' },
+      { value: 'videos', label: 'Videos' }
+    ],
+    [
+      { value: 'adjusted', label: 'Adjusted' },
+      { value: 'excluded', label: 'Excluded from export' }
+    ]
   ]
+  const FILTERS = FILTER_GROUPS.flat()
   const SORTS: { value: SortKey; label: string }[] = [
     { value: 'name', label: 'Name' },
     { value: 'date', label: 'Date modified' },
@@ -60,8 +71,11 @@
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
       <MenuLabel>Show</MenuLabel>
-      {#each FILTERS as f (f.value)}
-        <MenuItem checked={prefs.filter === f.value} onclick={() => onChange({ filter: f.value })}>{f.label}</MenuItem>
+      {#each FILTER_GROUPS as group, i (i)}
+        {#if i}<div class="filter-gap"></div>{/if}
+        {#each group as f (f.value)}
+          <MenuItem checked={prefs.filter === f.value} onclick={() => onChange({ filter: f.value })}>{f.label}</MenuItem>
+        {/each}
       {/each}
       <MenuSeparator />
       <MenuLabel>Sort by</MenuLabel>
@@ -83,6 +97,11 @@
 </div>
 
 <style>
+  /* A little space between groups of filters (a full separator would split "Show" in two). */
+  .filter-gap {
+    height: 6px;
+  }
+
   .anchor {
     position: relative;
   }
