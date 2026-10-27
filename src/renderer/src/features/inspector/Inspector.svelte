@@ -35,7 +35,7 @@
   import { view } from '../../state/view.svelte'
   import { Button, ColorPicker, Icon, NumberField, Segmented, Slider, Tag, Toggle } from '../../ui'
   import { GLOBAL } from '../keymaps'
-  import { compositionScene } from '../scene'
+  import { composed } from '../composition'
   import { ZOOM_MAX, ZOOM_MIN } from '../snapping'
   import AnchorGrid from './AnchorGrid.svelte'
   import { pickBackground } from './eyedropper'
@@ -62,8 +62,8 @@
   const compositionKey = $derived(compositions.length ? (selection.focus && compositions.includes(selection.focus) ? selection.focus : compositions[0]) : null)
   const composition = $derived(compositionOf(project.file, compositionKey))
   // The open composition as it sits here, for a cell's size and what it shows.
-  const scene = $derived(openComposition ? compositionScene(openComposition, board) : null)
-  const slotCell = $derived(slotKey && scene ? scene.arrangement.cells.find((c) => c.slot.id === selection.slot) : undefined)
+  const comp = $derived(openComposition ? composed(openComposition, board) : null)
+  const slotCell = $derived(slotKey && comp ? comp.arrangement.cells.find((c) => c.slot.id === selection.slot) : undefined)
   const slotAsset = $derived(slotCell?.slot.item ? items.asset(slotCell.slot.item) : undefined)
 
   /** What edits apply to (see `targets`): a cell, or the selected assets (not compositions). */
@@ -137,7 +137,7 @@
       ? [
           ...(compositions.length > 1 ? [plural(compositions.length, 'composition')] : [COMPOSITION_TYPES[composition.type], `${board.width}×${board.height}`]),
           plural(slotsOf(composition.root).length, 'cell'),
-          ...(scene?.duration ? [fmtTime(scene.duration)] : [])
+          ...(comp?.duration ? [fmtTime(comp.duration)] : [])
         ]
       : []
   )

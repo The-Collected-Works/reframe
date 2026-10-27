@@ -6,7 +6,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { slotKey } from '@shared/composition/bento'
-  import { computeLayout, drawFrame } from '@shared/layout'
+  import { drawFrame } from '@shared/layout'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { removeSlot, setMode, setSlot, swapSlots } from '../../state/actions'
   import { items } from '../../state/items.svelte'
@@ -15,13 +15,13 @@
   import { preview } from '../../state/preview.svelte'
   import { project } from '../../state/project.svelte'
   import { selection } from '../../state/selection.svelte'
-  import { copies, Player, sizesOf, SOON, type Track } from '../../state/playback.svelte'
+  import { copies, Player, sizesOf, SOON } from '../../state/playback.svelte'
   import { shell } from '../../state/shell.svelte'
   import { view } from '../../state/view.svelte'
   import { Button } from '../../ui'
   import { SINGLE } from '../keymaps'
   import { assetMenu, slotMenu } from '../menus'
-  import { compositionScene } from '../scene'
+  import { composed, quantize, tracksOf } from '../composition'
   import Filmstrip from './Filmstrip.svelte'
   import CompositionPlayerBar from './CompositionPlayerBar.svelte'
   import CompositionStage from './CompositionStage.svelte'
@@ -33,7 +33,7 @@
   const board = $derived(project.board)
   // A composition opens in the composition editor; anything else on the stage.
   const compositionKey = $derived(focused?.kind === 'composition' ? focused.name : null)
-  const scene = $derived(compositionKey ? compositionScene(compositionKey, board) : null)
+  const comp = $derived(compositionKey ? composed(compositionKey, board) : null)
   const asset = $derived(compositionKey ? undefined : items.asset(selection.focus))
   const settings = $derived(asset ? project.settingsOf(asset.name) : board.defaults)
   // Position among what the grid shows (filtered, sorted, collapsed folders left out).
@@ -50,8 +50,6 @@
 
   // A video's playback: one track, its trim the stretch that loops; sound from the file itself.
   // Remade for each item, so each starts where its trim does.
-  /** Device pixels on screen, rounded so small zooms don't keep asking for another size. */
-  const quantize = (px: number) => Math.ceil(px / 128) * 128
   let need = $state(0)
   const playable = $derived(asset?.kind === 'video' && asset.w > 0 ? asset.name : null)
   let playback = $state.raw<Player | null>(null)
@@ -106,25 +104,15 @@
     playback.preview(a.name, t, (src) => drawFrame(canvas.getContext('2d')!, src, a.w, a.h, board.width, board.height, settings, canvas.width / board.width))
   }
 
-  // A composition's playback: a track per video cell, each the part of its file the cell plays, sized
-  // to the cell on screen. No sound yet (the export has none either).
+  // A composition's playback: a track per video layer, each the part of its file the layer plays,
+  // sized to it on screen. No sound yet (the export has none either).
   let scale = $state(1)
-  const compositionTracks = $derived.by((): Track[] => {
-    if (!scene) return []
-    return scene.arrangement.cells.flatMap(({ slot, rect }) => {
-      const cell = scene.cells.get(slot.id)
-      const a = cell?.asset
-      if (a?.kind !== 'video' || !a.duration || !a.w) return []
-      const c = clipFor(project.file, a.name, a.duration)
-      const p = computeLayout(rect.w, rect.h, a.w, a.h, cell!.settings)
-      return [{ id: slot.id, file: a, start: c.start, length: c.end - c.start, end: slot.end ?? 'loop', need: quantize(Math.max(p.w, p.h) * scale) }]
-    })
-  })
+  const compositionTracks = $derived(comp ? tracksOf(comp, scale) : [])
   // Until every cell has a copy, the ones without show stills: say how many, and how far along.
   // How far into the composition every cell plays smoothly: a cell whose copy is still being made is
   // ready as far as it's encoded past its trim's start (the first time round).
   const compositionCached = $derived.by(() => {
-    let reach = scene?.duration ?? 0
+    let reach = comp?.duration ?? 0
     for (const t of compositionTracks) {
       const r = copies.ready(t.file)
       if (r < t.start + t.length - 0.05) reach = Math.min(reach, Math.max(0, r - t.start))
@@ -143,7 +131,7 @@
     if (!compositionKey) return
     const p = new Player({
       tracks: () => compositionTracks,
-      range: () => ({ start: 0, end: scene?.duration ?? 0 }),
+      range: () => ({ start: 0, end: comp?.duration ?? 0 }),
       hold: () => shell.picking
     })
     compositionPlayer = p
@@ -152,7 +140,7 @@
       compositionPlayer = null
     }
   })
-  const choosing = $derived(shell.choosing && scene ? scene.arrangement.cells.find((c) => c.slot.id === shell.choosing) : undefined)
+  const choosing = $derived(shell.choosing && comp ? comp.arrangement.cells.find((c) => c.slot.id === shell.choosing) : undefined)
 
   // Space plays and pauses; any arrow steps through the strip. (The stage handles the rest.)
   useKeymap(SINGLE, {
@@ -163,10 +151,10 @@
 </script>
 
 <div class="single">
-  {#if scene && compositionKey}
+  {#if comp && compositionKey}
     <CompositionStage
       {board}
-      {scene}
+      {comp}
       slot={selection.slot}
       player={compositionPlayer}
       picking={shell.picking}
@@ -182,9 +170,8 @@
       }}
       onRemove={removeSlot}
       onMenu={(slot, at) => {
-        const cell = scene.arrangement.cells.find((c) => c.slot.id === slot)
-        const a = scene.cells.get(slot)?.asset
-        slotMenu(slot, !!a, a?.kind === 'video', cell?.slot.end ?? 'loop', at)
+        const layer = comp.layers.find((l) => l.id === slot)
+        slotMenu(slot, !!layer?.source, layer?.source?.kind === 'video', layer?.end ?? 'loop', at)
       }}
       onExit={() => setMode('grid')}
     />
@@ -206,8 +193,8 @@
   {/if}
   <div class="single-fade"></div>
   <div class="single-overlay">
-    {#if compositionPlayer && scene?.duration}
-      <CompositionPlayerBar player={compositionPlayer} duration={scene.duration} preparing={compositionPreparing} cached={compositionCached} />
+    {#if compositionPlayer && comp?.duration}
+      <CompositionPlayerBar player={compositionPlayer} duration={comp.duration} preparing={compositionPreparing} cached={compositionCached} />
     {:else if asset && playback && asset.duration > 0}
       <PlayerBar
         {playback}
@@ -232,7 +219,7 @@
         assets={strip}
         {board}
         focus={selection.focus}
-        composite={(name) => compositionScene(name, board)}
+        composite={(name) => composed(name, board)}
         onSelect={(name) => selection.select(name)}
         onSeen={(a) => prioritize(a.path)}
       />

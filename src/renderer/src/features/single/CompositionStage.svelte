@@ -5,15 +5,17 @@
   another to swap them. Takes props; the single view connects it.
 -->
 <script lang="ts">
-  import { findNode, isSplit, type CellSource, type Gap } from '@shared/composition/bento'
+  import { findNode, isSplit, type Gap } from '@shared/composition/bento'
+  import type { Layer, LayerPicture } from '@shared/composition/compose'
   import { bounds, computeLayout, type Placement, type Point } from '@shared/layout'
-  import type { Artboard, CropSettings, Slot, SettingKey } from '@shared/types'
+  import type { Artboard, CropSettings, SettingKey } from '@shared/types'
   import { trackPointer } from '../../lib/drag'
+  import type { Asset } from '../../state/library.svelte'
   import type { Player } from '../../state/playback.svelte'
   import { hint, useKeymap } from '../../lib/keymap.svelte'
   import { Icon } from '../../ui'
-  import { LAYOUT_EDITOR, SINGLE } from '../keymaps'
-  import type { CompositionScene } from '../scene'
+  import { COMPOSITION_EDITOR, SINGLE } from '../keymaps'
+  import type { Composed } from '../composition'
   import { NO_GUIDES, snapZoom, zoomAbout, type Guides } from '../snapping'
   import { camera, type View } from './camera.svelte'
   import { dragGap, gapAt } from './gaps'
@@ -24,7 +26,7 @@
 
   let {
     board,
-    scene,
+    comp,
     slot,
     player,
     picking,
@@ -40,7 +42,7 @@
     onExit
   }: {
     board: Artboard
-    scene: CompositionScene
+    comp: Composed
     /** The cell being edited. */
     slot: string | null
     /** Its videos' playback (a track per video cell, by slot). */
@@ -70,7 +72,8 @@
   const dpr = window.devicePixelRatio || 1
   const TRANSFORM: SettingKey[] = ['zoom', 'scaleX', 'scaleY', 'offsetX', 'offsetY', 'rotation']
 
-  const arrangement = $derived(scene.arrangement)
+  const arrangement = $derived(comp.arrangement)
+  const layers = $derived(new Map(comp.layers.map((l) => [l.id, l])))
   const cellOf = (id: string | null) => (id ? arrangement.cells.find((c) => c.slot.id === id) : undefined)
   /** A cell's own artboard: the gizmo frames media in it exactly as in a whole artboard. */
   const cellBoard = (r: { w: number; h: number }): Artboard => ({ ...board, width: r.w, height: r.h })
@@ -78,8 +81,8 @@
   const selected = $derived.by(() => {
     const cell = cellOf(slot)
     if (!cell) return null
-    const c = scene.cells.get(cell.slot.id)
-    const a = c?.asset
+    const c = layers.get(cell.slot.id)
+    const a = c?.source
     const local = a?.w ? computeLayout(cell.rect.w, cell.rect.h, a.w, a.h, c!.settings) : null
     return { cell, asset: a, settings: c!.settings, local, placement: local ? onBoard(local, cell.rect) : null }
   })
@@ -122,10 +125,10 @@
     interacting = false
     settled++
   }
-  // A new composition goes back to Fit. (By key: the scene object itself is new after every edit.)
-  const sceneKey = $derived(scene.key)
+  // A new composition goes back to Fit. (By key: the composition object itself is new after every edit.)
+  const compKey = $derived(comp.key)
   let manual = $derived.by((): View | null => {
-    void sceneKey
+    void compKey
     return null
   })
   const tk = $derived(target.k)
@@ -133,7 +136,7 @@
   const tby = $derived(target.by)
   const cam = camera(
     () => ({ k: tk, bx: tbx, by: tby }),
-    () => `${width}x${height}/${scene.key}/${board.id}`,
+    () => `${width}x${height}/${comp.key}/${board.id}`,
     () => manual
   )
   const k = $derived(cam.current.k)
@@ -142,7 +145,7 @@
   const zoom = zoomTransitions({
     stage: () => stage,
     canvas: () => canvas,
-    name: () => scene.key,
+    name: () => comp.key,
     drawable: () => true,
     board: () => board,
     width: () => width,
@@ -152,16 +155,15 @@
   })
 
   /** A cell's picture now: its video frame while one is playing, else its thumbnail. */
-  const source = (s: Slot): CellSource | null => {
-    const c = scene.cells.get(s.id)
-    const a = c?.asset
-    if (!a?.w) return null
-    return { src: player?.frame(s.id) ?? a.thumb, sw: a.w, sh: a.h, settings: c!.settings }
+  const picture = (l: Layer<Asset> | undefined): LayerPicture | null => {
+    const a = l?.source
+    if (!l || !a?.w) return null
+    return { src: player?.frame(l.id) ?? a.thumb, sw: a.w, sh: a.h, settings: l.settings }
   }
 
   // Everything a frame is drawn from; the canvas redraws whenever it changes.
   const frame = $derived({
-    scene,
+    comp,
     view: cam.current,
     board,
     selected,
@@ -191,10 +193,9 @@
       view: f.view,
       dpr,
       board: f.board,
-      composition: f.scene.composition,
-      arrangement: f.scene.arrangement,
-      source,
-      selected: sel ? { rect: sel.cell.rect, placement: sel.placement, source: source(sel.cell.slot) } : null,
+      composition: f.comp,
+      picture,
+      selected: sel ? { rect: sel.cell.rect, placement: sel.placement, source: picture(layers.get(sel.cell.slot.id)) } : null,
       chrome: !f.picking,
       dragging: f.dragging,
       hoverCell: f.hoverCell && f.hoverCell !== slot ? (cellOf(f.hoverCell)?.rect ?? null) : null,
@@ -272,7 +273,7 @@
     zoomOut: () => zoomView(0.8, width / 2, height / 2)
   })
   // Esc lets go of the cell first (before the app's Esc goes back to the grid).
-  useKeymap(LAYOUT_EDITOR, {
+  useKeymap(COMPOSITION_EDITOR, {
     deselect: { when: () => !!slot, run: () => onSelect(null) },
     remove: { when: () => !!slot, run: () => onRemove() }
   })
@@ -344,11 +345,11 @@
   /** Moving, scaling or rotating a cell's media within its cell. */
   function dragMedia(e: PointerEvent, id: string, mode: Mode) {
     const cell = cellOf(id)
-    const c = scene.cells.get(id)
-    if (!cell || !c?.asset?.w) return
+    const c = layers.get(id)
+    if (!cell || !c?.source?.w) return
     const r = cell.rect
     const at = toBoard(e.clientX, e.clientY)
-    const start: DragStart = { mode, start: c.settings, board: cellBoard(r), sw: c.asset.w, sh: c.asset.h, k, at: { x: at.x - r.x, y: at.y - r.y } }
+    const start: DragStart = { mode, start: c.settings, board: cellBoard(r), sw: c.source.w, sh: c.source.h, k, at: { x: at.x - r.x, y: at.y - r.y } }
     follow(e, (x, y, m) => {
       const pt = toBoard(x, y)
       const res = dragTo(start, { x: pt.x - r.x, y: pt.y - r.y }, { shift: m.shiftKey, alt: m.altKey, mod: m.metaKey || m.ctrlKey })
@@ -361,13 +362,13 @@
 
   /** The content's own shape, for the cells either side of a gap (snapping so it fits uncropped). */
   function aspectsOf(gap: Gap): (index: number) => number | null {
-    const split = findNode(scene.composition.root, gap.split)
+    const split = findNode(comp.item.root, gap.split)
     return (i) => {
       const child = split && isSplit(split) ? split.children[i] : null
       if (!child || isSplit(child)) return null
-      const c = scene.cells.get(child.id)
-      if (!c?.asset?.w) return null
-      return Math.abs(c.settings.rotation % 180) === 90 ? c.asset.h / c.asset.w : c.asset.w / c.asset.h
+      const c = layers.get(child.id)
+      if (!c?.source?.w) return null
+      return Math.abs(c.settings.rotation % 180) === 90 ? c.source.h / c.source.w : c.source.w / c.source.h
     }
   }
 
@@ -397,7 +398,7 @@
     if (h.kind === 'media') return dragMedia(e, slot!, h.mode)
     // Another cell: select it, and its media moves straight away if dragged.
     onSelect(h.slot)
-    if (scene.cells.get(h.slot)?.asset?.w) dragMedia(e, h.slot, { kind: 'move' })
+    if (layers.get(h.slot)?.source?.w) dragMedia(e, h.slot, { kind: 'move' })
   }
 
   // Double-click: the media's transform back to how its cell frames it; an empty cell, choose what

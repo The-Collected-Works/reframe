@@ -1,6 +1,6 @@
-import { drawBento, type CellSource, type Arrangement } from '@shared/composition/bento'
+import { drawComposition, type Composition, type Layer, type LayerPicture, type LayerSource } from '@shared/composition/compose'
 import { computeLayout, corners, drawFrame, type Placement, type Rect } from '@shared/layout'
-import type { Artboard, CropSettings, CompositionItem, Slot } from '@shared/types'
+import type { Artboard, CropSettings } from '@shared/types'
 import { themeColor } from '../../lib/theme'
 import type { Guides } from '../snapping'
 import type { View } from './camera.svelte'
@@ -115,15 +115,15 @@ export function drawStage(ctx: CanvasRenderingContext2D, f: Frame): void {
 }
 
 /** The composition editor's view: the composition, and whatever editing chrome is showing. */
-export interface CompositionFrame {
+export interface CompositionFrame<S extends LayerSource = LayerSource> {
   view: View
   dpr: number
   board: Artboard
-  composition: CompositionItem
-  arrangement: Arrangement
-  source: (slot: Slot) => CellSource | null
+  composition: Composition<S>
+  /** Each layer's picture now. */
+  picture: (layer: Layer<S>) => LayerPicture | null
   /** The cell being edited: its rectangle, and its media's placement there (in artboard pixels). */
-  selected: { rect: Rect; placement: Placement | null; source: CellSource | null } | null
+  selected: { rect: Rect; placement: Placement | null; source: LayerPicture | null } | null
   /** Editing chrome shows (not while the eyedropper is open: it needs the exact picture). */
   chrome: boolean
   dragging: boolean
@@ -138,8 +138,8 @@ export interface CompositionFrame {
 const EMPTY = 'rgba(128, 128, 128, 0.16)'
 
 /** Draws the composition editor: the composition on its board, empty cells marked, and the selected cell's gizmo. */
-export function drawCompositionStage(ctx: CanvasRenderingContext2D, f: CompositionFrame): void {
-  const { view, dpr, board, composition, arrangement, selected } = f
+export function drawCompositionStage<S extends LayerSource>(ctx: CanvasRenderingContext2D, f: CompositionFrame<S>): void {
+  const { view, dpr, board, composition, selected } = f
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
   const kk = view.k * dpr
   const ox = view.bx * dpr
@@ -165,7 +165,7 @@ export function drawCompositionStage(ctx: CanvasRenderingContext2D, f: Compositi
   ctx.beginPath()
   ctx.rect(0, 0, W * kk, H * kk)
   ctx.clip()
-  drawBento(ctx, composition, arrangement, W, H, kk, f.source, EMPTY)
+  drawComposition(ctx, composition, kk, f.picture, EMPTY)
   ctx.restore()
   if (!f.chrome) return
 
@@ -175,8 +175,8 @@ export function drawCompositionStage(ctx: CanvasRenderingContext2D, f: Compositi
 
   // Empty cells: a plus, to say there's something to put there.
   ctx.strokeStyle = 'rgba(255,255,255,0.35)'
-  for (const c of arrangement.cells) {
-    if (c.slot.item) continue
+  for (const c of composition.layers) {
+    if (c.source) continue
     const cx = ox + (c.rect.x + c.rect.w / 2) * kk
     const cy = oy + (c.rect.y + c.rect.h / 2) * kk
     const s = Math.min(10 * dpr, (Math.min(c.rect.w, c.rect.h) * kk) / 4)

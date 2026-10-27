@@ -33,7 +33,7 @@ import { selection } from '../state/selection.svelte'
 import { shell } from '../state/shell.svelte'
 import { view } from '../state/view.svelte'
 import { showMenu, type ContextMenuItem } from '../ui'
-import { GLOBAL, GRID, LAYOUT_EDITOR } from './keymaps'
+import { GLOBAL, GRID, COMPOSITION_EDITOR } from './keymaps'
 
 /** The right-click menus: on items (grid and single view), composition cells, artboard tabs, and folder headers. */
 
@@ -131,7 +131,7 @@ export async function slotMenu(slot: string, filled: boolean, video: boolean, en
     { id: 'col', label: 'Add Cell Below', icon: 'splitCol' },
     ...(video ? [{ separator: true }, { id: 'hold', label: 'Hold Last Frame When Shorter', icon: 'pause' as const, checked: end === 'hold' }] : []),
     { separator: true },
-    { id: 'remove', label: 'Remove Cell', icon: 'trash', shortcut: hint(LAYOUT_EDITOR.actions.remove), danger: true }
+    { id: 'remove', label: 'Remove Cell', icon: 'trash', shortcut: hint(COMPOSITION_EDITOR.actions.remove), danger: true }
   ])
   if (id === 'choose') shell.choosing = slot
   else if (id === 'row' || id === 'col') splitSlot(id as Dir)

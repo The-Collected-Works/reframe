@@ -1,4 +1,4 @@
-import { slotTime } from '@shared/composition/bento'
+import { layerTime } from '@shared/composition/compose'
 import { Clip, type ClipLike } from './clip'
 import { sizeFor, sizesOf, type Copies, type MediaFile } from './copies'
 import { Emitter } from './emitter'
@@ -486,7 +486,7 @@ export class Playback {
       this.stopExact = null
       for (const t of this.tracks) {
         if (this.copies.sharp(t.file, t.need)) continue
-        const at = slotTime(this._time, t.start, t.length, t.end)
+        const at = layerTime(this._time, t)
         // In 256px steps (and never past the file's own size), so small zooms don't refetch.
         const edge = Math.min(Math.max(t.file.w, t.file.h), Math.ceil(Math.max(256, t.need) / 256) * 256)
         const have = this.exact.get(t.id)
@@ -511,7 +511,7 @@ export class Playback {
   /** Where a track is in its own file at the clock's time (null: no such track). */
   private trackTime(id: string): number | null {
     const t = this.tracks.find((x) => x.id === id)
-    return t ? slotTime(this._time, t.start, t.length, t.end) : null
+    return t ? layerTime(this._time, t) : null
   }
 
   /**
@@ -522,7 +522,7 @@ export class Playback {
     for (const t of this.tracks) {
       const c = this.clips.get(t.id)
       if (!c) continue
-      const at = slotTime(this._time, t.start, t.length, t.end)
+      const at = layerTime(this._time, t)
       const held = t.end === 'hold' && this._time >= t.length
       const scrub = this.scrubs.get(t.id)
       if (this._scrubbing && scrub) {
@@ -541,7 +541,7 @@ export class Playback {
     if (!a || !track) return
     // Silent while scrubbing; it seeks once, where the scrub ends.
     if (this._scrubbing) return void a.pause()
-    const at = slotTime(this._time, track.start, track.length, track.end)
+    const at = layerTime(this._time, track)
     if (!this._playing) {
       a.pause()
       if (Math.abs(a.currentTime - at) > 0.05) a.currentTime = at

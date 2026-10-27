@@ -54,7 +54,7 @@ The renderer (`src/renderer/src`) is Svelte 5:
 - `lib/playback/`: the playback engine everything that plays video uses (the single view, compositions, hover previews), in plain TypeScript with unit tests (`npm test`). A `Playback` is one clock and any number of tracks; each track's pictures come from a `Clip`, fed from playback copies sized to what's on screen (`Copies`: small, every frame a keyframe, made by the media worker for every video ahead of time, what's open first, and kept between sessions), and from the exact frame when the clock stops. Sound plays from the original file, apart from the pictures. `state/playback.svelte.ts` is the one place it meets Svelte: the app's copy store and `Player`, a playback with reactive outputs. See `docs/playback-roadmap.md`.
 - `styles/`: theme tokens, base element styles, a few utility classes and shared keyframes. Everything else is scoped to its component.
 
-The main process (`src/main`) scans folders, runs ffmpeg and writes exports; `src/shared` is the crop geometry both sides use.
+The main process (`src/main`) scans folders, runs ffmpeg and writes exports. `src/shared` is what both sides use: the crop geometry (`layout.ts`), and compositions (`composition/`). `compose()` turns a composition into layers (each with its source, place, framing and timing) that the grid, the editor, playback and export all work from, so what's previewed is what's exported. Each type of composition places its layers its own way; so far there's `bento` (cells in a tree of splits).
 
 ## Build
 

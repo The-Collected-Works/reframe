@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { drawBento } from '@shared/composition/bento'
+  import { drawComposition } from '@shared/composition/compose'
   import { drawFrame, resolveSettings } from '@shared/layout'
   import type { Artboard } from '@shared/types'
   import { visibility } from '../../lib/attach'
   import { scheduleDraw } from '../../lib/draw-queue'
   import type { Asset } from '../../state/library.svelte'
-  import { thumbSource, type CompositionScene } from '../scene'
+  import { thumbnail, type Composed } from '../composition'
   import { FILM_HEIGHT } from './film'
 
   let {
     asset,
     board,
-    scene,
+    comp,
     on,
     onclick,
     onSeen
@@ -19,7 +19,7 @@
     asset: Asset
     board: Artboard
     /** A composition, as it sits on the board. */
-    scene: CompositionScene | null
+    comp: Composed | null
     /** The one the single view shows. */
     on: boolean
     onclick: () => void
@@ -30,7 +30,7 @@
   const width = $derived(Math.round((FILM_HEIGHT * board.width) / board.height))
   const dpr = window.devicePixelRatio || 1
   const key = $derived(
-    `${JSON.stringify(settings)}|${width}x${FILM_HEIGHT}@${dpr}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}@${asset.thumbAt}|${scene?.stamp}`
+    `${JSON.stringify(settings)}|${width}x${FILM_HEIGHT}@${dpr}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}@${asset.thumbAt}|${comp?.stamp}`
   )
 
   let canvas: HTMLCanvasElement
@@ -39,7 +39,7 @@
   let drawn = ''
 
   function draw() {
-    if (!canvas || (!asset.thumb && !scene)) return
+    if (!canvas || (!asset.thumb && !comp)) return
     const pw = Math.round(width * dpr)
     const ph = Math.round(FILM_HEIGHT * dpr)
     if (canvas.width !== pw || canvas.height !== ph) {
@@ -47,7 +47,7 @@
       canvas.height = ph
     }
     const ctx = canvas.getContext('2d')!
-    if (scene) drawBento(ctx, scene.composition, scene.arrangement, board.width, board.height, pw / board.width, thumbSource(scene))
+    if (comp) drawComposition(ctx, comp, pw / board.width, thumbnail)
     else drawFrame(ctx, asset.thumb, asset.w, asset.h, board.width, board.height, settings, pw / board.width)
     ready = true
     drawn = key
@@ -58,7 +58,7 @@
   })
   const onVisible = (v: boolean) => {
     visible = v
-    if (v && !asset.thumb && !scene) onSeen()
+    if (v && !asset.thumb && !comp) onSeen()
   }
 </script>
 

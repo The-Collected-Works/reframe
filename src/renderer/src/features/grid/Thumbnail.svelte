@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments'
-  import { drawBento } from '@shared/composition/bento'
+  import { drawComposition } from '@shared/composition/compose'
   import { drawFrame, resolveSettings } from '@shared/layout'
   import { visibility } from '../../lib/attach'
   import { trackPointer } from '../../lib/drag'
@@ -17,14 +17,14 @@
   import { hasOverrides } from '../../state/model/project'
   import { folderOf } from '../../state/model/tree'
   import { Dot, Icon, Ring } from '../../ui'
-  import { thumbSource } from '../scene'
+  import { thumbnail } from '../composition'
   import { dragOffset, NO_GUIDES, type Guides } from '../snapping'
   import { useGrid } from './context'
   import { HoverPreview } from './preview.svelte'
 
   let { entry, width }: { entry: Entry; width: number } = $props()
   const g = useGrid()
-  const scene = $derived(entry.kind === 'composition' ? g.composite(entry.name) : null)
+  const comp = $derived(entry.kind === 'composition' ? g.composite(entry.name) : null)
   const home = $derived(entry.source ?? entry.name)
   const copying = $derived(g.copying(entry))
 
@@ -54,7 +54,7 @@
   // What's on the canvas, so unchanged cells skip redrawing.
   let drawn = ''
   const key = $derived(
-    `${JSON.stringify(settings)}|${width}x${height}@${window.devicePixelRatio}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}@${asset.thumbAt}|${scene?.stamp}`
+    `${JSON.stringify(settings)}|${width}x${height}@${window.devicePixelRatio}|${asset.w}x${asset.h}|${asset.mtime}|${!!asset.thumb}@${asset.thumbAt}|${comp?.stamp}`
   )
 
   function draw() {
@@ -66,11 +66,11 @@
       canvas.width = pw
       canvas.height = ph
     }
-    if (asset.thumb || scene) ready = true
+    if (asset.thumb || comp) ready = true
     const ctx = canvas.getContext('2d')!
     const kk = k * dpr
-    if (scene) {
-      drawBento(ctx, scene.composition, scene.arrangement, board.width, board.height, kk, thumbSource(scene), EMPTY)
+    if (comp) {
+      drawComposition(ctx, comp, kk, thumbnail, EMPTY)
       drawn = key
       return
     }
@@ -198,7 +198,7 @@
     onpointerleave={asset.kind === 'video' ? () => (preview.hovering = false) : undefined}
   >
     <canvas bind:this={canvas} data-eyedropper data-ready={ready || undefined} style:width={`${width}px`} style:height={`${height}px`}></canvas>
-    {#if !scene && !asset.thumb && !asset.error}<div class="cell-loading"></div>{/if}
+    {#if !comp && !asset.thumb && !asset.error}<div class="cell-loading"></div>{/if}
     {#if asset.error}<div class="cell-error">Can’t read file</div>{/if}
     <!-- Without the caption row, the adjusted dot sits on the picture's corner instead. -->
     {#if !g.names && overridden}<span class="corner-dot"><Dot title="Adjusted" /></span>{/if}
@@ -231,8 +231,8 @@
       {/if}
       {#if asset.kind === 'video' && asset.duration > 0}
         <span class="cell-dur">{fmtTime((clip?.end ?? asset.duration) - (clip?.start ?? 0))}</span>
-      {:else if scene?.duration}
-        <span class="cell-dur">{fmtTime(scene.duration)}</span>
+      {:else if comp?.duration}
+        <span class="cell-dur">{fmtTime(comp.duration)}</span>
       {/if}
     </div>
   {/if}

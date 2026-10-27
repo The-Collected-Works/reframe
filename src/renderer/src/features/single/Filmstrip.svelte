@@ -11,7 +11,7 @@
   import { trackPointer } from '../../lib/drag'
   import { reducedMotion } from '../../lib/motion'
   import type { Asset } from '../../state/library.svelte'
-  import type { CompositionScene } from '../scene'
+  import type { Composed } from '../composition'
   import { FILM_GAP, FILM_HEIGHT, FILM_PAD } from './film'
   import FilmstripItem from './FilmstripItem.svelte'
 
@@ -27,7 +27,7 @@
     assets: Asset[]
     board: Artboard
     /** A composition as it sits on the board. */
-    composite: (name: string) => CompositionScene | null
+    composite: (name: string) => Composed | null
     /** The one the single view shows. */
     focus: string | null
     onSelect: (name: string) => void
@@ -149,7 +149,7 @@
     <FilmstripItem
       asset={a}
       {board}
-      scene={a.kind === 'composition' ? composite(a.name) : null}
+      comp={a.kind === 'composition' ? composite(a.name) : null}
       on={a.name === focus}
       onclick={() => onSelect(a.name)}
       onSeen={() => onSeen(a)}

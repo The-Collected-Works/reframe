@@ -1,21 +1,12 @@
-import { drawBento, compositionDuration, arrange, slotKey, slotsOf, type CellSource } from '@shared/composition/bento'
+import { compose, drawComposition, type Composition, type LayerPicture } from '@shared/composition/compose'
 import { drawFrame, resolveSettings } from '@shared/layout'
-import type { Artboard, Clip, ColorMeta, CropSettings, ExportPrefs, LayerJob, CompositionItem, ProjectFile } from '@shared/types'
+import type { Artboard, Clip, ColorMeta, CropSettings, ExportPrefs, LayerJob, ProjectFile } from '@shared/types'
 import { api } from '../../lib/bridge'
 import { join } from '../../lib/paths'
 import { loadImage, videoInfo } from '../../lib/media'
 import type { Asset } from '../../state/library.svelte'
 import { compositionOf, type Entry } from '../../state/model/items'
 import { folderOf } from '../../state/model/tree'
-
-/** A composition's cell as the export found it: what it shows, framed and trimmed as it was then. */
-export interface CellPlan {
-  slot: string
-  asset: Asset
-  settings: CropSettings
-  clip: Clip
-  end: 'loop' | 'hold'
-}
 
 export interface Item {
   id: string
@@ -29,11 +20,17 @@ export interface Item {
   boardDir: string
   /** What's written: a picture, or a video (a composition with any video in it is one). */
   out: 'image' | 'video'
-  /** A composition, as it was when the export started, with its cells. */
-  composition?: { key: string; item: CompositionItem; cells: CellPlan[] }
+  /**
+   * A composition, as it was when the export started (see compose), and its sources' trims then: it's
+   * composed again once its videos' details are loaded, so it's timed exactly as it plays.
+   */
+  composition?: { comp: Composition<Asset>; clips: Record<string, Clip> }
 }
 
 export type Status = { state: 'queued' | 'running' | 'done' | 'error'; progress: number; error?: string }
+
+/** What a layer can show: an image or a video that can be read. */
+const sourceOf = (a: Asset | undefined): Asset | null => (a && !a.error && a.kind !== 'composition' ? a : null)
 
 const safe = (s: string) => s.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').trim() || 'Artboard'
 const stem = (name: string) => name.replace(/\.[^.]+$/, '')
@@ -68,15 +65,12 @@ export function plan(
       if (entry.kind === 'composition') {
         const item = compositionOf(file, entry.name)
         if (!item) continue
-        const cells = slotsOf(item.root).flatMap((s): CellPlan[] => {
-          const c = s.item ? asset(s.item) : undefined
-          if (!c || c.error) return []
-          return [{ slot: s.id, asset: c, settings: resolveSettings(board, slotKey(entry.name, s.id)), clip: clipOf(c.name), end: s.end ?? 'loop' }]
-        })
+        const comp = compose(entry.name, item, { board, source: (k) => sourceOf(asset(k)), clip: clipOf })
+        const shown = comp.layers.filter((l) => l.source)
         // Nothing in it yet: nothing to write.
-        if (!cells.length) continue
-        composition = { key: entry.name, item, cells }
-        kind = cells.some((c) => c.asset.kind === 'video') ? 'video' : 'image'
+        if (!shown.length) continue
+        composition = { comp, clips: { ...file.clips } }
+        kind = shown.some((l) => l.source!.kind === 'video') ? 'video' : 'image'
       }
       const ext = kind === 'video' ? 'mp4' : prefs.imageFormat
       // Subfolders are mirrored under the artboard's folder ("Square/Shoot A/clip.mp4"); a variant
@@ -111,8 +105,9 @@ export async function renderImage(item: Item, prefs: ExportPrefs): Promise<void>
   const canvas = new OffscreenCanvas(W, H)
   const ctx = canvas.getContext('2d')!
   if (item.composition) {
-    const sources = await compositionSources(item, false)
-    drawBento(ctx, item.composition.item, arrangementOf(item), W, H, 1, (s) => sources.get(s.id) ?? null)
+    const comp = item.composition.comp
+    const pictures = await picturesOf(comp, false)
+    drawComposition(ctx, comp, 1, (l) => pictures.get(l.id) ?? null)
   } else {
     const img = await loadImage(item.asset.path)
     drawFrame(ctx, img, img.naturalWidth, img.naturalHeight, W, H, item.settings, 1)
@@ -120,19 +115,19 @@ export async function renderImage(item: Item, prefs: ExportPrefs): Promise<void>
   await api.writeFile(item.output, await (await encode(canvas, prefs)).arrayBuffer())
 }
 
-const arrangementOf = (item: Item) => arrange(item.composition!.item, item.board.width, item.board.height, item.board.splits?.[item.composition!.key])
-
-/** Each cell's picture at full size; videos are left as holes (`videos`) to show through. */
-async function compositionSources(item: Item, videos: boolean): Promise<Map<string, CellSource>> {
-  const out = new Map<string, CellSource>()
+/** Each layer's picture at full size; videos are left as holes (`videos`) to show through. */
+async function picturesOf(comp: Composition<Asset>, videos: boolean): Promise<Map<string, LayerPicture>> {
+  const out = new Map<string, LayerPicture>()
   await Promise.all(
-    item.composition!.cells.map(async (c) => {
-      if (c.asset.kind === 'video') {
-        if (videos) out.set(c.slot, { src: null, sw: 1, sh: 1, settings: c.settings, hole: true })
+    comp.layers.map(async (l) => {
+      const s = l.source
+      if (!s) return
+      if (s.kind === 'video') {
+        if (videos) out.set(l.id, { src: null, sw: 1, sh: 1, settings: l.settings, hole: true })
         return
       }
-      const img = await loadImage(c.asset.path)
-      out.set(c.slot, { src: img, sw: img.naturalWidth, sh: img.naturalHeight, settings: c.settings })
+      const img = await loadImage(s.path)
+      out.set(l.id, { src: img, sw: img.naturalWidth, sh: img.naturalHeight, settings: l.settings })
     })
   )
   return out
@@ -170,49 +165,54 @@ export async function renderVideo(item: Item, prefs: ExportPrefs, cancelled: () 
  * lays each video under its hole.
  */
 async function renderCompositionVideo(item: Item, prefs: ExportPrefs, cancelled: () => boolean): Promise<void> {
-  const composition = item.composition!
-  const { width: W, height: H } = item.board
-  const arrangement = arrangementOf(item)
-  const canvas = new OffscreenCanvas(W, H)
-  const sources = await compositionSources(item, true)
-  drawBento(canvas.getContext('2d')!, composition.item, arrangement, W, H, 1, (s) => sources.get(s.id) ?? null)
+  const { comp: planned, clips } = item.composition!
+  // Every video's size, length and colour, loaded if they weren't yet; then composed again with them.
+  const loaded = new Map<string, Asset & { fps?: number }>()
+  for (const l of planned.layers) {
+    const s = l.source
+    if (s?.kind === 'video' && !loaded.has(s.name)) loaded.set(s.name, { ...s, ...(await videoMeta(s)) })
+  }
+  const comp = compose(planned.key, planned.item, {
+    board: item.board,
+    source: (k) => loaded.get(k) ?? planned.layers.find((l) => l.source?.name === k)?.source ?? null,
+    clip: (k) => clips[k] ?? { start: 0, end: null }
+  })
+  const canvas = new OffscreenCanvas(comp.width, comp.height)
+  const pictures = await picturesOf(comp, true)
+  drawComposition(canvas.getContext('2d')!, comp, 1, (l) => pictures.get(l.id) ?? null)
   const layer = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer())
-  const cells: LayerJob[] = []
+  const layers: LayerJob[] = []
   let fps = 0
-  for (const c of composition.cells) {
-    if (c.asset.kind !== 'video') continue
-    const rect = arrangement.cells.find((l) => l.slot.id === c.slot)!.rect
-    const m = await videoMeta(c.asset)
-    const end = c.clip.end ?? m.duration
+  for (const l of comp.layers) {
+    const s = l.source
+    if (s?.kind !== 'video' || l.length <= 0) continue
+    const m = loaded.get(s.name)!
     fps = Math.max(fps, m.fps ?? 0)
-    cells.push({
-      input: c.asset.path,
-      x: rect.x,
-      y: rect.y,
-      width: rect.w,
-      height: rect.h,
+    layers.push({
+      input: s.path,
+      x: l.rect.x,
+      y: l.rect.y,
+      width: l.rect.w,
+      height: l.rect.h,
       srcWidth: m.w,
       srcHeight: m.h,
       color: m.color,
-      settings: c.settings,
-      clip: c.clip,
-      length: Math.max(0.05, end - c.clip.start),
-      end: c.end
+      settings: l.settings,
+      clip: { start: l.start, end: l.start + l.length },
+      length: l.length,
+      end: l.end
     })
   }
   if (cancelled()) throw new Error('cancelled')
   await api.exportComposition({
     id: item.id,
     output: item.output,
-    width: W,
-    height: H,
-    bgColor: composition.item.bgColor,
+    width: comp.width,
+    height: comp.height,
+    bgColor: comp.background,
     layer,
-    cells,
-    duration: compositionDuration(
-      composition.item.duration,
-      cells.map((c) => c.length)
-    ),
+    cells: layers,
+    duration: comp.duration,
     fps: Math.min(60, Math.round(fps * 1000) / 1000 || 30),
     crf: prefs.videoCrf
   })

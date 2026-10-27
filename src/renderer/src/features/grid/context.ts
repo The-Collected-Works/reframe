@@ -3,7 +3,7 @@ import type { Artboard, Clip, CropSettings } from '@shared/types'
 import type { CopyState } from '../../lib/playback/copies'
 import type { Asset } from '../../state/library.svelte'
 import type { Entry } from '../../state/model/items'
-import type { CompositionScene } from '../scene'
+import type { Composed } from '../composition'
 
 export const GAP = 8
 /** Mat around each frame; matches the thumbnail's padding. */
@@ -37,7 +37,7 @@ export interface GridModel {
 
   asset(entry: Entry): Asset
   /** A composition as it sits on the artboard. */
-  composite(name: string): CompositionScene | null
+  composite(name: string): Composed | null
   selected(name: string): boolean
   focused(name: string): boolean
   clip(name: string): Clip | undefined

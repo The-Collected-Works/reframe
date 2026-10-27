@@ -17,7 +17,7 @@
   import { Icon } from '../../ui'
   import { GRID } from '../keymaps'
   import { assetMenu, excludedFolderMenu, folderMenu } from '../menus'
-  import { compositionScene } from '../scene'
+  import { composed } from '../composition'
   import { GAP, PAD, provideGrid, scroll } from './context'
   import GridFolder from './GridFolder.svelte'
   import { boxSelect } from './marquee'
@@ -112,7 +112,7 @@
       return active && !shell.picking
     },
     asset: (entry) => items.with(entry),
-    composite: (name) => compositionScene(name, board),
+    composite: (name) => composed(name, board),
     selected: (name) => selection.has(name),
     focused: (name) => selection.focus === name,
     clip: (name) => project.file.clips[name],

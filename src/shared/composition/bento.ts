@@ -1,12 +1,11 @@
-import { drawFrame, type Rect } from '../layout'
-import type { CropSettings, CompositionItem, BentoNode, Slot, Split, SplitArrangement } from '../types'
+import type { Rect } from '../layout'
+import type { CompositionItem, BentoNode, Slot, Split, SplitArrangement } from '../types'
 
 /**
- * Compositions: several items laid out on one artboard. The arrangement is a tree of splits, each laying its
- * children side by side or stacked. What's in it (the tree, which item each slot shows) is the
- * same on every artboard; how it's arranged (each split's direction and proportions) is per
- * artboard, and follows the artboard's shape until set. Shared, so the preview and the export lay
- * out and draw a composition the same way.
+ * Bento compositions: cells laid out as a tree of splits, each laying its children side by side or
+ * stacked. What's in it (the tree, which item each slot shows) is the same on every artboard; how
+ * it's arranged (each split's direction and proportions) is per artboard, and follows the artboard's
+ * shape until set. `arrange` places the cells; compose.ts turns them into the composition's layers.
  */
 
 export type Dir = 'row' | 'col'
@@ -148,74 +147,4 @@ export function arrange(
   }
   place(composition.root, { x: pad, y: pad, w: W - pad * 2, h: H - pad * 2 })
   return out
-}
-
-/** What a cell shows when drawn: a picture framed by `settings`, or (`hole`) nothing, cut out. */
-export interface CellSource {
-  src: CanvasImageSource | null
-  sw: number
-  sh: number
-  settings: CropSettings
-  hole?: boolean
-}
-
-type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
-
-export function cellPath(ctx: Ctx, r: Rect, radius: number, k: number): void {
-  ctx.beginPath()
-  ctx.roundRect(r.x * k, r.y * k, r.w * k, r.h * k, Math.max(0, Math.min(radius, r.w / 2, r.h / 2)) * k)
-}
-
-/**
- * Draws a composition: its background, then each cell framed into its (rounded) rectangle. `k` maps
- * artboard pixels to canvas pixels, as for drawFrame. A cell with nothing to show is left as
- * background, or filled with `empty` (the editor's placeholder).
- */
-export function drawBento(
-  ctx: Ctx,
-  composition: Pick<CompositionItem, 'radius' | 'bgColor'>,
-  arrangement: Arrangement,
-  W: number,
-  H: number,
-  k: number,
-  source: (slot: Slot) => CellSource | null,
-  empty?: string
-): void {
-  ctx.save()
-  ctx.fillStyle = composition.bgColor
-  ctx.fillRect(0, 0, W * k, H * k)
-  for (const { slot, rect } of arrangement.cells) {
-    const s = source(slot)
-    cellPath(ctx, rect, composition.radius, k)
-    if (s?.hole) {
-      ctx.save()
-      ctx.globalCompositeOperation = 'destination-out'
-      ctx.fill()
-      ctx.restore()
-    } else if (s && s.sw) {
-      ctx.save()
-      ctx.clip()
-      ctx.translate(rect.x * k, rect.y * k)
-      drawFrame(ctx, s.src, s.sw, s.sh, rect.w, rect.h, s.settings, k)
-      ctx.restore()
-    } else if (empty) {
-      ctx.fillStyle = empty
-      ctx.fill()
-    }
-  }
-  ctx.restore()
-}
-
-// ---- time
-
-/** How long a composition runs: its set duration, or its longest video. 0: no video, so it's a still. */
-export function compositionDuration(duration: number | null, lengths: number[]): number {
-  if (!lengths.length) return 0
-  return Math.max(0.1, duration ?? Math.max(...lengths))
-}
-
-/** Where a slot's video is (in its own time) at `t` seconds into the composition. */
-export function slotTime(t: number, start: number, length: number, end: 'loop' | 'hold' = 'loop'): number {
-  if (length <= 0) return start
-  return start + (end === 'hold' ? Math.min(t, Math.max(0, length - 1 / 60)) : t % length)
 }

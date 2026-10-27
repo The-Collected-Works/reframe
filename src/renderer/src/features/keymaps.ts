@@ -73,7 +73,7 @@ export const SINGLE = keymap({
   ]
 })
 
-export const LAYOUT_EDITOR = keymap({
+export const COMPOSITION_EDITOR = keymap({
   title: 'Composition editor',
   actions: {
     deselect: { keys: 'escape', label: 'Deselect the cell, then back to grid' },
@@ -89,4 +89,4 @@ export const LAYOUT_EDITOR = keymap({
 })
 
 /** In the order the shortcuts panel lists them. */
-export const KEYMAPS = [GLOBAL, GRID, SINGLE, LAYOUT_EDITOR]
+export const KEYMAPS = [GLOBAL, GRID, SINGLE, COMPOSITION_EDITOR]
