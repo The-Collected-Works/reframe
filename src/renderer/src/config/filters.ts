@@ -44,8 +44,8 @@ export const FACETS: Facet[] = [
     key: 'export',
     label: 'Export',
     values: [
-      { key: 'included', label: 'Included in export' },
-      { key: 'left-out', label: 'Excluded from export' }
+      { key: 'included', label: 'Included' },
+      { key: 'left-out', label: 'Excluded' }
     ]
   }
 ]
