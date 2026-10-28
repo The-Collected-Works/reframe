@@ -8,14 +8,16 @@ export type FacetKey = 'item' | 'media' | 'framing' | 'export'
 
 export interface Facet {
   key: FacetKey
+  /** Its heading in the menu (Only shows one value of it, then all of it again). */
+  label: string
   values: { key: string; label: string; title?: string }[]
-  /** Its values are about the artboard being edited (they change with the tab): Adjustments. */
-  board?: true
 }
 
+/** In menu order. Adjustments and Export are about the artboard being edited (they follow the tab). */
 export const FACETS: Facet[] = [
   {
     key: 'item',
+    label: 'Item',
     values: [
       { key: 'source', label: 'Source files', title: 'The folder’s own files' },
       { key: 'variant', label: 'Variants' },
@@ -24,6 +26,7 @@ export const FACETS: Facet[] = [
   },
   {
     key: 'media',
+    label: 'Media',
     values: [
       { key: 'image', label: 'Images', title: 'Images, and compositions where nothing moves' },
       { key: 'video', label: 'Videos', title: 'Videos, and compositions with a video in them' }
@@ -31,7 +34,7 @@ export const FACETS: Facet[] = [
   },
   {
     key: 'framing',
-    board: true,
+    label: 'Adjustments',
     values: [
       { key: 'default', label: 'Default' },
       { key: 'adjusted', label: 'Adjusted' }
@@ -39,7 +42,7 @@ export const FACETS: Facet[] = [
   },
   {
     key: 'export',
-    board: true,
+    label: 'Export',
     values: [
       { key: 'included', label: 'Included in export' },
       { key: 'left-out', label: 'Excluded from export' }

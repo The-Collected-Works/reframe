@@ -50,12 +50,6 @@
     { value: 'date', label: 'Date modified' },
     { value: 'type', label: 'Type' }
   ]
-  // Adjustments are the current artboard's (they follow the tab).
-  const SECTIONS: { label: string; facets: Facet[] }[] = [
-    { label: 'Item', facets: FACETS.filter((f) => f.key === 'item') },
-    { label: 'Media', facets: FACETS.filter((f) => f.key === 'media') },
-    { label: 'Adjustments', facets: FACETS.filter((f) => f.board) }
-  ]
 
   let open = $state(false)
   // Counted only while it's open: counting looks at every item's edits on the artboard.
@@ -84,26 +78,24 @@
   />
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
-      {#each SECTIONS as section, i (section.label)}
+      <!-- Adjustments and Export are the current artboard's (they follow the tab). -->
+      {#each FACETS as facet, i (facet.key)}
         {#if i > 0}<div class="section-gap"></div>{/if}
         <div class="section-head">
-          <MenuLabel>{section.label}</MenuLabel>
+          <MenuLabel>{facet.label}</MenuLabel>
           {#if i === 0 && prefs.hidden.length}<button class="show-all" onclick={() => onChange({ hidden: [] })}>Show all</button>{/if}
         </div>
-        {#each section.facets as facet, j (facet.key)}
-          {#if j > 0}<div class="facet-gap"></div>{/if}
-          {#each facet.values as v (v.key)}
-            {@const id = valueId(facet.key, v.key)}
-            {@const off = hidden.has(id)}
-            <div class={['value', { off }]}>
-              <button class="toggle" title={v.title} onclick={(e) => (e.altKey ? only(facet, id) : toggle(id))}>
-                <Icon name={off ? 'exclude' : 'show'} size={14} />
-                <span class="name">{v.label}</span>
-                <span class="count">{counted.get(id) ?? 0}</span>
-              </button>
-              <button class="only" title="Show just this (Alt-click)" onclick={() => only(facet, id)}>{alone(facet, id) ? 'All' : 'Only'}</button>
-            </div>
-          {/each}
+        {#each facet.values as v (v.key)}
+          {@const id = valueId(facet.key, v.key)}
+          {@const off = hidden.has(id)}
+          <div class={['value', { off }]}>
+            <button class="toggle" title={v.title} onclick={(e) => (e.altKey ? only(facet, id) : toggle(id))}>
+              <Icon name={off ? 'exclude' : 'show'} size={14} />
+              <span class="name">{v.label}</span>
+              <span class="count">{counted.get(id) ?? 0}</span>
+            </button>
+            <button class="only" title="Show just this (Alt-click)" onclick={() => only(facet, id)}>{alone(facet, id) ? 'All' : 'Only'}</button>
+          </div>
         {/each}
       {/each}
       <MenuSeparator />
@@ -152,11 +144,6 @@
 
   .show-all:hover {
     text-decoration: underline;
-  }
-
-  /* Between the facets in one section (framing, then export). */
-  .facet-gap {
-    height: 4px;
   }
 
   .value {
