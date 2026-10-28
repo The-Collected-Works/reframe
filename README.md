@@ -9,14 +9,18 @@ Batch-crop a folder of images and videos into one or more artboard sizes, then e
 3. Select one or more assets to **override** settings. A blue dot marks an override; click the dot to reset that setting.
 4. Add more artboards with **+**. Each one keeps its own defaults and overrides. On the current tab, click the name to rename it, or the rest of the tab to change its size. Middle-click a tab to delete it (Ctrl+Z brings it back).
 5. To leave assets out of an artboard's export, select them and use the leave-out button in the inspector footer (or the right-click menu).
-6. **Export** writes `<destination>/<artboard name>/<file>`. Images go out as PNG, JPG or WebP, and videos as H.264 MP4.
+6. **Export** writes `<destination>/<artboard name>/<file>`. Images go out as PNG, JPG or WebP, and videos as H.264 MP4 or as GIF.
 
-**Compositions** put several items on one artboard: select them and press **⌘/Ctrl+G**, then open the composition (double-click it, or **E**). Its editor has two modes, switched at its top left:
+**Compositions** put several items on one artboard: select them and press **⌘/Ctrl+G**, then open the composition (double-click it, or **E**). The editor:
 
-- **Layout** arranges the cells. Click a cell to select it; click again (or **Esc**) for the group it's in. The **+** on each edge of the selection adds a cell there. Drag a cell onto another cell's edge to put it beside it, onto its middle to swap the two, or into the margin to put it beside everything. Drag a gap to resize the cells either side (on this artboard; double-click the gap to make them equal again). The toolbar over a selected group turns it from side by side to stacked, makes its cells equal, or spreads them into the group around it. The inspector shows the whole structure.
-- **Frame** positions what a cell shows, as for a single asset. Double-clicking a cell in Layout frames it.
+- **Select** a cell by clicking it, on the board or in the outline at the left (fold it away with the toggle at its top left). **Shift**-click adds to the selection. **\\** selects the group around the selection; **Enter** on a group selects what's in it; **Esc** deselects.
+- **Arrange** by dragging a cell: onto another cell's edge to put it beside it, onto its middle to swap the two, or into the margin to put it beside everything. The layout reflows as you drag, to show where it will land. Drag rows in the outline to reorder them or move them into another group. The **+** on each edge of the selection adds a cell there.
+- **Resize** by dragging a gap; it snaps to halves, thirds and quarters. Double-click a gap to make the cells either side equal. Sizes are each artboard's own.
+- **Group** a selection with **⌘/Ctrl+G** and ungroup with **⌘/Ctrl+Shift+G**. A group is a horizontal or vertical stack on every artboard; set its direction to **Auto** in the inspector to have it follow each artboard's shape instead.
+- **Adjust** what a cell shows by double-clicking it (or **Enter**), as for a single asset; **Esc** or **Done** ends it.
+- **Right-click** a cell, a group (in the outline) or a selection for the rest: group, ungroup, make cells equal, replace, adjust, hold a short video's last frame, remove.
 
-A group runs the same way on every artboard; set it to **Auto** in the inspector to have it follow each artboard's shape instead. Sizes are each artboard's own.
+The inspector sets the composition's spacing, corner radius, background and duration.
 
 Edits autosave to `.reframe.json` inside the folder, so reopening the folder restores them. Reframe never saves over a project it could lose something from. One saved by a newer version of Reframe, or one that can't be read (still syncing, say), opens read-only. One changed somewhere else since it was opened (another computer, another window) waits for you to reload it or overwrite it. The last copy that opened cleanly is kept as `.reframe.backup.json`. A project from an earlier version is updated when it's first edited, and kept as it was beside it (`.reframe.v1.json`).
 

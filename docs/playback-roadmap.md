@@ -13,7 +13,7 @@ The engine is plain TypeScript with no Svelte inside. It's told what to do throu
 - **`copies.ts`** knows which playback copies exist and decides what's made next.
   - Copies are 960 and 1920px on the long side, capped at the source's size.
   - Every frame is a keyframe, at the source frame rate (up to 60), H.264 High 4.2, CRF 20, lanczos scaling, converted to BT.709 as export converts.
-  - They're made one at a time by the media worker, in priority order: `NOW` (on screen) < `SOON` (filmstrip neighbours) < sharper copies of what's on screen < `LATER` (every other video in the folder, made ahead of time at low CPU priority).
+  - The media worker makes a few at a time (see #3), in priority order: `NOW` (on screen) < `SOON` (filmstrip neighbours) < sharper copies of what's on screen < `LATER` (every other video in the folder, made ahead of time at low CPU priority).
   - A more urgent copy stops a less urgent one. While anything plays or scrubs, and for 2s after, only `NOW` copies are made.
   - Copies are kept on disk between sessions (`<userData>/posters/copies`, 8 GB, least recently used first). When a folder opens, one call looks up which are already made.
 - **`stream.ts`** plays a copy while it's still being made. The worker writes a video's first copy twice from one encode (ffmpeg's `tee` muxer): the normal file, plus a fragmented MP4 in quarter-second fragments. `StreamFeed` reads the growing file through the `media:` protocol using byte ranges and feeds it to a `MediaSource`.
