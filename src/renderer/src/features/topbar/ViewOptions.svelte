@@ -194,6 +194,13 @@
     color: var(--muted);
     font-size: 12px;
     font-variant-numeric: tabular-nums;
+    transition: opacity var(--t-fast) var(--ease);
+  }
+
+  /* Only takes the count's place. */
+  .value:hover .count,
+  .value:has(.only:focus-visible) .count {
+    opacity: 0;
   }
 
   .off .toggle :global(svg),
@@ -224,6 +231,6 @@
 
   .only:hover {
     color: var(--text);
-    background: var(--tint-3);
+    background: color-mix(in srgb, var(--raised), white 10%);
   }
 </style>
