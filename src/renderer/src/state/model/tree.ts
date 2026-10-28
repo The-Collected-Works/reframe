@@ -1,9 +1,9 @@
 import { resolveSettings } from '@shared/framing/framing'
 import type { Artboard, SkippedFolder } from '@shared/types'
-import { FILTER_GROUPS, type FilterKey } from '../../config/filters'
+import { valueId, type FacetKey } from '../../config/filters'
 import type { ViewPrefs } from '../prefs'
 import type { Entry } from './items'
-import { hasOverrides } from './project'
+import { isAdjusted } from './project'
 
 /**
  * The library: every item as the grid shows it, a tree of folders filtered and sorted by the view
@@ -38,8 +38,44 @@ export interface FolderNode {
   excluded?: SkippedFolder
 }
 
-/** `sectioned`: folders get headers (to fold them by); without, it's one plain run of thumbnails. */
-export type GridLayout = { tree: FolderNode[]; visible: Entry[]; sectioned: boolean }
+/**
+ * `sectioned`: folders get headers (to fold them by); without, it's one plain run of thumbnails.
+ * `held`: shown only because they're held (see gridLayout).
+ */
+export type GridLayout = { tree: FolderNode[]; visible: Entry[]; sectioned: boolean; held: ReadonlySet<string> }
+
+/**
+ * The value an item has for each facet of the view filters (see FACETS): what it is, whether it
+ * moves, and (given the artboard) whether it's adjusted or left out there. A composition is a video
+ * when there's one in it.
+ */
+export function valuesOf(a: Entry, board: Artboard | null): [FacetKey, string][] {
+  const values: [FacetKey, string][] = [
+    ['item', a.kind === 'composition' ? 'composition' : a.source ? 'variant' : 'source'],
+    ['media', (a.kind === 'composition' ? a.moves : a.kind === 'video') ? 'video' : 'image']
+  ]
+  if (board) {
+    values.push(['framing', isAdjusted(board, a.name, a.kind === 'composition') ? 'adjusted' : 'default'])
+    values.push(['export', resolveSettings(board, a.name).skip ? 'left-out' : 'included'])
+  }
+  return values
+}
+
+/**
+ * How many items have each value (by id: see valueId) among those the other facets let through:
+ * what showing it again would bring back, or hiding it would take away.
+ */
+export function valueCounts(all: Entry[], hidden: string[], board: Artboard): Map<string, number> {
+  const off = new Set(hidden)
+  const counts = new Map<string, number>()
+  for (const a of all) {
+    const ids = valuesOf(a, board).map(([f, v]) => valueId(f, v))
+    ids.forEach((id, i) => {
+      if (ids.every((other, j) => j === i || !off.has(other))) counts.set(id, (counts.get(id) ?? 0) + 1)
+    })
+  }
+  return counts
+}
 
 /**
  * What the grid shows, from the items and the view options. The compositions come first, in a section of
@@ -48,32 +84,26 @@ export type GridLayout = { tree: FolderNode[]; visible: Entry[]; sectioned: bool
  * Also the flat list of visible assets in on-screen
  * order (a folder's files, then its subfolders; nothing inside a collapsed folder), which the
  * filmstrip, arrow keys, Select All, shift-click ranges and the export dialog's "Visible" scope
- * all follow. `board` is only given when the filter looks at edits.
+ * all follow. `board` is only given when something hidden is about edits (adjusted, left out).
+ * `held` items show whatever's hidden: ones changed while selected, until they're let go.
  */
-export function gridLayout(all: Entry[], prefs: ViewPrefs, collapsed: string[], skipped: SkippedFolder[], board: Artboard | null): GridLayout {
-  const { filters, sort, group } = prefs
-  const is = (a: Entry, f: FilterKey): boolean => {
-    switch (f) {
-      // The folder's own files; the variants made from them; compositions.
-      case 'sources':
-        return a.kind !== 'composition' && !a.source
-      case 'variants':
-        return !!a.source
-      case 'compositions':
-        return a.kind === 'composition'
-      case 'images':
-        return a.kind === 'image'
-      case 'videos':
-        return a.kind === 'video'
-      case 'adjusted':
-        return !!board && hasOverrides(board, a.name)
-      case 'excluded':
-        return !!board && resolveSettings(board, a.name).skip
-    }
+export function gridLayout(
+  all: Entry[],
+  prefs: ViewPrefs,
+  collapsed: string[],
+  skipped: SkippedFolder[],
+  board: Artboard | null,
+  held: ReadonlySet<string> = new Set()
+): GridLayout {
+  const { hidden, sort, group } = prefs
+  const off = new Set(hidden)
+  const shownBy = new Set<string>()
+  const pass = (a: Entry): boolean => {
+    if (!off.size || valuesOf(a, board).every(([f, v]) => !off.has(valueId(f, v)))) return true
+    if (!held.has(a.name)) return false
+    shownBy.add(a.name)
+    return true
   }
-  // Each group with a filter on narrows what shows to the items any of its filters on takes in.
-  const groups = FILTER_GROUPS.map((g) => g.filter((f) => filters.includes(f))).filter((g) => g.length)
-  const pass = (a: Entry) => groups.every((g) => g.some((f) => is(a, f)))
   // A variant sorts as its file does (it has the file's kind and date), then after it, by name.
   const home = (a: Entry) => a.source ?? a.name
   const byName = (a: Entry, b: Entry) => natural(baseName(home(a)), baseName(home(b))) || natural(folderOf(home(a)), folderOf(home(b)))
@@ -109,7 +139,7 @@ export function gridLayout(all: Entry[], prefs: ViewPrefs, collapsed: string[], 
   if (!group) {
     const flat = { ...node(''), collapsed: false, assets: assets.filter(pass).sort(cmp) }
     flat.count = flat.assets.length
-    return { tree: [...compositionNode, ...(flat.count ? [flat] : [])], visible: [...compositions, ...flat.assets], sectioned: false }
+    return { tree: [...compositionNode, ...(flat.count ? [flat] : [])], visible: [...compositions, ...flat.assets], sectioned: false, held: shownBy }
   }
 
   // Build the tree: every folder with something to show, and the folders leading to it.
@@ -157,5 +187,5 @@ export function gridLayout(all: Entry[], prefs: ViewPrefs, collapsed: string[], 
     n.children.forEach(walk)
   }
   tree.forEach(walk)
-  return { tree, visible, sectioned }
+  return { tree, visible, sectioned, held: shownBy }
 }

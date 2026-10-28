@@ -4,7 +4,6 @@
 -->
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { SvelteSet } from 'svelte/reactivity'
   import { api } from '../../lib/bridge'
   import { join } from '../../lib/paths'
   import { items as all } from '../../state/items.svelte'
@@ -22,7 +21,12 @@
   const prefs = $derived(project.file.export)
   const out = $derived(prefs.dir ?? join(library.dir!, 'export'))
 
-  const included = new SvelteSet(untrack(() => project.file.artboards.map((b) => b.id)))
+  // The artboards ticked last time (kept with the project); new ones are ticked.
+  const included = $derived(new Set(project.file.artboards.filter((b) => !prefs.skipBoards.includes(b.id)).map((b) => b.id)))
+  const toggleBoard = (id: string, on: boolean) => {
+    const others = prefs.skipBoards.filter((b) => b !== id && project.file.artboards.some((a) => a.id === b))
+    project.setExportPrefs({ skipBoards: on ? others : [...others, id] })
+  }
   const counts = $derived({ all: all.all.length, visible: view.visible.length, selected: selection.size })
   // The last export's choice, if it's still offered; else a narrower one than "all" when there is
   // one: several selected, or a filtered grid.
@@ -72,7 +76,7 @@
         const d = await api.chooseExportDir(out)
         if (d) project.setExportPrefs({ dir: d })
       }}
-      onToggleBoard={(id, on) => (on ? included.add(id) : included.delete(id))}
+      onToggleBoard={toggleBoard}
       onScope={choose}
       onPrefs={(patch) => project.setExportPrefs(patch)}
     />

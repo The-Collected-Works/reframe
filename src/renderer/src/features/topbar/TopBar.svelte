@@ -75,6 +75,8 @@
       {#if view.mode === 'grid'}
         <ViewOptions
           prefs={view.prefs}
+          boardName={project.board.name}
+          counts={() => view.counts()}
           hasFolders={library.folders.length > 0}
           changed={view.changed}
           onChange={setViewPrefs}

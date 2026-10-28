@@ -126,6 +126,8 @@ export interface ExportPrefs {
   gifColors: number
   gifDither: GifDither
   gifDenoise: boolean
+  /** Artboards left out of exports, by id (the dialog's choice, kept); any other, a new one too, is exported. */
+  skipBoards: string[]
 }
 
 export interface ProjectFile {

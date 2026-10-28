@@ -40,6 +40,8 @@ export interface GridModel {
   composite(name: string): Composed | null
   selected(name: string): boolean
   focused(name: string): boolean
+  /** Shown only because it's selected: the view hides it (it goes once deselected). */
+  held(name: string): boolean
   clip(name: string): Clip | undefined
   /** A video's playback copy being made (or waiting to be). */
   copying(entry: Entry): CopyState

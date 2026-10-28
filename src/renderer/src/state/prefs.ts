@@ -1,19 +1,19 @@
 /** What's remembered per user (in local storage): view options, folded folders, preview volume. */
 
-import { FILTER_GROUPS, type FilterKey } from '../config/filters'
+import { VALUES, valueId, type FacetKey } from '../config/filters'
 
 export type SortKey = 'name' | 'date' | 'type'
 
 export interface ViewPrefs {
-  /** Showing only these (see FILTER_GROUPS); none: everything. */
-  filters: FilterKey[]
+  /** Values the grid hides ("export:left-out": see FACETS); none: everything shows. */
+  hidden: string[]
   sort: SortKey
   /** Sections per folder; off, one continuous grid. */
   group: boolean
   /** File names under thumbnails. */
   names: boolean
 }
-export const VIEW_DEFAULTS: ViewPrefs = { filters: [], sort: 'name', group: true, names: true }
+export const VIEW_DEFAULTS: ViewPrefs = { hidden: [], sort: 'name', group: true, names: true }
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -32,16 +32,35 @@ function write(key: string, value: unknown): void {
   }
 }
 
-const FILTERS = FILTER_GROUPS.flat()
+const IDS = new Set(VALUES.map((v) => v.id))
+
+/**
+ * Filters from before they hid things: each picked what to show only (within a group, any of them;
+ * one at a time before 0.6). What they showed, as what's hidden now.
+ */
+function fromShown(shown: string[]): string[] {
+  const old: Record<string, [FacetKey, string]> = {
+    sources: ['item', 'source'],
+    variants: ['item', 'variant'],
+    compositions: ['item', 'composition'],
+    images: ['media', 'image'],
+    videos: ['media', 'video'],
+    adjusted: ['framing', 'adjusted'],
+    excluded: ['export', 'left-out']
+  }
+  const on = shown.flatMap((f) => (old[f] ? [old[f]] : []))
+  const facets = new Set(on.map(([f]) => f))
+  return VALUES.filter((v) => facets.has(v.facet) && !on.some(([f, k]) => valueId(f, k) === v.id)).map((v) => v.id)
+}
+
 const SORTS: SortKey[] = ['name', 'date', 'type']
 
 /** Stored view options, each checked (a value from another version falls back to the default). */
 export function storedView(): ViewPrefs {
-  const v = read<Partial<ViewPrefs> & { filter?: string }>('reframe.view', {})
-  // One filter at a time, before 0.6 ("all", or one of them).
-  const filters = Array.isArray(v.filters) ? v.filters : v.filter ? [v.filter] : []
+  const v = read<Partial<ViewPrefs> & { filters?: unknown; filter?: string }>('reframe.view', {})
+  const hidden: unknown[] = Array.isArray(v.hidden) ? v.hidden : fromShown(Array.isArray(v.filters) ? v.filters : v.filter ? [v.filter] : [])
   return {
-    filters: filters.filter((f, i): f is FilterKey => FILTERS.includes(f as FilterKey) && filters.indexOf(f) === i),
+    hidden: hidden.filter((id, i): id is string => typeof id === 'string' && IDS.has(id) && hidden.indexOf(id) === i),
     sort: SORTS.includes(v.sort as SortKey) ? (v.sort as SortKey) : VIEW_DEFAULTS.sort,
     group: typeof v.group === 'boolean' ? v.group : VIEW_DEFAULTS.group,
     names: typeof v.names === 'boolean' ? v.names : VIEW_DEFAULTS.names

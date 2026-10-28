@@ -1,3 +1,5 @@
+import { untrack } from 'svelte'
+import { project } from './project.svelte'
 import { view } from './view.svelte'
 
 /**
@@ -99,3 +101,20 @@ class Selection {
 }
 
 export const selection = new Selection()
+
+/**
+ * Keeps what's selected on screen while it's changed, even if the view now hides it (see
+ * view.hold): it goes once it's deselected, or another artboard is chosen. Call while the app
+ * initialises.
+ */
+export function holdSelection(): void {
+  let board: string | null = null
+  $effect(() => {
+    const names = selection.names
+    const id = project.boardId
+    untrack(() => {
+      view.hold(names, id !== board)
+      board = id
+    })
+  })
+}

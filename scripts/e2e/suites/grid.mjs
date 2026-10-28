@@ -20,11 +20,18 @@ async function menu(app, selector, label) {
   await app.eval(`[...document.querySelectorAll('.ctx-item')].find((b) => ${label}.test(b.textContent)).click()`)
 }
 
-/** Chooses `label` in View options (left open, as it stays while things change). */
-async function viewOption(app, label) {
+/**
+ * In View options (left open, as it stays while things change): shows or hides the value called
+ * `label`, or with `only`, shows just it in its group; 'Show all' shows everything.
+ */
+async function viewOption(app, label, { only = false } = {}) {
   if (!(await app.eval(`!!document.querySelector('.popover')`))) await app.clickOn('[title^="View options"]')
-  await app.waitFor(`document.querySelector('.popover .menu-item')`, 3000, 'View options')
-  await app.eval(`[...document.querySelectorAll('.popover .menu-item')].find((b) => b.textContent.trim() === ${JSON.stringify(label)}).click()`)
+  await app.waitFor(`document.querySelector('.popover .value')`, 3000, 'View options')
+  if (label === 'Show all') await app.eval(`document.querySelector('.popover .show-all')?.click()`)
+  else
+    await app.eval(
+      `[...document.querySelectorAll('.popover .value')].find((v) => v.querySelector('.name').textContent.trim() === ${JSON.stringify(label)}).querySelector(${JSON.stringify(only ? '.only' : '.toggle')}).click()`
+    )
   await sleep(300)
 }
 
@@ -141,14 +148,37 @@ export default {
       }
     ],
     [
-      'view filters narrow the grid, and All shows everything',
+      'view filters hide what’s unticked, and Show all brings it back',
       async ({ app }) => {
-        await viewOption(app, 'Videos')
-        assert.equal(await cells(app), 0)
         await viewOption(app, 'Images')
+        assert.equal(await cells(app), 0)
+        assert.ok(await app.eval(`/matches your view/.test(document.body.innerText)`), 'says nothing matches')
+        // Only images: the photos again (Videos hidden instead).
+        await viewOption(app, 'Images', { only: true })
         assert.equal(await cells(app), 13)
-        await viewOption(app, 'All')
+        assert.ok(await app.eval(`!!document.querySelector('[title^="View options"].dot, [title^="View options (hiding videos)"]')`), 'says what’s hidden')
+        await viewOption(app, 'Show all')
         assert.equal(await cells(app), 13)
+        await app.key('Escape')
+      }
+    ],
+    [
+      'hiding what’s left out: an asset left out stays while it’s selected, then goes',
+      async ({ app }) => {
+        await viewOption(app, 'Left out')
+        await app.key('Escape')
+        const before = await cells(app)
+        const first = await app.eval(`document.querySelector('.cell').dataset.name`)
+        await menu(app, `.cell[data-name="${first}"] .frame`, /Leave Out of Export/)
+        await sleep(300)
+        assert.ok(await app.eval(`document.querySelector('.cell[data-name="${first}"]')?.classList.contains('held')`), 'still there, faded')
+        await app.key('Escape')
+        await sleep(300)
+        assert.equal(await cells(app), before - 1)
+        await app.key('z', 'ctrl')
+        await sleep(300)
+        assert.equal(await cells(app), before, 'undo brings it back')
+        await viewOption(app, 'Show all')
         await app.key('Escape')
       }
     ]

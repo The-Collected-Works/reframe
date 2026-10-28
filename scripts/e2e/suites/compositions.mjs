@@ -20,10 +20,14 @@ const row = (app, i) =>
   )
 const names = (app) => app.eval(`[...document.querySelectorAll('.cell')].map((c) => c.querySelector('.cell-name')?.textContent.trim())`)
 
-async function viewOption(app, label) {
+async function viewOption(app, label, { only = false } = {}) {
   if (!(await app.eval(`!!document.querySelector('.popover')`))) await app.clickOn('[title^="View options"]')
-  await app.waitFor(`document.querySelector('.popover .menu-item')`, 3000, 'View options')
-  await app.eval(`[...document.querySelectorAll('.popover .menu-item')].find((b) => b.textContent.trim() === ${JSON.stringify(label)}).click()`)
+  await app.waitFor(`document.querySelector('.popover .value')`, 3000, 'View options')
+  if (label === 'Show all') await app.eval(`document.querySelector('.popover .show-all')?.click()`)
+  else
+    await app.eval(
+      `[...document.querySelectorAll('.popover .value')].find((v) => v.querySelector('.name').textContent.trim() === ${JSON.stringify(label)}).querySelector(${JSON.stringify(only ? '.only' : '.toggle')}).click()`
+    )
   await sleep(300)
 }
 
@@ -103,13 +107,14 @@ export default {
         await app.clickOn('.cell[data-name="h264.mp4"] .frame')
         await app.key('d', 'ctrl')
         await app.waitFor(`[...document.querySelectorAll('.cell-name')].some((n) => n.textContent.trim() === 'h264 copy')`, 3000, 'the variant')
-        await viewOption(app, 'Variants')
+        await viewOption(app, 'Variants', { only: true })
         assert.deepEqual(await names(app), ['h264 copy'])
         await viewOption(app, 'Compositions')
         assert.deepEqual(await names(app), ['Composition 1', 'h264 copy'])
+        // Composition 1 has videos in it: it goes with them.
         await viewOption(app, 'Videos')
-        assert.deepEqual(await names(app), ['h264 copy'])
-        await viewOption(app, 'All')
+        assert.deepEqual(await names(app), [])
+        await viewOption(app, 'Show all')
         assert.equal((await names(app)).length, 6)
         await app.key('Escape')
       }

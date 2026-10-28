@@ -144,6 +144,7 @@ export function setMode(mode: Mode): void {
 export function setViewPrefs(patch: Partial<ViewPrefs>): void {
   view.setPrefs(patch)
   keepSelectionVisible()
+  view.hold(selection.names)
 }
 
 export function resetView(): void {

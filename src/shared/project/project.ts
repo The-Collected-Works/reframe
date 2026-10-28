@@ -7,7 +7,7 @@ import type { ProjectFile } from '../types'
  * what it doesn't know).
  * - 1: artboards, trims, export preferences (Reframe 0.6).
  * - 2: variants and compositions (`items`), file fingerprints (`files`), GIF export, each
- *   artboard's arrangement of compositions (`splits`).
+ *   artboard's arrangement of compositions (`splits`), the artboards export leaves out.
  */
 export const PROJECT_VERSION = 2
 

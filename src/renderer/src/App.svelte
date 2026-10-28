@@ -22,6 +22,7 @@
   import { openFolder, rescanFolder } from './state/actions'
   import { autosave } from './state/autosave.svelte'
   import { trackFiles } from './state/files.svelte'
+  import { holdSelection } from './state/selection.svelte'
   import { items } from './state/items.svelte'
   import { project } from './state/project.svelte'
   import { starts, type Start } from './state/starts.svelte'
@@ -45,6 +46,7 @@
 
   const saving = autosave()
   trackFiles()
+  holdSelection()
 
   // Every video gets its playback copy ahead of time (what's showing in the grid first, then the
   // rest), so most are ready before they're opened. Copies are kept, so it's once per video.

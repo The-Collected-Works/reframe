@@ -32,7 +32,8 @@ export function emptyProject(): ProjectFile {
       gifFps: 15,
       gifColors: 128,
       gifDither: 'light',
-      gifDenoise: true
+      gifDenoise: true,
+      skipBoards: []
     },
     items: {},
     files: {}
@@ -112,6 +113,12 @@ export function withoutOverrides(b: Artboard, names: string[], keys: SettingKey[
  * of the export isn't an adjustment: it's about the asset, not how it's framed.
  */
 export const hasOverrides = (board: Artboard, name: string): boolean => Object.keys(board.overrides[name] ?? {}).some((k) => k !== 'skip')
+
+/** Whether an item has been adjusted on `board`: its framing, or a composition's cells or how they're arranged. */
+export const isAdjusted = (board: Artboard, name: string, composition = false): boolean =>
+  hasOverrides(board, name) ||
+  (composition &&
+    (Object.keys(board.splits?.[name] ?? {}).length > 0 || Object.keys(board.overrides).some((k) => k.startsWith(name + '/') && hasOverrides(board, k))))
 
 /** A video's trim, filled in: from 0 and to the end unless trimmed. */
 export const clipFor = (project: ProjectFile, name: string, duration: number): { start: number; end: number } => {

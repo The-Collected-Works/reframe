@@ -1,15 +1,21 @@
 <!--
   Grid view options: what to show, how to sort it, grouping by folder, captions, and folding every
-  folder at once. It stays open while things are changed; a dot on the button says a filter is
-  hiding something. Right-click the button to reset.
+  folder at once. It stays open while things are changed; a dot on the button says something's
+  hidden. Right-click the button to reset.
+
+  Show: every value of every facet (see FACETS) with an eye, open while it shows. Clicking one hides
+  or shows it; Only (or Alt-click) shows just it within its facet, and again shows all of them. The
+  counts are what each would show, given the rest.
 -->
 <script lang="ts">
-  import { FILTER_GROUPS, FILTER_LABELS, type FilterKey } from '../../config/filters'
+  import { FACETS, VALUES, valueId, type Facet } from '../../config/filters'
   import type { SortKey, ViewPrefs } from '../../state/prefs'
-  import { Button, MenuItem, MenuLabel, MenuSeparator, Popover, showMenu } from '../../ui'
+  import { Button, Icon, MenuItem, MenuLabel, MenuSeparator, Popover, showMenu } from '../../ui'
 
   let {
     prefs,
+    boardName,
+    counts,
     hasFolders,
     changed,
     onChange,
@@ -17,6 +23,10 @@
     onReset
   }: {
     prefs: ViewPrefs
+    /** The artboard being edited (some values are about it). */
+    boardName: string
+    /** How many items have each value (by id), given the rest: read only while open. */
+    counts: () => Map<string, number>
     /** There are subfolders (so folding them means something). */
     hasFolders: boolean
     /** Anything differs from the defaults. */
@@ -26,23 +36,37 @@
     onReset: () => void
   } = $props()
 
-  // Showing everything (All): every eye open, greyed. Otherwise on is lit, off is greyed and shut.
-  const eye = (f: FilterKey) =>
-    !prefs.filters.length
-      ? { icon: 'show' as const, dim: true }
-      : prefs.filters.includes(f)
-        ? { icon: 'show' as const }
-        : { icon: 'exclude' as const, dim: true }
-  // Each toggles; All clears them.
-  const toggle = (f: FilterKey) => onChange({ filters: prefs.filters.includes(f) ? prefs.filters.filter((x) => x !== f) : [...prefs.filters, f] })
+  const hidden = $derived(new Set(prefs.hidden))
+  const toggle = (id: string) => onChange({ hidden: hidden.has(id) ? prefs.hidden.filter((x) => x !== id) : [...prefs.hidden, id] })
+  const idsOf = (f: Facet) => f.values.map((v) => valueId(f.key, v.key))
+  /** Showing just `id` in its facet. */
+  const alone = (f: Facet, id: string) => idsOf(f).every((x) => (x === id) !== hidden.has(x))
+  // Just this one; just this one already: all of them again.
+  const only = (f: Facet, id: string) => {
+    const others = idsOf(f).filter((x) => x !== id)
+    const rest = prefs.hidden.filter((x) => !idsOf(f).includes(x))
+    onChange({ hidden: alone(f, id) ? rest : [...rest, ...others] })
+  }
+
   const SORTS: { value: SortKey; label: string }[] = [
     { value: 'name', label: 'Name' },
     { value: 'date', label: 'Date modified' },
     { value: 'type', label: 'Type' }
   ]
+  const SECTIONS: { label: string; facets: Facet[] }[] = $derived([
+    { label: 'Item', facets: FACETS.filter((f) => f.key === 'item') },
+    { label: 'Media', facets: FACETS.filter((f) => f.key === 'media') },
+    { label: `On ${boardName}`, facets: FACETS.filter((f) => f.board) }
+  ])
 
   let open = $state(false)
-  const showing = $derived(prefs.filters.map((f) => FILTER_LABELS[f].toLowerCase()).join(', '))
+  // Counted only while it's open: counting looks at every item's edits on the artboard.
+  const counted = $derived(open ? counts() : new Map<string, number>())
+  const hiding = $derived(
+    VALUES.filter((v) => hidden.has(v.id))
+      .map((v) => v.label.toLowerCase())
+      .join(', ')
+  )
 </script>
 
 <div class="anchor">
@@ -51,8 +75,8 @@
     icon="viewOptions"
     iconSize={15}
     pressed={open}
-    dot={prefs.filters.length > 0}
-    title={showing ? `View options (showing ${showing})` : 'View options'}
+    dot={prefs.hidden.length > 0}
+    title={hiding ? `View options (hiding ${hiding})` : 'View options'}
     onclick={() => (open = !open)}
     oncontextmenu={async (e) => {
       e.preventDefault()
@@ -62,12 +86,26 @@
   />
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
-      <MenuLabel>Show</MenuLabel>
-      <MenuItem indicator={prefs.filters.length ? { icon: 'exclude', dim: true } : { icon: 'show' }} onclick={() => onChange({ filters: [] })}>All</MenuItem>
-      {#each FILTER_GROUPS as group, i (i)}
-        <div class="filter-gap"></div>
-        {#each group as f (f)}
-          <MenuItem indicator={eye(f)} onclick={() => toggle(f)}>{FILTER_LABELS[f]}</MenuItem>
+      <div class="show-head">
+        <MenuLabel>Show</MenuLabel>
+        {#if prefs.hidden.length}<button class="show-all" onclick={() => onChange({ hidden: [] })}>Show all</button>{/if}
+      </div>
+      {#each SECTIONS as section (section.label)}
+        <div class="section">{section.label}</div>
+        {#each section.facets as facet, i (facet.key)}
+          {#if i > 0}<div class="facet-gap"></div>{/if}
+          {#each facet.values as v (v.key)}
+            {@const id = valueId(facet.key, v.key)}
+            {@const off = hidden.has(id)}
+            <div class={['value', { off }]}>
+              <button class="toggle" title={v.title} onclick={(e) => (e.altKey ? only(facet, id) : toggle(id))}>
+                <Icon name={off ? 'exclude' : 'show'} size={14} />
+                <span class="name">{v.label}</span>
+                <span class="count">{counted.get(id) ?? 0}</span>
+              </button>
+              <button class="only" title="Show just this (Alt-click)" onclick={() => only(facet, id)}>{alone(facet, id) ? 'All' : 'Only'}</button>
+            </div>
+          {/each}
         {/each}
       {/each}
       <MenuSeparator />
@@ -90,16 +128,109 @@
 </div>
 
 <style>
-  /* A little space between groups of filters (a separator would split "Show" in two). */
-  .filter-gap {
-    height: 6px;
-  }
-
   .anchor {
     position: relative;
   }
 
   .menu {
-    width: 208px;
+    width: 232px;
+  }
+
+  .show-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .show-all {
+    padding: 2px 10px;
+    font-size: 11px;
+    color: var(--accent);
+  }
+
+  .show-all:hover {
+    text-decoration: underline;
+  }
+
+  .section {
+    padding: 8px 10px 2px;
+    font-size: 11px;
+    color: var(--faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Between the facets in one section (framing, then export). */
+  .facet-gap {
+    height: 4px;
+  }
+
+  .value {
+    position: relative;
+    border-radius: 6px;
+    transition: background-color var(--t-fast) var(--ease);
+  }
+
+  .value:hover {
+    background: var(--hover);
+  }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    height: 30px;
+    padding: 0 10px;
+    text-align: left;
+  }
+
+  .toggle :global(svg) {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .name {
+    flex: 1;
+    white-space: nowrap;
+    transition: color var(--t-fast) var(--ease);
+  }
+
+  .count {
+    color: var(--muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .off .toggle :global(svg),
+  .off .name,
+  .off .count {
+    color: var(--faint);
+  }
+
+  /* Over the count, on hover. */
+  .only {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    translate: 0 -50%;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--raised);
+    opacity: 0;
+    transition: opacity var(--t-fast) var(--ease);
+  }
+
+  .value:hover .only,
+  .only:focus-visible {
+    opacity: 1;
+  }
+
+  .only:hover {
+    color: var(--text);
+    background: var(--tint-3);
   }
 </style>

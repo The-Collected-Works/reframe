@@ -6,7 +6,7 @@
   import { useKeymap } from '../../lib/keymap.svelte'
   import { copies } from '../../state/playback.svelte'
   import { basename } from '../../lib/paths'
-  import { combineSelection, deleteSelection, duplicateSelection, includeFolder, renameItem, setMode, toggleCollapsed } from '../../state/actions'
+  import { combineSelection, deleteSelection, duplicateSelection, includeFolder, renameItem, setMode, setViewPrefs, toggleCollapsed } from '../../state/actions'
   import { items } from '../../state/items.svelte'
   import { library } from '../../state/library.svelte'
   import { prioritize } from '../../state/loading'
@@ -14,7 +14,7 @@
   import { selection } from '../../state/selection.svelte'
   import { shell } from '../../state/shell.svelte'
   import { view } from '../../state/view.svelte'
-  import { Icon } from '../../ui'
+  import { Button, Icon } from '../../ui'
   import { GRID } from '../../config/keymaps'
   import { assetMenu, excludedFolderMenu, folderMenu } from '../menus'
   import { composed } from '../../state/composition'
@@ -115,6 +115,7 @@
     composite: (name) => composed(name, board),
     selected: (name) => selection.has(name),
     focused: (name) => selection.focus === name,
+    held: (name) => view.grid.held.has(name),
     clip: (name) => project.file.clips[name],
     copying: (e) => (e.kind === 'video' ? copies.state(e) : null),
     renaming: (name) => shell.renamingItem === name,
@@ -161,7 +162,14 @@
       <GridFolder {node} />
     {/each}
   {/if}
-  {#if items.all.length > 0 && !tree.length}<div class="empty-hint center">Nothing matches this filter</div>{/if}
+  {#if items.all.length > 0 && !tree.length}
+    <div class="empty-hint center">
+      <div class="no-match">
+        Nothing here matches your view
+        <Button onclick={() => setViewPrefs({ hidden: [] })}>Show everything</Button>
+      </div>
+    </div>
+  {/if}
   {#if (library.skipped.length > 0 && !sectioned) || library.truncated}
     <div class="grid-foot">
       {#if library.skipped.length > 0 && !sectioned}
@@ -273,5 +281,12 @@
     background: color-mix(in srgb, var(--accent) 10%, transparent);
     pointer-events: none;
     animation: fade 120ms var(--ease) both;
+  }
+
+  .no-match {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    pointer-events: auto;
   }
 </style>

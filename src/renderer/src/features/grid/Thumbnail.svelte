@@ -14,7 +14,7 @@
   import { themeColor } from '../../lib/theme'
   import { fmtTime } from '../../lib/format'
   import type { Entry } from '../../state/model/items'
-  import { hasOverrides } from '../../state/model/project'
+  import { isAdjusted } from '../../state/model/project'
   import { folderOf } from '../../state/model/tree'
   import { Dot, Icon, Ring } from '../../ui'
   import { thumbnail, tracksOf } from '../../state/composition'
@@ -34,10 +34,11 @@
   const board = $derived(g.board)
   const selected = $derived(g.selected(entry.name))
   const focused = $derived(g.focused(entry.name))
+  const held = $derived(g.held(entry.name))
   const clip = $derived(g.clip(entry.name))
   const settings = $derived(resolveSettings(board, entry.name))
   const height = $derived(Math.round((width * board.height) / board.width))
-  const overridden = $derived(hasOverrides(board, entry.name))
+  const overridden = $derived(isAdjusted(board, entry.name, entry.kind === 'composition'))
   const k = $derived(width / board.width)
 
   let canvas: HTMLCanvasElement
@@ -208,7 +209,7 @@
     e.preventDefault()
     g.menu(asset, { x: e.clientX, y: e.clientY })
   }}
-  class={['cell', { selected, focused, skipped: settings.skip }]}
+  class={['cell', { selected, focused, held, skipped: settings.skip }]}
 >
   <div
     {@attach visibility(onVisible)}
@@ -317,6 +318,12 @@
 
   .skipped canvas {
     opacity: 0.25;
+  }
+
+  /* The view hides it; it's still here because it's selected, and goes once it isn't. */
+  .held {
+    opacity: 0.5;
+    transition: opacity var(--t-med) var(--ease);
   }
 
   /* Excluded from export: dimmed, with a faint X from corner to corner (1px at any size or shape).

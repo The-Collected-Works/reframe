@@ -37,6 +37,8 @@ export interface Entry {
   mtime: number
   /** A variant: the name of the file it's of. */
   source?: string
+  /** A composition with a video in it (it moves). */
+  moves?: boolean
 }
 
 /**
@@ -48,8 +50,11 @@ export function entriesOf(files: AssetEntry[], items: Record<string, VirtualItem
   const variants = new Map<string, Entry[]>()
   const byName = new Map(files.map((f) => [f.name, f]))
   for (const [key, item] of Object.entries(items)) {
-    if (item.kind === 'composition') compositions.push({ name: key, kind: 'composition', label: item.name, path: '', size: 0, mtime: 0 })
-    else {
+    if (item.kind === 'composition') {
+      const isVideo = (k: string | null) => byName.get((k && items[k]?.kind === 'variant' ? (items[k] as VariantItem).source : k) ?? '')?.kind === 'video'
+      const moves = slotsOf(item.root).some((slot) => isVideo(slot.item))
+      compositions.push({ name: key, kind: 'composition', label: item.name, path: '', size: 0, mtime: 0, moves })
+    } else {
       const f = byName.get(item.source)
       if (!f) continue
       const list = variants.get(f.name) ?? []
