@@ -24,7 +24,7 @@ class View {
   private edits = $derived(this.prefs.hidden.some((id) => id.startsWith('framing:') || id.startsWith('export:')) ? project.board : null)
   /**
    * Shown whatever the view hides (faded, if it would), so an item changed while it's selected (left
-   * out, say, with Left out hidden) doesn't vanish from under the pointer: it goes once it's let go.
+   * out, say, with Excluded from export hidden) doesn't vanish from under the pointer: it goes once it's let go.
    * See `hold`.
    */
   private held = $state.raw<ReadonlySet<string>>(new Set())

@@ -165,7 +165,7 @@ export default {
     [
       'hiding what’s left out: an asset left out stays while it’s selected, then goes',
       async ({ app }) => {
-        await viewOption(app, 'Left out')
+        await viewOption(app, 'Excluded from export')
         await app.key('Escape')
         const before = await cells(app)
         const first = await app.eval(`document.querySelector('.cell').dataset.name`)

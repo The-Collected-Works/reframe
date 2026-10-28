@@ -3,7 +3,7 @@
   folder at once. It stays open while things are changed; a dot on the button says something's
   hidden. Right-click the button to reset.
 
-  Show: every value of every facet (see FACETS) with an eye, open while it shows. Clicking one hides
+  What shows: every value of every facet (see FACETS), with an eye, open while it shows. Clicking one hides
   or shows it; Only (or Alt-click) shows just it within its facet, and again shows all of them. The
   counts are what each would show, given the rest.
 -->
@@ -14,7 +14,6 @@
 
   let {
     prefs,
-    boardName,
     counts,
     hasFolders,
     changed,
@@ -23,8 +22,6 @@
     onReset
   }: {
     prefs: ViewPrefs
-    /** The artboard being edited (some values are about it). */
-    boardName: string
     /** How many items have each value (by id), given the rest: read only while open. */
     counts: () => Map<string, number>
     /** There are subfolders (so folding them means something). */
@@ -53,11 +50,12 @@
     { value: 'date', label: 'Date modified' },
     { value: 'type', label: 'Type' }
   ]
-  const SECTIONS: { label: string; facets: Facet[] }[] = $derived([
+  // Adjustments are the current artboard's (they follow the tab).
+  const SECTIONS: { label: string; facets: Facet[] }[] = [
     { label: 'Item', facets: FACETS.filter((f) => f.key === 'item') },
     { label: 'Media', facets: FACETS.filter((f) => f.key === 'media') },
-    { label: `On ${boardName}`, facets: FACETS.filter((f) => f.board) }
-  ])
+    { label: 'Adjustments', facets: FACETS.filter((f) => f.board) }
+  ]
 
   let open = $state(false)
   // Counted only while it's open: counting looks at every item's edits on the artboard.
@@ -86,14 +84,14 @@
   />
   <Popover {open} onClose={() => (open = false)}>
     <div class="menu">
-      <div class="show-head">
-        <MenuLabel>Show</MenuLabel>
-        {#if prefs.hidden.length}<button class="show-all" onclick={() => onChange({ hidden: [] })}>Show all</button>{/if}
-      </div>
-      {#each SECTIONS as section (section.label)}
-        <div class="section">{section.label}</div>
-        {#each section.facets as facet, i (facet.key)}
-          {#if i > 0}<div class="facet-gap"></div>{/if}
+      {#each SECTIONS as section, i (section.label)}
+        {#if i > 0}<div class="section-gap"></div>{/if}
+        <div class="section-head">
+          <MenuLabel>{section.label}</MenuLabel>
+          {#if i === 0 && prefs.hidden.length}<button class="show-all" onclick={() => onChange({ hidden: [] })}>Show all</button>{/if}
+        </div>
+        {#each section.facets as facet, j (facet.key)}
+          {#if j > 0}<div class="facet-gap"></div>{/if}
           {#each facet.values as v (v.key)}
             {@const id = valueId(facet.key, v.key)}
             {@const off = hidden.has(id)}
@@ -136,10 +134,14 @@
     width: 232px;
   }
 
-  .show-head {
+  .section-head {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
+  }
+
+  .section-gap {
+    height: 8px;
   }
 
   .show-all {
@@ -150,15 +152,6 @@
 
   .show-all:hover {
     text-decoration: underline;
-  }
-
-  .section {
-    padding: 8px 10px 2px;
-    font-size: 11px;
-    color: var(--faint);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   /* Between the facets in one section (framing, then export). */

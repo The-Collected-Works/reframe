@@ -24,12 +24,14 @@ import {
   Pause,
   ArrowLeftRight,
   Equal,
+  Film,
   Group,
   PanelLeft,
   Ungroup,
   CornerLeftUp,
   LayoutPanelLeft,
   Crop,
+  Image as ImageIcon,
   ImagePlus,
   PencilLine,
   Pipette,
@@ -91,7 +93,9 @@ export const ICONS = {
   // Named by the axis line, not the motion: mirroring left-right is the vertical-axis glyph.
   flipH: TrianglesCenterlineDashedVertical,
   flipV: TrianglesCenterlineDashedHorizontal,
-  // Variants and compositions.
+  // What an item is: a file's media, variants and compositions.
+  image: ImageIcon,
+  video: Film,
   variant: Layers2,
   composition: LayoutDashboard,
   splitRow: Columns2,

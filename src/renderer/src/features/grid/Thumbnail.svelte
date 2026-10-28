@@ -243,8 +243,9 @@
       {#if overridden}<Dot title="Adjusted" />{/if}
       {#if entry.kind === 'composition'}
         <span class="cell-kind" title="Composition"><Icon name="composition" size={12} /></span>
-      {:else if entry.source}
-        <span class="cell-kind" title={`Variant of ${entry.source}`}><Icon name="variant" size={12} /></span>
+      {:else}
+        {#if entry.source}<span class="cell-kind" title={`Variant of ${entry.source}`}><Icon name="variant" size={12} /></span>{/if}
+        <span class="cell-kind" title={entry.kind === 'video' ? 'Video' : 'Image'}><Icon name={entry.kind} size={12} /></span>
       {/if}
       {#if g.renaming(entry.name)}
         <input class="cell-rename" value={entry.label} aria-label="Name" spellcheck="false" onpointerdown={(e) => e.stopPropagation()} {@attach renameField} />
