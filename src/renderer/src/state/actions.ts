@@ -67,6 +67,32 @@ export async function includeFolder(folder: string): Promise<void> {
   showToast(`Included “${baseName(folder)}”`)
 }
 
+// ---- the project file (when it can't be saved: see ProjectLock)
+
+/** Reads the project file again, replacing what's open: to take changes made elsewhere, or to retry. */
+export async function reloadProject(): Promise<void> {
+  const dir = library.dir
+  const read = dir && (await api.readProject(dir).catch(() => null))
+  if (read && dir === library.dir) project.load(read)
+}
+
+/** Saves what's open over the changes made elsewhere. */
+export async function overwriteProject(): Promise<void> {
+  const dir = library.dir
+  if (!dir) return
+  const lock = await api.saveProject(dir, project.file, true).catch(() => project.lock)
+  if (dir === library.dir) project.lock = lock
+}
+
+/** Puts back the last good copy of a project file that can't be read. */
+export async function restoreProject(): Promise<void> {
+  const dir = library.dir
+  const read = dir && (await api.restoreProject(dir).catch(() => null))
+  if (!read || dir !== library.dir) return
+  project.load(read)
+  if (!read.lock) showToast('Restored the last good copy')
+}
+
 // ---- the view
 
 /** Grid or single. The single view needs something to show: the selection's first, or the first there is. */
@@ -133,6 +159,7 @@ export function resetKeys(keys: SettingKey[]): void {
 
 /** The focused asset's values for `keys` become the defaults; the selection then follows them. */
 export function makeDefault(keys: SettingKey[]): void {
+  if (!project.editable()) return
   const names = selection.names
   if (!names.length) return
   const source = selection.focus && selection.has(selection.focus) ? selection.focus : names[0]
@@ -145,6 +172,7 @@ export function makeDefault(keys: SettingKey[]): void {
  * exported stays as it is.
  */
 export function resetSelection(): void {
+  if (!project.editable()) return
   const names = selection.names.filter((n) => hasOverrides(project.board, n))
   if (!names.length) return
   project.resetKeys(names, FRAMING_KEYS)
@@ -158,6 +186,7 @@ export function copy(): void {
 }
 
 export function paste(): void {
+  if (!project.editable()) return
   const n = selection.size
   if (project.paste(selection.names)) showToast(n > 1 ? `Pasted to ${n} items` : 'Pasted')
 }
@@ -173,12 +202,14 @@ export function redo(): void {
 // ---- artboards
 
 export function duplicateBoard(id: string): void {
+  if (!project.editable()) return
   project.duplicateBoard(id)
   shell.editingBoard = null
 }
 
 /** Deletes an artboard, saying how to get it back. */
 export function deleteBoard(id: string): void {
+  if (!project.editable()) return
   const board = project.file.artboards.find((b) => b.id === id)
   if (!board || project.file.artboards.length < 2) return
   project.removeBoard(id)
@@ -188,6 +219,7 @@ export function deleteBoard(id: string): void {
 
 /** A new artboard; a custom one opens its editor. */
 export function addBoard(name: string, width: number, height: number, edit = false): void {
+  if (!project.editable()) return
   const board = project.addBoard(name, width, height)
   if (edit) shell.editingBoard = board.id
 }

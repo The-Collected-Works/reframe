@@ -11,7 +11,7 @@ Batch-crop a folder of images and videos into one or more artboard sizes, then e
 5. To leave assets out of an artboard's export, select them and use the leave-out button in the inspector footer (or the right-click menu).
 6. **Export** writes `<destination>/<artboard name>/<file>`. Images go out as PNG, JPG or WebP, and videos as H.264 MP4.
 
-Edits autosave to `.reframe.json` inside the folder, so reopening the folder restores them.
+Edits autosave to `.reframe.json` inside the folder, so reopening the folder restores them. Reframe never saves over a project it could lose something from. One saved by a newer version of Reframe, or one that can't be read (still syncing, say), opens read-only. One changed somewhere else since it was opened (another computer, another window) waits for you to reload it or overwrite it. The last copy that opened cleanly is kept as `.reframe.backup.json`.
 
 | | |
 |---|---|

@@ -5,7 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'elec
 import { mimeOf } from '@shared/media'
 import type { ColorMeta, FolderScan, OverlayTint, ProjectFile, VideoExportJob } from '@shared/types'
 import { cancelExport, exportVideo, frame, poster, scrubProxy, stopWorker } from './jobs'
-import { markFolder, noteSkipped, saveProject, scanFolder, setSkipped, unmarkFolder, watchFolder } from './folder'
+import { markFolder, noteSkipped, readProject, restoreProject, saveProject, scanFolder, setSkipped, unmarkFolder, watchFolder } from './folder'
 import { installUpdate, pollAutoUpdate, updateStatus } from './autoupdate'
 import { folderArg, forget, readState, recentFolders, remember, updateSystemMenus } from './recent'
 import { checkForUpdate, openRelease } from './updates'
@@ -232,7 +232,9 @@ ipcMain.handle('last-folder', async () => {
     () => null
   )
 })
-ipcMain.handle('save-project', (_e, dir: string, project: ProjectFile) => saveProject(dir, project))
+ipcMain.handle('save-project', (_e, dir: string, project: ProjectFile, force?: boolean) => saveProject(dir, project, force))
+ipcMain.handle('read-project', (_e, dir: string) => readProject(dir))
+ipcMain.handle('restore-project', (_e, dir: string) => restoreProject(dir))
 ipcMain.handle('choose-export-dir', async (_e, defaultPath?: string) => {
   const res = await dialog.showOpenDialog(win!, { defaultPath, properties: ['openDirectory', 'createDirectory'] })
   return res.canceled ? null : (res.filePaths[0] ?? null)

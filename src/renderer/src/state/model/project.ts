@@ -1,4 +1,5 @@
 import { DEFAULT_SETTINGS } from '@shared/layout'
+import { PROJECT_VERSION } from '@shared/project'
 import type { Artboard, CropSettings, ProjectFile, SettingKey } from '@shared/types'
 
 /**
@@ -26,7 +27,7 @@ export function newBoard(name: string, width: number, height: number, defaults: 
 
 export function emptyProject(): ProjectFile {
   return {
-    version: 1,
+    version: PROJECT_VERSION,
     artboards: [newBoard('Square', 1080, 1080)],
     clips: {},
     export: { dir: null, imageFormat: 'png', imageQuality: 0.92, videoCrf: 18 }
@@ -43,7 +44,7 @@ export function normalizeProject(p: ProjectFile | null): ProjectFile {
   const base = emptyProject()
   if (!p || !p.artboards?.length) return base
   return {
-    version: 1,
+    version: PROJECT_VERSION,
     artboards: p.artboards.map((b) => ({
       ...b,
       defaults: { ...DEFAULT_SETTINGS, ...known(b.defaults) },

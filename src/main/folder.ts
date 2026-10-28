@@ -2,10 +2,15 @@ import { execFile } from 'node:child_process'
 import { promises as fs, watch, type FSWatcher } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { kindOf } from '@shared/media'
+import { parseProject, type ProjectLock, type ProjectRead } from '@shared/project'
 import type { AssetEntry, FolderScan, MediaKind, ProjectFile, SkippedFolder } from '@shared/types'
-import { writeJsonAtomic } from './fsutil'
+import { writeFileAtomic } from './fsutil'
 
 export const PROJECT_FILE = '.reframe.json'
+/** The project file as it was when last opened and read without trouble, to restore if it breaks. */
+const PROJECT_BACKUP = '.reframe.backup.json'
+/** A project file that couldn't be read, kept when it's replaced (by the backup, or on purpose). */
+const PROJECT_UNREADABLE = '.reframe.unreadable.json'
 
 /**
  * Marks a folder as Reframe's own output (or one the user excluded): scans skip it and everything
@@ -30,7 +35,7 @@ const READ_AHEAD = 8
  */
 export async function scanFolder(dir: string, withProject = true): Promise<FolderScan> {
   const project = withProject ? await readProject(dir) : null
-  if (withProject) await markLegacyExport(dir, project)
+  if (project) await markLegacyExport(dir, project.file)
   let found = 0
   let truncated = false
   let reading = 0
@@ -154,17 +159,74 @@ async function markLegacyExport(dir: string, project: ProjectFile | null): Promi
     await markFolder(out, 'export')
 }
 
-async function readProject(dir: string): Promise<ProjectFile | null> {
-  try {
-    const data = JSON.parse(await fs.readFile(join(dir, PROJECT_FILE), 'utf8'))
-    return data?.version === 1 ? data : null
-  } catch {
-    return null
+/**
+ * Each folder's project file as last read or written here (null: there was none), so a save can
+ * tell whether something else changed it meanwhile.
+ */
+const known = new Map<string, string | null>()
+
+const readText = (path: string): Promise<string | null> => fs.readFile(path, 'utf8').catch((e: NodeJS.ErrnoException) => (e.code === 'ENOENT' ? null : ''))
+
+/**
+ * A folder's project file, read (when opening it, or again to reload). One that reads cleanly is
+ * kept as the backup; one that doesn't says whether there's a backup to restore.
+ */
+export async function readProject(dir: string): Promise<ProjectRead> {
+  const text = await readText(join(dir, PROJECT_FILE))
+  known.set(dir, text)
+  if (text == null) return { file: null, lock: null }
+  const read = parseProject(text)
+  if (read.lock?.reason === 'unreadable') return { file: null, lock: await unreadable(dir) }
+  if (!read.lock && (await readText(join(dir, PROJECT_BACKUP))) !== text) {
+    await writeFileAtomic(join(dir, PROJECT_BACKUP), text).catch(() => {})
   }
+  return read
 }
 
-export function saveProject(dir: string, project: ProjectFile): Promise<void> {
-  return writeJsonAtomic(join(dir, PROJECT_FILE), project, true)
+/** Why an unreadable project file can't be saved over, and whether there's a backup to restore. */
+async function unreadable(dir: string): Promise<ProjectLock> {
+  const backup = await readText(join(dir, PROJECT_BACKUP))
+  return { reason: 'unreadable', backup: !!backup && !parseProject(backup).lock }
+}
+
+/** Puts the backup back in place of an unreadable project file (kept aside), and reads it. */
+export async function restoreProject(dir: string): Promise<ProjectRead> {
+  const backup = await fs.readFile(join(dir, PROJECT_BACKUP), 'utf8')
+  const now = await readText(join(dir, PROJECT_FILE))
+  if (now && parseProject(now).lock?.reason === 'unreadable') await writeFileAtomic(join(dir, PROJECT_UNREADABLE), now)
+  await writeFileAtomic(join(dir, PROJECT_FILE), backup)
+  return readProject(dir)
+}
+
+let saving: Promise<unknown> = Promise.resolve()
+
+/**
+ * Saves a folder's project, unless that would lose something: the file there now is from a newer
+ * Reframe (never overwritten), can't be read, or changed since it was read here (both overwritten
+ * only with `force`, an unreadable one kept aside first). Returns why it didn't save, or null once
+ * it has. Saves run one at a time, each checking what the one before wrote.
+ */
+export function saveProject(dir: string, project: ProjectFile, force = false): Promise<ProjectLock | null> {
+  const path = join(dir, PROJECT_FILE)
+  const save = async (): Promise<ProjectLock | null> => {
+    const now = await readText(path)
+    if (now != null) {
+      const lock = parseProject(now).lock
+      if (lock?.reason === 'newer') return lock
+      if (!force) {
+        if (lock) return unreadable(dir)
+        if (now !== known.get(dir)) return { reason: 'changed' }
+      }
+      if (lock) await writeFileAtomic(join(dir, PROJECT_UNREADABLE), now)
+    }
+    const text = JSON.stringify(project, null, 2)
+    await writeFileAtomic(path, text)
+    known.set(dir, text)
+    return null
+  }
+  const next = saving.catch(() => {}).then(save)
+  saving = next
+  return next
 }
 
 let watcher: FSWatcher | null = null

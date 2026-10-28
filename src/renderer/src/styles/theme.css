@@ -21,6 +21,7 @@
   --accent: #6e9bff;
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --danger: #ff6b6b;
+  --caution: #f2b84b;
   /* Snapping guides, drawn over the media. */
   --guide: #ff4f8b;
 

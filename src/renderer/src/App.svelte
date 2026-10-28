@@ -9,6 +9,7 @@
   import Grid from './features/grid/Grid.svelte'
   import { finishPick } from './features/inspector/eyedropper'
   import Inspector from './features/inspector/Inspector.svelte'
+  import ProjectNotice from './features/project/ProjectNotice.svelte'
   import { GLOBAL } from './features/keymaps'
   import { blocked, GLOBAL_HANDLERS, quiet } from './features/shortcuts'
   import SingleView from './features/single/SingleView.svelte'
@@ -75,6 +76,7 @@
 
 <div class="app">
   <TopBar />
+  <ProjectNotice />
   {#if library.dir}
     <main class="workspace">
       <section class={['content drop-zone', { dropping: drop.dropping }]} {...drop.handlers}>
@@ -103,7 +105,7 @@
   .app {
     height: 100%;
     display: grid;
-    grid-template-rows: var(--topbar-h) 1fr;
+    grid-template-rows: var(--topbar-h) auto 1fr;
   }
 
   .workspace {

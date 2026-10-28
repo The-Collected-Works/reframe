@@ -1,5 +1,7 @@
 import { resolveSettings } from '@shared/layout'
+import type { ProjectLock, ProjectRead } from '@shared/project'
 import type { Artboard, Clip, CropSettings, ExportPrefs, ProjectFile, SettingKey } from '@shared/types'
+import { showToast } from '../ui'
 import { History } from './history.svelte'
 import { changes, emptyProject, FRAMING_KEYS, newBoard, normalizeProject, uid, withOverrides, withoutOverrides } from './model/project'
 
@@ -22,11 +24,28 @@ class Project {
   /** The current artboard. */
   readonly board = $derived(this.file.artboards.find((b) => b.id === this.boardId) ?? this.file.artboards[0])
 
-  /** A folder's project as saved (or a new one), with nothing to undo. */
-  load(saved: ProjectFile | null): void {
-    const file = normalizeProject(saved)
+  /** Why it isn't being saved, or null (see ProjectLock). Newer or unreadable, it's read-only. */
+  lock = $state.raw<ProjectLock | null>(null)
+  readonly readOnly = $derived(this.lock?.reason === 'newer' || this.lock?.reason === 'unreadable')
+  /** Bumped on every load, so autosave can tell a project loaded from one edited. */
+  loads = $state(0)
+
+  /**
+   * A folder's project as read (or a new one), with nothing to undo. A newer one is shown as far
+   * as this version understands it. Reloading keeps the artboard being edited, if it's still there.
+   */
+  load(read: ProjectRead | null): void {
+    let file: ProjectFile
+    try {
+      file = normalizeProject(read?.file ?? null)
+    } catch {
+      file = emptyProject()
+    }
+    const board = this.boardId
     this.history.reset(file)
-    this.boardId = file.artboards[0].id
+    this.lock = read?.lock ?? null
+    this.loads++
+    this.boardId = file.artboards.some((b) => b.id === board) ? board : file.artboards[0].id
   }
 
   /** An asset's settings on the current artboard: its overrides over the defaults. */
@@ -80,12 +99,12 @@ class Project {
     const clips = { ...this.file.clips }
     if (clip && (clip.start > 0 || clip.end != null)) clips[name] = clip
     else delete clips[name]
-    this.history.commit({ ...this.file, clips })
+    this.commit({ ...this.file, clips })
   }
 
   addBoard(name: string, width: number, height: number): Artboard {
     const board = newBoard(name, width, height, this.board.defaults)
-    this.history.commit({ ...this.file, artboards: [...this.file.artboards, board] })
+    this.commit({ ...this.file, artboards: [...this.file.artboards, board] })
     this.boardId = board.id
     return board
   }
@@ -100,14 +119,14 @@ class Project {
     const copy: Artboard = { ...structuredClone(src), id: uid(), name: `${src.name} copy` }
     const artboards = [...this.file.artboards]
     artboards.splice(artboards.indexOf(src) + 1, 0, copy)
-    this.history.commit({ ...this.file, artboards })
+    this.commit({ ...this.file, artboards })
     this.boardId = copy.id
   }
 
   removeBoard(id: string): void {
     if (this.file.artboards.length < 2) return
     const artboards = this.file.artboards.filter((b) => b.id !== id)
-    this.history.commit({ ...this.file, artboards })
+    this.commit({ ...this.file, artboards })
     if (this.boardId === id) this.boardId = artboards[0].id
   }
 
@@ -132,6 +151,23 @@ class Project {
     return stepped
   }
 
+  private refused = -Infinity
+
+  /** Whether it can be edited; when it can't (read-only), says so, at most every few seconds. */
+  editable(): boolean {
+    if (!this.readOnly) return true
+    if (performance.now() - this.refused > 3000) {
+      this.refused = performance.now()
+      showToast(this.lock?.reason === 'newer' ? 'Read-only · saved by a newer Reframe' : 'Read-only · its project file couldn’t be read')
+    }
+    return false
+  }
+
+  /** Records an edit, unless it's read-only. */
+  private commit(next: ProjectFile, key = ''): void {
+    if (this.editable()) this.history.commit(next, key)
+  }
+
   /** Changes one artboard (the current one by default). Returning it unchanged changes nothing. */
   private mapBoard(fn: (b: Artboard) => Artboard, key = '', id = this.boardId): void {
     const i = this.file.artboards.findIndex((b) => b.id === id)
@@ -140,7 +176,7 @@ class Project {
     if (board === this.file.artboards[i]) return
     const artboards = [...this.file.artboards]
     artboards[i] = board
-    this.history.commit({ ...this.file, artboards }, key)
+    this.commit({ ...this.file, artboards }, key)
   }
 }
 
