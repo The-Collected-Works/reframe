@@ -18,24 +18,24 @@ Batch-crop a folder of images and videos into one or more artboard sizes, then e
 
 A group runs the same way on every artboard; set it to **Auto** in the inspector to have it follow each artboard's shape instead. Sizes are each artboard's own.
 
-Edits autosave to `.reframe.json` inside the folder, so reopening the folder restores them.
+Edits autosave to `.reframe.json` inside the folder, so reopening the folder restores them. Reframe never saves over a project it could lose something from. One saved by a newer version of Reframe, or one that can't be read (still syncing, say), opens read-only. One changed somewhere else since it was opened (another computer, another window) waits for you to reload it or overwrite it. The last copy that opened cleanly is kept as `.reframe.backup.json`. A project from an earlier version is updated when it's first edited, and kept as it was beside it (`.reframe.v1.json`).
 
-| | |
-|---|---|
-| Drag empty grid space | Box select (**Shift** / **⌘/Ctrl** add to the selection) |
-| Drag (grid or single view) | Move. Snaps to edges and centre with guides; **Shift** locks an axis, **Alt** turns snapping off |
-| Drag a corner handle | Scale from the opposite corner (**Alt**: from the centre); sticks at 100% |
-| Drag just outside a corner | Rotate (**Shift**: 15° steps); right angles are sticky |
-| Scroll / pinch (single view) | Zoom about the cursor |
-| Double-click (single view) | Reset position, scale and rotation |
-| Middle-click a value | Reset it |
-| `I` | Eyedropper: click any image or video to set the background to its exact colour |
-| `E` / `Esc` | Grid ↔ single view / back or deselect |
-| `←` `→` | Previous / next asset |
-| `Space` | Open the selection (grid), play / pause (single view) |
-| `⌘/Ctrl` + `Z`, `⇧Z` | Undo / redo |
-| `⌘/Ctrl` + `C`, `V` | Copy / paste settings between assets |
-| `⌘/Ctrl` + `A`, `E`, `O`, `1–9` | Select all, export, open folder, switch artboard |
+|                                 |                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Drag empty grid space           | Box select (**Shift** / **⌘/Ctrl** add to the selection)                                         |
+| Drag (grid or single view)      | Move. Snaps to edges and centre with guides; **Shift** locks an axis, **Alt** turns snapping off |
+| Drag a corner handle            | Scale from the opposite corner (**Alt**: from the centre); sticks at 100%                        |
+| Drag just outside a corner      | Rotate (**Shift**: 15° steps); right angles are sticky                                           |
+| Scroll / pinch (single view)    | Zoom about the cursor                                                                            |
+| Double-click (single view)      | Reset position, scale and rotation                                                               |
+| Middle-click a value            | Reset it                                                                                         |
+| `I`                             | Eyedropper: click any image or video to set the background to its exact colour                   |
+| `E` / `Esc`                     | Grid ↔ single view / back or deselect                                                            |
+| `←` `→`                         | Previous / next asset                                                                            |
+| `Space`                         | Open the selection (grid), play / pause (single view)                                            |
+| `⌘/Ctrl` + `Z`, `⇧Z`            | Undo / redo                                                                                      |
+| `⌘/Ctrl` + `C`, `V`             | Copy / paste settings between assets                                                             |
+| `⌘/Ctrl` + `A`, `E`, `O`, `1–9` | Select all, export, open folder, switch artboard                                                 |
 
 The full list is under the **ⓘ** button in the app.
 
@@ -60,16 +60,16 @@ npm run e2e        # builds, then drives the app over the DevTools protocol on g
 
 The code is in layers. Each may import only from the layers before it in this table (`src/layers.test.ts` checks, as part of `npm test`):
 
-| Layer | What it is | May import |
-|---|---|---|
-| `src/shared/` | The domain core, plain TypeScript, used by both processes | nothing outside it |
-| `src/main/`, `src/preload/` | The main process: folders, ffmpeg, exports, updates | `shared` |
-| `renderer/src/lib/` | Engines and plumbing that know nothing of the app | `shared` |
-| `renderer/src/ui/` | The UI kit | `shared`, `lib` |
-| `renderer/src/config/` | Static app data that several layers read | `shared`, `lib` |
-| `renderer/src/state/` | App state, actions, and where engines meet it | the above |
-| `renderer/src/features/` | The screens and tools | the above |
-| `renderer/src/` (root) | `App.svelte` and `main.ts`, wiring it all up | everything |
+| Layer                       | What it is                                                | May import         |
+| --------------------------- | --------------------------------------------------------- | ------------------ |
+| `src/shared/`               | The domain core, plain TypeScript, used by both processes | nothing outside it |
+| `src/main/`, `src/preload/` | The main process: folders, ffmpeg, exports, updates       | `shared`           |
+| `renderer/src/lib/`         | Engines and plumbing that know nothing of the app         | `shared`           |
+| `renderer/src/ui/`          | The UI kit                                                | `shared`, `lib`    |
+| `renderer/src/config/`      | Static app data that several layers read                  | `shared`, `lib`    |
+| `renderer/src/state/`       | App state, actions, and where engines meet it             | the above          |
+| `renderer/src/features/`    | The screens and tools                                     | the above          |
+| `renderer/src/` (root)      | `App.svelte` and `main.ts`, wiring it all up              | everything         |
 
 What's in each:
 
@@ -77,6 +77,7 @@ What's in each:
   - `framing/`: how an asset sits in a frame (`framing.ts`: placement, drawing, settings) and snapping it to edges and centres (`snapping.ts`).
   - `composition/`: compositions. `compose()` turns one into layers (each with its source, place, framing and timing) that the grid, the editor, playback and export all work from, so what's previewed is what's exported. Each type places its layers its own way; so far there's `bento` (cells in a tree of splits).
   - `media/`: file types, colour handling, and the ffmpeg arguments export uses.
+  - `project/`: the project file's format (`PROJECT_VERSION`, bumped for any change to what's saved), reading it safely (`parseProject`: a newer format or an unreadable file is never saved over), and bringing earlier formats up to date (`migrate.ts`, a step per format, each tested on a file saved the old way).
   - `types.ts`: the data both processes share (projects, artboards, items, export jobs, the bridge's API).
 - `lib/`: the bridge to the main process, media loading, drag tracking, motion, the keymap engine; and `playback/`, the playback engine everything that plays video uses (the single view, compositions, hover previews), with unit tests. A `Playback` is one clock and any number of tracks; each track's pictures come from a `Clip`, fed from playback copies sized to what's on screen (`Copies`: small, every frame a keyframe, made for every video ahead of time, a few at once, what's open first, and kept between sessions), and from the exact frame when the clock stops. See `docs/playback-roadmap.md`.
 - `ui/`: buttons, fields, menus, popovers, dialogs, the colour picker, the eyedropper, exported from `ui/index.ts`. Nothing in it knows about app state; it takes props and reports through callbacks.

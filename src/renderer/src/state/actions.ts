@@ -90,6 +90,32 @@ export async function includeFolder(folder: string): Promise<void> {
   showToast(`Included “${baseName(folder)}”`)
 }
 
+// ---- the project file (when it can't be saved: see ProjectLock)
+
+/** Reads the project file again, replacing what's open: to take changes made elsewhere, or to retry. */
+export async function reloadProject(): Promise<void> {
+  const dir = library.dir
+  const read = dir && (await api.readProject(dir).catch(() => null))
+  if (read && dir === library.dir) project.load(read)
+}
+
+/** Saves what's open over the changes made elsewhere. */
+export async function overwriteProject(): Promise<void> {
+  const dir = library.dir
+  if (!dir) return
+  const lock = await api.saveProject(dir, project.file, true).catch(() => project.lock)
+  if (dir === library.dir) project.lock = lock
+}
+
+/** Puts back the last good copy of a project file that can't be read. */
+export async function restoreProject(): Promise<void> {
+  const dir = library.dir
+  const read = dir && (await api.restoreProject(dir).catch(() => null))
+  if (!read || dir !== library.dir) return
+  project.load(read)
+  if (!read.lock) showToast('Restored the last good copy')
+}
+
 /**
  * Empties the caches (posters and playback copies, for every folder); they're made again as
  * they're needed.
@@ -205,6 +231,7 @@ export function resetKeys(keys: SettingKey[]): void {
 
 /** The focused asset's values for `keys` become the defaults; the selection then follows them. */
 export function makeDefault(keys: SettingKey[]): void {
+  if (!project.editable()) return
   const names = targets()
   if (!names.length || editingSlot()) return
   const source = selection.focus && names.includes(selection.focus) ? selection.focus : names[0]
@@ -217,6 +244,7 @@ export function makeDefault(keys: SettingKey[]): void {
  * exported stays as it is.
  */
 export function resetSelection(): void {
+  if (!project.editable()) return
   const names = targets().filter((n) => hasOverrides(project.board, n))
   if (!names.length) return
   project.resetKeys(names, FRAMING_KEYS)
@@ -231,6 +259,7 @@ export function copy(): void {
 }
 
 export function paste(): void {
+  if (!project.editable()) return
   const names = targets()
   if (project.paste(names)) showToast(names.length > 1 ? `Pasted to ${names.length} items` : 'Pasted')
 }
@@ -242,6 +271,7 @@ const inOrder = (names: string[]) => view.visible.filter((e) => names.includes(e
 
 /** Copies of the selected items, selected in their place: variants of files, and copies of compositions. */
 export function duplicateSelection(): void {
+  if (!project.editable()) return
   const keys = inOrder(selection.names)
   if (!keys.length) return
   let made: string[] = []
@@ -257,6 +287,7 @@ export function duplicateSelection(): void {
 
 /** A new composition of the selected assets (in on-screen order), selected. */
 export function combineSelection(): void {
+  if (!project.editable()) return
   const members = inOrder(selection.names).filter((n) => !isComposition(n))
   if (!members.length) return
   let key = ''
@@ -272,6 +303,7 @@ export function combineSelection(): void {
 
 /** Adds the selected assets to the end of a composition. */
 export function addToComposition(key: string): void {
+  if (!project.editable()) return
   const members = inOrder(selection.names).filter((n) => !isComposition(n))
   if (!members.length) return
   project.change((f) => model.append(f, key, members))
@@ -280,6 +312,7 @@ export function addToComposition(key: string): void {
 
 /** Deletes the selected variants and compositions (files stay: they're the folder's). */
 export function deleteSelection(): void {
+  if (!project.editable()) return
   const keys = selection.names.filter(model.isVirtual)
   if (!keys.length) return
   const label = keys.length === 1 ? `“${items.entry(keys[0])?.label}”` : plural(keys.length, 'item')
@@ -412,12 +445,14 @@ export function redo(): void {
 // ---- artboards
 
 export function duplicateBoard(id: string): void {
+  if (!project.editable()) return
   project.duplicateBoard(id)
   shell.editingBoard = null
 }
 
 /** Deletes an artboard, saying how to get it back. */
 export function deleteBoard(id: string): void {
+  if (!project.editable()) return
   const board = project.file.artboards.find((b) => b.id === id)
   if (!board || project.file.artboards.length < 2) return
   project.removeBoard(id)
@@ -427,6 +462,7 @@ export function deleteBoard(id: string): void {
 
 /** A new artboard; a custom one opens its editor. */
 export function addBoard(name: string, width: number, height: number, edit = false): void {
+  if (!project.editable()) return
   const board = project.addBoard(name, width, height)
   if (edit) shell.editingBoard = board.id
 }

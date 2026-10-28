@@ -1,3 +1,5 @@
+import type { ProjectLock, ProjectRead } from './project/project'
+
 export type FitMode = 'fill' | 'fit' | 'width' | 'height' | 'stretch'
 export type BgMode = 'color' | 'blur'
 export type MediaKind = 'image' | 'video'
@@ -127,7 +129,8 @@ export interface ExportPrefs {
 }
 
 export interface ProjectFile {
-  version: 1
+  /** Its format (see PROJECT_VERSION). */
+  version: number
   artboards: Artboard[]
   /** Trim is a property of the source, shared across artboards. */
   clips: Record<string, Clip>
@@ -164,7 +167,8 @@ export interface SkippedFolder {
 export interface FolderScan {
   dir: string
   assets: AssetEntry[]
-  project: ProjectFile | null
+  /** Its project file, read (null on a rescan, which doesn't read it). */
+  project: ProjectRead | null
   skipped: SkippedFolder[]
   /** Stopped at the file limit; some media wasn't included. */
   truncated: boolean
@@ -293,7 +297,12 @@ export interface ReframeApi {
   forgetFolder(dir: string): Promise<string[]>
   /** A folder to open, chosen from the taskbar jump list or the Dock menu. */
   onOpenFolderRequest(cb: (dir: string) => void): () => void
-  saveProject(dir: string, project: ProjectFile): Promise<void>
+  /** Saves the project unless that would lose something (see ProjectLock): returns why not, or null. `force`: overwrite changes made elsewhere. */
+  saveProject(dir: string, project: ProjectFile, force?: boolean): Promise<ProjectLock | null>
+  /** Reads a folder's project file again. */
+  readProject(dir: string): Promise<ProjectRead>
+  /** Replaces an unreadable project file with its last good copy, and reads it. */
+  restoreProject(dir: string): Promise<ProjectRead>
   chooseExportDir(defaultPath?: string): Promise<string | null>
   writeFile(path: string, data: ArrayBuffer): Promise<void>
   exportVideo(job: VideoExportJob): Promise<void>

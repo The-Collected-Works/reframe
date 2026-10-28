@@ -1,4 +1,6 @@
 import { DEFAULT_SETTINGS } from '@shared/framing/framing'
+import { migrate } from '@shared/project/migrate'
+import { PROJECT_VERSION } from '@shared/project/project'
 import type { Artboard, CropSettings, ProjectFile, SettingKey } from '@shared/types'
 
 /**
@@ -17,7 +19,7 @@ export function newBoard(name: string, width: number, height: number, defaults: 
 
 export function emptyProject(): ProjectFile {
   return {
-    version: 1,
+    version: PROJECT_VERSION,
     artboards: [newBoard('Square', 1080, 1080)],
     clips: {},
     export: {
@@ -42,12 +44,17 @@ const KNOWN = new Set(Object.keys(DEFAULT_SETTINGS))
 const known = (o: object | undefined): Partial<CropSettings> =>
   Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => KNOWN.has(k))) as Partial<CropSettings>
 
-/** A project file as saved (possibly by another version), made whole. */
-export function normalizeProject(p: ProjectFile | null): ProjectFile {
+/**
+ * A project file as saved, made whole: brought up to date if it's from an earlier format (see
+ * migrate), with anything missing filled in. One from a newer format is taken as far as this
+ * version understands it (it's read-only: see ProjectLock).
+ */
+export function normalizeProject(saved: ProjectFile | null): ProjectFile {
   const base = emptyProject()
+  const p = saved && saved.version < PROJECT_VERSION ? migrate(saved) : saved
   if (!p || !p.artboards?.length) return base
   return {
-    version: 1,
+    version: PROJECT_VERSION,
     artboards: p.artboards.map((b) => ({
       ...b,
       defaults: { ...DEFAULT_SETTINGS, ...known(b.defaults) },
@@ -59,10 +66,7 @@ export function normalizeProject(p: ProjectFile | null): ProjectFile {
     })),
     clips: p.clips ?? {},
     export: { ...base.export, ...p.export },
-    // Compositions were saved as "grid", then "layout", while they were being built (both bentos).
-    items: Object.fromEntries(
-      Object.entries(p.items ?? {}).map(([k, i]) => [k, ['grid', 'layout'].includes(i.kind as string) ? { ...i, kind: 'composition', type: 'bento' } : i])
-    ) as ProjectFile['items'],
+    items: p.items ?? {},
     files: p.files ?? {}
   }
 }

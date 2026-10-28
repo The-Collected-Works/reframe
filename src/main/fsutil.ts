@@ -5,15 +5,15 @@ const queues = new Map<string, Promise<unknown>>()
 let seq = 0
 
 /**
- * Writes JSON so a reader never sees a half-written file: to a uniquely named temporary file, then
+ * Writes a file so a reader never sees it half-written: to a uniquely named temporary file, then
  * renamed over the target. Writes to the same file run one after another, so overlapping saves
  * can't trip over each other's temporary file or land out of order.
  */
-export function writeJsonAtomic(path: string, data: unknown, pretty = false): Promise<void> {
+export function writeFileAtomic(path: string, text: string): Promise<void> {
   const write = async () => {
     const tmp = `${path}.${process.pid}.${++seq}.tmp`
     try {
-      await fs.writeFile(tmp, JSON.stringify(data, null, pretty ? 2 : undefined))
+      await fs.writeFile(tmp, text)
       await fs.rename(tmp, path)
     } catch (e) {
       await fs.rm(tmp, { force: true })
@@ -24,6 +24,11 @@ export function writeJsonAtomic(path: string, data: unknown, pretty = false): Pr
   queues.set(path, next)
   next.finally(() => queues.get(path) === next && queues.delete(path)).catch(() => {})
   return next
+}
+
+/** writeFileAtomic, as JSON. */
+export function writeJsonAtomic(path: string, data: unknown, pretty = false): Promise<void> {
+  return writeFileAtomic(path, JSON.stringify(data, null, pretty ? 2 : undefined))
 }
 
 /** How much of a file's start, middle and end its content hash reads. */
