@@ -8,7 +8,8 @@ import { join, resolve } from 'node:path'
 import { Page, sleep } from './cdp.mjs'
 
 const require = createRequire(import.meta.url)
-const ELECTRON = require('electron')
+// E2E_APP: a packaged app's executable to run instead (dist/linux-unpacked/reframe, say).
+const ELECTRON = process.env.E2E_APP ?? require('electron')
 const ROOT = resolve(import.meta.dirname, '../..')
 let nextPort = 9333
 const hasXvfb = process.platform === 'linux' && spawnSync('which', ['xvfb-run']).status === 0
@@ -21,7 +22,7 @@ export async function launch(folder, { ready = "document.querySelector('.cell, .
   const port = nextPort++
   const dir = profile ?? mkdtempSync(join(tmpdir(), 'reframe-e2e-'))
   const args = [
-    ROOT,
+    ...(process.env.E2E_APP ? [] : [ROOT]),
     `--user-data-dir=${dir}`,
     `--remote-debugging-port=${port}`,
     '--mute-audio',
