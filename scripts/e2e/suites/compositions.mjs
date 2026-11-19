@@ -333,7 +333,8 @@ export default {
         await sleep(1000)
         await ctx.app.quit()
         const file = join(ctx.folder, '.reframe.json')
-        const project = JSON.parse(readFileSync(file, 'utf8'))
+        // As format 1 saved them: format 2 came after the rename.
+        const project = { ...JSON.parse(readFileSync(file, 'utf8')), version: 1 }
         for (const item of Object.values(project.items)) {
           if (item.kind !== 'composition') continue
           item.kind = 'layout'
